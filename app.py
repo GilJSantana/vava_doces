@@ -29,19 +29,47 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS customizados
+# Estilos CSS customizados para identidade visual (verde + dourado)
 st.markdown("""
 <style>
+    :root{
+        --vava-green-dark: #0F3B2E;
+        --vava-green: #145D44;
+        --vava-gold: #C9A23A;
+        --vava-cream: #F6F1E6;
+    }
+    html, body, [data-testid='stAppViewContainer'] {
+        background: linear-gradient(180deg, var(--vava-green-dark) 0%, #0B2E25 100%);
+        color: var(--vava-cream);
+        font-family: 'Georgia', 'Times New Roman', serif;
+    }
     .header {
         text-align: center;
-        padding: 2rem 0;
+        padding: 1.5rem 0 0.25rem 0;
+    }
+    .vava-logo-wrapper {
+        display:flex;align-items:center;justify-content:center;margin-bottom:0.6rem;
+    }
+    .vava-logo {
+        border-radius: 999px;
+        border: 4px solid var(--vava-gold);
+        box-shadow: 0 6px 18px rgba(0,0,0,0.4);
     }
     .metric-card {
-        background-color: #f0f2f6;
+        background: linear-gradient(180deg, rgba(201,162,58,0.08), rgba(255,255,255,0.02));
         padding: 1rem;
-        border-radius: 10px;
+        border-radius: 12px;
         margin: 0.5rem 0;
+        border: 1px solid rgba(201,162,58,0.12);
     }
+    .stButton>button {
+        background: linear-gradient(90deg, var(--vava-gold), #E6C46B);
+        color: #0b2e25;
+        font-weight: 600;
+    }
+    .card-title { color: var(--vava-cream); font-weight:600; }
+    .dataframe thead tr th { background: rgba(20,93,68,0.6) !important; }
+    .streamlit-expanderHeader { color: var(--vava-cream) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,14 +133,17 @@ def main():
     st.markdown('<div class="header">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("assets/logo.png", width=150)
+        # logo arredondado com borda dourada
+        st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
+        st.markdown('<img src="assets/logo.png" class="vava-logo" width="150" />', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     st.title("🍰 Vava Doces - Análise de Custos e Faturamento")
     st.markdown("_Ferramenta de análise de custos de produção e faturamento_")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Sidebar - Configuração
     with st.sidebar:
-        st.header("⚙️ Configuração")
+        st.markdown(f"<div style='padding:0.5rem 0; color:{'#F6F1E6'}'><h3>⚙️ Configuração</h3></div>", unsafe_allow_html=True)
 
         # Status de conexão
         adapter = get_adapter()
