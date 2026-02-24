@@ -1,0 +1,20 @@
+[project]
+name = "vava-doces"
+version = "0.1.0"
+description = "Análise de custos e faturamento da Loja Vava Doces"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas",
+    "gspread",
+    "google-auth",
+    "streamlit",
+    "python-dotenv",
+    "pytest>=9.0.2",
+    "pytest-mock>=3.15.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock"
+]
