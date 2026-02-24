@@ -32,6 +32,7 @@ st.set_page_config(
 # Estilos CSS customizados para identidade visual (verde + dourado)
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap');
     :root{
         --vava-green-dark: #0F3B2E;
         --vava-green: #145D44;
@@ -41,11 +42,11 @@ st.markdown("""
     html, body, [data-testid='stAppViewContainer'] {
         background: linear-gradient(180deg, var(--vava-green-dark) 0%, #0B2E25 100%);
         color: var(--vava-cream);
-        font-family: 'Georgia', 'Times New Roman', serif;
+        font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
     }
     .header {
         text-align: center;
-        padding: 1.5rem 0 0.25rem 0;
+        padding: 1.2rem 0 0.25rem 0;
     }
     .vava-logo-wrapper {
         display:flex;align-items:center;justify-content:center;margin-bottom:0.6rem;
@@ -56,18 +57,23 @@ st.markdown("""
         box-shadow: 0 6px 18px rgba(0,0,0,0.4);
     }
     .metric-card {
-        background: linear-gradient(180deg, rgba(201,162,58,0.08), rgba(255,255,255,0.02));
-        padding: 1rem;
-        border-radius: 12px;
-        margin: 0.5rem 0;
-        border: 1px solid rgba(201,162,58,0.12);
+        background: linear-gradient(180deg, rgba(201,162,58,0.09), rgba(255,255,255,0.02));
+        padding: 0.9rem 1rem;
+        border-radius: 14px;
+        margin: 0.4rem 0;
+        border: 1px solid rgba(201,162,58,0.14);
+        color: var(--vava-cream);
     }
+    .metric-card .card-title { font-size:0.95rem; opacity:0.9; }
+    .metric-card .card-value { font-size:1.25rem; font-weight:700; color: var(--vava-cream); }
     .stButton>button {
-        background: linear-gradient(90deg, var(--vava-gold), #E6C46B);
-        color: #0b2e25;
-        font-weight: 600;
+        background: linear-gradient(90deg, var(--vava-gold), #E6C46B) !important;
+        color: #0b2e25 !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
     }
-    .card-title { color: var(--vava-cream); font-weight:600; }
+    .stDownloadButton>button { padding: 0.45rem 0.8rem !important; }
+    .dataframe-wrapper { border-radius:12px; overflow:hidden; border:1px solid rgba(255,255,255,0.03); }
     .dataframe thead tr th { background: rgba(20,93,68,0.6) !important; }
     .streamlit-expanderHeader { color: var(--vava-cream) !important; }
 </style>
@@ -133,9 +139,10 @@ def main():
     st.markdown('<div class="header">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # logo arredondado com borda dourada
+        # logo: preferir assets/logo.jpg se existir, senão usar logo.png
+        logo_path = "assets/logo.jpg" if os.path.exists("assets/logo.jpg") else "assets/logo.png"
         st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
-        st.markdown('<img src="assets/logo.png" class="vava-logo" width="150" />', unsafe_allow_html=True)
+        st.markdown(f'<img src="{logo_path}" class="vava-logo" width="150" />', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
     st.title("🍰 Vava Doces - Análise de Custos e Faturamento")
     st.markdown("_Ferramenta de análise de custos de produção e faturamento_")
@@ -199,22 +206,21 @@ def show_dashboard(service):
         # Métricas principais
         col1, col2, col3, col4 = st.columns(4)
 
-        with col1:
-            total_receitas = len(custo_por_receita)
-            st.metric("📝 Total de Receitas", total_receitas)
+        # Preparar valores
+        total_receitas = len(custo_por_receita)
+        custo_total = sum(custo_por_receita.values()) if custo_por_receita else Decimal(0)
+        custo_medio = (custo_total / len(custo_por_receita)) if custo_por_receita else Decimal(0)
+        custo_minimo = min(custo_por_receita.values()) if custo_por_receita else Decimal(0)
 
-        with col2:
-            custo_total = sum(custo_por_receita.values())
-            st.metric("💸 Custo Total", format_currency(custo_total))
+        # Renderizar cards métricos com HTML para controle visual
+        def render_metric(col, title, value):
+            with col:
+                st.markdown(f"<div class='metric-card'><div class='card-title'>{title}</div><div class='card-value'>{value}</div></div>", unsafe_allow_html=True)
 
-        with col3:
-            if custo_por_receita:
-                custo_medio = custo_total / len(custo_por_receita)
-                st.metric("📊 Custo Médio", format_currency(custo_medio))
-
-        with col4:
-            custo_minimo = min(custo_por_receita.values()) if custo_por_receita else Decimal(0)
-            st.metric("🔽 Custo Mínimo", format_currency(custo_minimo))
+        render_metric(col1, '📝 Total de Receitas', f"{total_receitas}")
+        render_metric(col2, '💸 Custo Total', format_currency(custo_total))
+        render_metric(col3, '📊 Custo Médio', format_currency(custo_medio))
+        render_metric(col4, '🔽 Custo Mínimo', format_currency(custo_minimo))
 
         st.markdown("---")
 
@@ -236,7 +242,9 @@ def show_dashboard(service):
             display_df["Custo (R$)"] = display_df["Custo (R$)"].apply(
                 lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             )
+            st.markdown('<div class="dataframe-wrapper">', unsafe_allow_html=True)
             st.dataframe(display_df, use_container_width=True, hide_index=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"❌ Erro ao processar dashboard: {e}")
