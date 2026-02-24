@@ -21,9 +21,38 @@ O repositório foi organizado com boas práticas (injeção de dependência, sep
 
 ---
 
-## 🗂 Estrutura relevante do projeto
+## 🎨 Interface Streamlit
 
-- `main.py` — script principal (em desenvolvimento).
+A aplicação Streamlit oferece uma interface interativa para visualizar e analisar os dados:
+
+### Funcionalidades principais:
+
+- **📊 Dashboard**: Visão geral dos custos com gráficos e métricas principais
+- **💰 Custos**: Visualização detalhada dos dados de custos com filtros
+- **📈 Faturamento**: Análise de vendas e faturamento
+- **🔍 Análise Detalhada**: Relatórios avançados e análises de margens
+
+### Como executar:
+
+```bash
+./run_app.sh
+# ou
+uv run streamlit run app.py
+```
+
+Acesse em seu navegador: `http://localhost:8501`
+
+Para documentação completa, veja [STREAMLIT_SETUP.md](./STREAMLIT_SETUP.md)
+
+---
+
+## 🗂 Estrutura do projeto
+
+- `app.py` — aplicação Streamlit para visualização de dados.
+- `run_app.sh` — script para executar a aplicação.
+- `.env.example` — arquivo de exemplo para configuração de credenciais.
+- `.streamlit/config.toml` — configuração da aplicação Streamlit.
+- `STREAMLIT_SETUP.md` — documentação completa sobre execução do Streamlit.
 - `src/` — código fonte
   - `src/ports/data_source.py` — contrato/porta `DataSource` e exceção `DataSourceError`.
   - `src/infrastructure/google_sheets_adapter.py` — adaptador que implementa `DataSource` e acessa Google Sheets (usa `gspread`).
@@ -31,6 +60,7 @@ O repositório foi organizado com boas práticas (injeção de dependência, sep
 - `tests/` — suíte de testes (pytest)
   - `tests/test_cost_analysis_service.py` — testes de unidade para `CostAnalysisService` (usa um `FakeDataSource`).
   - `tests/test_google_sheets_adapter.py` — testes do adaptador com mocks do `gspread`.
+  - `tests/test_streamlit_app.py` — testes para funções auxiliares da aplicação Streamlit.
 - `RECEITAS AWI.xlsx` — planilha de referência/entrada para alinhamento de esquema (não é usada diretamente pelos testes).
 
 ---
@@ -39,27 +69,54 @@ O repositório foi organizado com boas práticas (injeção de dependência, sep
 
 Observação: neste repositório você informou que está usando o gerenciador `uv`. Os comandos abaixo assumem que as dependências foram instaladas no ambiente gerenciado por `uv`.
 
-1) Instalar dependências (exemplo - caso precise reinstalar):
+### 1. Instalar dependências
 
 ```bash
-# se você mantém um ambiente criado via uv, use o mecanismo do seu fluxo para (re)instalar
-# Exemplo genérico (adapte conforme seu uso do uv):
+# Instalar todas as dependências
 uv install
-# Ou, se preferir, recrie o ambiente/instale localmente:
-# python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 ```
 
-2) Rodar testes (usa o pytest no ambiente uv):
+### 2. Configurar credenciais do Google Sheets
 
 ```bash
+# Copiar arquivo de exemplo
+cp .env.example .env
+
+# Editar com seus dados
+nano .env
+```
+
+Configure:
+- `GOOGLE_APPLICATION_CREDENTIALS`: Caminho para o JSON da Service Account
+- `GOOGLE_SHEET_ID`: ID da sua planilha
+
+### 3. Rodar testes
+
+```bash
+# Rodar todos os testes
 uv run pytest -q
+
+# Rodar teste específico
+uv run pytest -q tests/test_cost_analysis_service.py::test_calculate_cost_per_recipe_happy_path
+
+# Rodar com cobertura
+uv run pytest --cov=src tests/
 ```
 
-3) Rodar um teste específico:
+### 4. Executar a aplicação Streamlit
 
 ```bash
-uv run pytest -q tests/test_cost_analysis_service.py::test_calculate_cost_per_recipe_happy_path
+# Usando o script (recomendado)
+./run_app.sh
+
+# Ou diretamente
+uv run streamlit run app.py
+
+# Abrir no navegador
+# http://localhost:8501
 ```
+
+Para mais detalhes sobre a configuração do Streamlit, consulte [STREAMLIT_SETUP.md](./STREAMLIT_SETUP.md).
 
 ---
 
