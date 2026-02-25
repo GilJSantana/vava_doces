@@ -21,39 +21,11 @@ O repositório foi organizado com boas práticas (injeção de dependência, sep
 
 ---
 
-## 🎨 Interface Streamlit
-
-A aplicação Streamlit oferece uma interface interativa para visualizar e analisar os dados:
+## 🗂 Estrutura relevante do projeto
 
 ### Funcionalidades principais:
 
-- **📊 Dashboard**: Visão geral dos custos com gráficos e métricas principais
-- **💰 Custos**: Visualização detalhada dos dados de custos com filtros
-- **📈 Faturamento**: Análise de vendas e faturamento
-- **🔍 Análise Detalhada**: Relatórios avançados e análises de margens
-
-### Como executar:
-
-```bash
-./run_app.sh
-# ou
-uv run streamlit run app.py
-```
-
-Acesse em seu navegador: `http://localhost:8501`
-
-Para documentação completa, veja [STREAMLIT_SETUP.md](./STREAMLIT_SETUP.md)
-
----
-
-## 🗂 Estrutura do projeto
-
-- `app.py` — aplicação Streamlit para visualização de dados.
-- `run_app.sh` — script para executar a aplicação.
-- `.env.example` — arquivo de exemplo para configuração de credenciais.
-- `.streamlit/config.toml` — configuração da aplicação Streamlit.
-- `STREAMLIT_SETUP.md` — documentação completa sobre execução do Streamlit.
-- `src/` — código fonte
+- `main.py` — script principal (em desenvolvimento).
   - `src/ports/data_source.py` — contrato/porta `DataSource` e exceção `DataSourceError`.
   - `src/infrastructure/google_sheets_adapter.py` — adaptador que implementa `DataSource` e acessa Google Sheets (usa `gspread`).
   - `src/domain/cost_analysis_service.py` — serviço de domínio que implementa regras e calcula custo por receita (injeção de `DataSource`).
@@ -74,6 +46,8 @@ Observação: neste repositório você informou que está usando o gerenciador `
 ```bash
 # Instalar todas as dependências
 uv install
+# Ou, se preferir, recrie o ambiente/instale localmente:
+# python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 ```
 
 ### 2. Configurar credenciais do Google Sheets
@@ -97,7 +71,6 @@ Configure:
 uv run pytest -q
 
 # Rodar teste específico
-uv run pytest -q tests/test_cost_analysis_service.py::test_calculate_cost_per_recipe_happy_path
 
 # Rodar com cobertura
 uv run pytest --cov=src tests/
@@ -120,35 +93,28 @@ Para mais detalhes sobre a configuração do Streamlit, consulte [STREAMLIT_SETU
 
 ---
 
-## Configuração de credenciais do Google (Sheets)
+2) Rodar testes (usa o pytest no ambiente uv):
 
-Recomendamos usar uma Service Account para ambientes servidor/CI. Dois modos comuns:
+uv run pytest -q
+# Exemplo genérico (adapte conforme seu uso do uv):
 
-A) Usando `GOOGLE_APPLICATION_CREDENTIALS` (Service Account JSON):
-
-1. Crie uma Service Account no Google Cloud Console e faça o download do JSON da chave.
-2. Dê acesso de leitura (e se necessário escrita) à planilha compartilhando-a com o e-mail da Service Account.
+3) Rodar um teste específico:
 3. Defina a variável de ambiente antes de rodar a aplicação/tests:
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="/caminho/para/service-account.json"
 ```
 
-No `GoogleSheetsAdapter` você pode também passar o caminho do arquivo via construtor (argumento `credential_file`) em vez de depender da variável.
 
 B) Autenticação local (desenvolvimento):
 
 - Alternativa: `gcloud auth application-default login` para usar suas credenciais de usuário localmente (não recomendado para CI).
 
-Segurança:
-- Nunca comite o JSON de credenciais no repositório. Use secrets no CI (ex.: GitHub Secrets) e grave o conteúdo em arquivo temporário na etapa do job.
 
 ---
 
 ## Contratos, design e boas práticas aplicadas
 
-- Interface/porta `DataSource` (em `src/ports/data_source.py`): abstrai a fonte de dados (Google Sheets, CSV, DB). O domínio depende dessa abstração (Dependency Inversion).
-- `GoogleSheetsAdapter` (adapter): responsabilidade única — autenticar e converter resposta da API para `pandas.DataFrame`.
 - `CostAnalysisService` (domain): contém regras de negócio (cálculo de custo) e validação. Recebe um `DataSource` por injeção de dependência.
 - Erros: adaptadores normalizam exceções para `DataSourceError` para facilitar tratamento e testes.
 - Testes escritos com TDD em mente: primeiro os testes de domínio com mocks/fakes, depois implementação da infraestrutura.

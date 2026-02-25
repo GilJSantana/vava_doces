@@ -22,19 +22,9 @@ from src.ports.data_source import DataSourceError
 load_dotenv()
 
 # Configuração da página
-# Se houver favicon em assets, carregue os bytes para usar como page_icon
-_favicon_path = "assets/favicon.png" if os.path.exists("assets/favicon.png") else None
-_favicon_bytes = None
-if _favicon_path:
-    try:
-        with open(_favicon_path, 'rb') as _f:
-            _favicon_bytes = _f.read()
-    except Exception:
-        _favicon_bytes = None
-
 st.set_page_config(
     page_title="Vava Doces - Análise de Custos",
-    page_icon=_favicon_bytes or "🍰",
+    page_icon="🍰",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -130,10 +120,10 @@ def format_currency(value):
     return f"R$ {float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def load_data(service, sheet_name):
+def load_data_from_sheet(adapter, sheet_name):
     """Carrega dados de uma planilha específica."""
     try:
-        return service.get_production_costs() if sheet_name == "Custos" else service.get_sales_data()
+        return adapter.get_data(sheet_name)
     except DataSourceError as e:
         st.error(f"❌ Erro ao carregar dados de '{sheet_name}': {e}")
         return None
@@ -181,7 +171,15 @@ def main():
         # Menu de navegação
         page = st.radio(
             "Selecione uma página:",
-            options=["📊 Dashboard", "💰 Custos", "📈 Faturamento", "🔍 Análise Detalhada"]
+            options=[
+                "📊 Dashboard",
+                "📦 Cadastro de Produtos",
+                "🥘 Matéria Prima",
+                "💳 Vendas Diárias",
+                "📈 Resumo Diário",
+                "📊 Análise por Categoria",
+                "🔍 Análise Detalhada"
+            ]
         )
 
     # Inicializar serviço
@@ -192,11 +190,17 @@ def main():
 
     # Renderizar página selecionada
     if page == "📊 Dashboard":
-        show_dashboard(service)
-    elif page == "💰 Custos":
-        show_custos(service)
-    elif page == "📈 Faturamento":
-        show_faturamento(service)
+        show_dashboard(service, adapter)
+    elif page == "📦 Cadastro de Produtos":
+        show_produtos(adapter)
+    elif page == "🥘 Matéria Prima":
+        show_materia_prima(adapter)
+    elif page == "💳 Vendas Diárias":
+        show_vendas_diarias(adapter)
+    elif page == "📈 Resumo Diário":
+        show_resumo_diario(adapter)
+    elif page == "📊 Análise por Categoria":
+        show_analise_categoria(adapter)
     elif page == "🔍 Análise Detalhada":
         show_analise_detalhada(service)
 
@@ -205,179 +209,325 @@ def main():
 # PÁGINA: DASHBOARD
 # =====================================================================
 
-def show_dashboard(service):
+def show_dashboard(service, adapter):
     st.header("📊 Dashboard")
     st.markdown("---")
 
     try:
         # Carregar dados
-        custos_df = service.get_production_costs()
-        faturamento_df = service.get_sales_data()
+        produtos_df = load_data_from_sheet(adapter, "Cadastro Produtos")
+        vendas_df = load_data_from_sheet(adapter, "Vendas Diárias")
+        resumo_df = load_data_from_sheet(adapter, "Resumo Diário")
 
-        if custos_df is None or custos_df.empty:
-            st.warning("⚠️ Nenhum dado de custos disponível")
+        if produtos_df is None or produtos_df.empty:
+            st.warning("⚠️ Nenhum dado disponível")
             return
-
-        # Calcular custo total por receita
-        custo_por_receita = service.calculate_cost_per_recipe("Custos")
 
         # Métricas principais
         col1, col2, col3, col4 = st.columns(4)
 
-        # Preparar valores
-        total_receitas = len(custo_por_receita)
-        custo_total = sum(custo_por_receita.values()) if custo_por_receita else Decimal(0)
-        custo_medio = (custo_total / len(custo_por_receita)) if custo_por_receita else Decimal(0)
-        custo_minimo = min(custo_por_receita.values()) if custo_por_receita else Decimal(0)
-
-        # Renderizar cards métricos com HTML para controle visual
+        # Renderizar cards métricos
         def render_metric(col, title, value):
             with col:
                 st.markdown(f"<div class='metric-card'><div class='card-title'>{title}</div><div class='card-value'>{value}</div></div>", unsafe_allow_html=True)
 
-        render_metric(col1, '📝 Total de Receitas', f"{total_receitas}")
-        render_metric(col2, '💸 Custo Total', format_currency(custo_total))
-        render_metric(col3, '📊 Custo Médio', format_currency(custo_medio))
-        render_metric(col4, '🔽 Custo Mínimo', format_currency(custo_minimo))
+        total_produtos = len(produtos_df) if produtos_df is not None else 0
+        total_vendas = len(vendas_df) if vendas_df is not None else 0
+
+        # Tentar calcular totais de vendas se existirem colunas numéricas
+        total_valor_vendas = "R$ 0,00"
+        if vendas_df is not None and not vendas_df.empty:
+            numeric_cols = vendas_df.select_dtypes(include=['number']).columns
+            if len(numeric_cols) > 0:
+                total_valor_vendas = format_currency(vendas_df[numeric_cols[0]].sum())
+
+        render_metric(col1, '📦 Total de Produtos', f"{total_produtos}")
+        render_metric(col2, '💳 Total de Vendas', f"{total_vendas}")
+        render_metric(col3, '💰 Valor Total Vendas', total_valor_vendas)
+        render_metric(col4, '📊 Categorias', f"{len(produtos_df['Categoria'].unique()) if 'Categoria' in produtos_df.columns else 0}")
 
         st.markdown("---")
 
-        # Gráfico de custos por receita
-        if custo_por_receita:
-            st.subheader("💰 Custo por Receita")
+        # Gráficos
+        st.subheader("📈 Produtos por Categoria")
 
-            # Converter para DataFrame para visualização
-            custo_df = pd.DataFrame(
-                [(k, float(v)) for k, v in custo_por_receita.items()],
-                columns=["Receita", "Custo (R$)"]
-            ).sort_values("Custo (R$)", ascending=False)
+        if "Categoria" in produtos_df.columns:
+            categoria_count = produtos_df['Categoria'].value_counts()
+            st.bar_chart(categoria_count)
 
-            st.bar_chart(custo_df.set_index("Receita"))
+        st.markdown("---")
 
-            # Tabela com detalhes
-            st.subheader("📋 Detalhamento de Custos")
-            display_df = custo_df.copy()
-            display_df["Custo (R$)"] = display_df["Custo (R$)"].apply(
-                lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            )
-            st.markdown('<div class="dataframe-wrapper">', unsafe_allow_html=True)
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        # Tabelas com resumo
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("📋 Últimos Produtos Cadastrados")
+            if produtos_df is not None and not produtos_df.empty:
+                display_df = produtos_df.tail(5).copy()
+                st.dataframe(display_df, use_container_width=True)
+            else:
+                st.info("Nenhum dado disponível")
+
+        with col2:
+            st.subheader("💳 Últimas Vendas")
+            if vendas_df is not None and not vendas_df.empty:
+                display_df = vendas_df.tail(5).copy()
+                st.dataframe(display_df, use_container_width=True)
+            else:
+                st.info("Nenhum dado disponível")
+
 
     except Exception as e:
         st.error(f"❌ Erro ao processar dashboard: {e}")
-
-
 # =====================================================================
-# PÁGINA: CUSTOS
+# PÁGINA: CADASTRO DE PRODUTOS
 # =====================================================================
 
-def show_custos(service):
-    st.header("💰 Dados de Custos")
+def show_produtos(adapter):
+    st.header("📦 Cadastro de Produtos")
     st.markdown("---")
 
     try:
-        df = service.get_production_costs()
+        df = load_data_from_sheet(adapter, "Cadastro Produtos")
 
         if df is None or df.empty:
-            st.warning("⚠️ Nenhum dado de custos disponível")
+            st.warning("⚠️ Nenhum produto cadastrado")
             return
+
+        # Estatísticas
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("📦 Total de Produtos", len(df))
+
+        with col2:
+            if "Categoria" in df.columns:
+                st.metric("📊 Categorias", df["Categoria"].nunique())
+
+        with col3:
+            if "Preço" in df.columns or "preco" in [c.lower() for c in df.columns]:
+                price_col = [c for c in df.columns if c.lower() == "preco" or c.lower() == "preço"][0] if any(c.lower() in ["preco", "preço"] for c in df.columns) else None
+                if price_col:
+                    st.metric("💰 Preço Médio", format_currency(df[price_col].mean()))
+
+        st.markdown("---")
 
         # Filtros
         col1, col2 = st.columns(2)
 
-        with col1:
-            if "recipe" in [c.lower() for c in df.columns]:
-                recipes = df[[c for c in df.columns if c.lower() == "recipe"][0]].unique()
-                selected_recipe = st.multiselect(
-                    "Filtrar por receita:",
-                    options=recipes,
-                    default=recipes[:5] if len(recipes) > 5 else recipes
+        selected_category = None
+        if "Categoria" in df.columns:
+            with col1:
+                categories = df["Categoria"].unique()
+                selected_category = st.multiselect(
+                    "Filtrar por categoria:",
+                    options=categories,
+                    default=categories if len(categories) <= 5 else list(categories[:5])
                 )
 
-        # Exibir dados
-        st.subheader("📊 Tabela de Custos")
-
-        if "selected_recipe" in locals() and selected_recipe:
-            recipe_col = [c for c in df.columns if c.lower() == "recipe"][0]
-            filtered_df = df[df[recipe_col].isin(selected_recipe)]
+        # Aplicar filtro
+        if selected_category:
+            df_filtered = df[df["Categoria"].isin(selected_category)]
         else:
-            filtered_df = df
+            df_filtered = df
 
-        st.dataframe(filtered_df, use_container_width=True)
+        # Exibir tabela
+        st.subheader("📋 Lista de Produtos")
+        st.dataframe(df_filtered, use_container_width=True)
 
-        # Opções de download
+        # Download
         st.markdown("---")
-        st.subheader("📥 Downloads")
-
-        csv = filtered_df.to_csv(index=False)
+        st.subheader("📥 Download")
+        csv = df_filtered.to_csv(index=False)
         st.download_button(
             label="📥 Baixar como CSV",
             data=csv,
-            file_name="custos.csv",
+            file_name="produtos.csv",
             mime="text/csv"
         )
 
     except Exception as e:
-        st.error(f"❌ Erro ao exibir custos: {e}")
+        st.error(f"❌ Erro ao exibir produtos: {e}")
 
 
 # =====================================================================
-# PÁGINA: FATURAMENTO
+# PÁGINA: MATÉRIA PRIMA
 # =====================================================================
 
-def show_faturamento(service):
-    st.header("📈 Dados de Faturamento")
+def show_materia_prima(adapter):
+    st.header("🥘 Matéria Prima")
     st.markdown("---")
 
     try:
-        df = service.get_sales_data()
+        df = load_data_from_sheet(adapter, "Matéria Prima")
 
         if df is None or df.empty:
-            st.warning("⚠️ Nenhum dado de faturamento disponível")
+            st.warning("⚠️ Nenhum dado de matéria prima disponível")
             return
 
-        # Exibir dados
-        st.subheader("📊 Tabela de Faturamento")
+        # Estatísticas
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("🥘 Total de Itens", len(df))
+
+        with col2:
+            if "Unidade" in df.columns:
+                st.metric("📏 Unidades", df["Unidade"].nunique())
+
+        with col3:
+            if "Preço" in df.columns or "preco" in [c.lower() for c in df.columns]:
+                price_col = [c for c in df.columns if c.lower() == "preco" or c.lower() == "preço"][0] if any(c.lower() in ["preco", "preço"] for c in df.columns) else None
+                if price_col:
+                    st.metric("💰 Preço Médio", format_currency(df[price_col].mean()))
+
+        st.markdown("---")
+
+        # Exibir tabela
+        st.subheader("📋 Tabela de Matéria Prima")
         st.dataframe(df, use_container_width=True)
 
-        # Estatísticas
+        # Download
         st.markdown("---")
-        st.subheader("📊 Estatísticas")
-
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        if len(numeric_cols) > 0:
-            col1, col2, col3 = st.columns(3)
-
-            with col1:
-                for col in numeric_cols:
-                    st.metric(f"Total - {col}", f"{df[col].sum():,.2f}")
-                    break
-
-            with col2:
-                for col in numeric_cols:
-                    st.metric(f"Média - {col}", f"{df[col].mean():,.2f}")
-                    break
-
-            with col3:
-                for col in numeric_cols:
-                    st.metric(f"Máximo - {col}", f"{df[col].max():,.2f}")
-                    break
-
-        # Opções de download
-        st.markdown("---")
-        st.subheader("📥 Downloads")
-
+        st.subheader("📥 Download")
         csv = df.to_csv(index=False)
         st.download_button(
             label="📥 Baixar como CSV",
             data=csv,
-            file_name="faturamento.csv",
+            file_name="materia_prima.csv",
             mime="text/csv"
         )
 
     except Exception as e:
-        st.error(f"❌ Erro ao exibir faturamento: {e}")
+        st.error(f"❌ Erro ao exibir matéria prima: {e}")
+
+
+# =====================================================================
+# PÁGINA: VENDAS DIÁRIAS
+# =====================================================================
+
+def show_vendas_diarias(adapter):
+    st.header("💳 Vendas Diárias")
+    st.markdown("---")
+
+    try:
+        df = load_data_from_sheet(adapter, "Vendas Diárias")
+
+        if df is None or df.empty:
+            st.warning("⚠️ Nenhum dado de vendas disponível")
+            return
+
+        # Estatísticas
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("💳 Total de Vendas", len(df))
+
+        with col2:
+            # Tentar encontrar coluna de valor
+            numeric_cols = df.select_dtypes(include=['number']).columns
+            if len(numeric_cols) > 0:
+                st.metric("💰 Valor Total", format_currency(df[numeric_cols[0]].sum()))
+
+        with col3:
+            if len(numeric_cols) > 0:
+                st.metric("📊 Valor Médio", format_currency(df[numeric_cols[0]].mean()))
+
+        st.markdown("---")
+
+        # Gráfico de vendas
+        if len(numeric_cols) > 0:
+            st.subheader("📈 Gráfico de Vendas")
+            # Tentar agrupar por data se existir coluna de data
+            st.line_chart(df[numeric_cols[0]])
+
+        st.markdown("---")
+
+        # Exibir tabela
+        st.subheader("📋 Tabela de Vendas Diárias")
+        st.dataframe(df, use_container_width=True)
+
+        # Download
+        st.markdown("---")
+        st.subheader("📥 Download")
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Baixar como CSV",
+            data=csv,
+            file_name="vendas_diarias.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir vendas diárias: {e}")
+
+
+# =====================================================================
+# PÁGINA: RESUMO DIÁRIO
+# =====================================================================
+
+def show_resumo_diario(adapter):
+    st.header("📈 Resumo Diário")
+    st.markdown("---")
+
+    try:
+        df = load_data_from_sheet(adapter, "Resumo Diário")
+
+        if df is None or df.empty:
+            st.warning("⚠️ Nenhum dado de resumo disponível")
+            return
+
+        # Exibir tabela
+        st.subheader("📊 Resumo Diário")
+        st.dataframe(df, use_container_width=True)
+
+        # Download
+        st.markdown("---")
+        st.subheader("📥 Download")
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Baixar como CSV",
+            data=csv,
+            file_name="resumo_diario.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir resumo diário: {e}")
+
+
+# =====================================================================
+# PÁGINA: ANÁLISE POR CATEGORIA
+# =====================================================================
+
+def show_analise_categoria(adapter):
+    st.header("📊 Análise por Categoria")
+    st.markdown("---")
+
+    try:
+        df = load_data_from_sheet(adapter, "Análise por Categoria")
+
+        if df is None or df.empty:
+            st.warning("⚠️ Nenhum dado de análise disponível")
+            return
+
+        # Exibir tabela
+        st.subheader("📊 Análise por Categoria")
+        st.dataframe(df, use_container_width=True)
+
+        # Download
+        st.markdown("---")
+        st.subheader("📥 Download")
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Baixar como CSV",
+            data=csv,
+            file_name="analise_categoria.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir análise por categoria: {e}")
 
 
 # =====================================================================
