@@ -13,8 +13,6 @@ import pandas as pd
 from decimal import Decimal
 import os
 from dotenv import load_dotenv
-import base64
-import mimetypes
 
 from src.infrastructure.google_sheets_adapter import GoogleSheetsAdapter
 from src.domain.cost_analysis_service import CostAnalysisService
@@ -153,8 +151,8 @@ def main():
     st.markdown('<div class="header">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # logo: preferir assets/logo.jpg se existir, senão usar logo.png
-        logo_path = "assets/logo.jpg" if os.path.exists("assets/logo.jpg") else "assets/logo.png"
+        # logo: usar assets/logo.png
+        logo_path = "assets/logo.png"
         # Use st.image para renderizar (mais confiável em Streamlit)
         try:
             st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
