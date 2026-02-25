@@ -68,6 +68,8 @@ st.markdown("""
         border: 4px solid var(--vava-gold);
         box-shadow: 0 6px 18px rgba(0,0,0,0.4);
     }
+    /* estilizar imagens geradas por st.image */
+    .stImage img { border-radius: 999px !important; border:4px solid var(--vava-gold) !important; box-shadow: 0 6px 18px rgba(0,0,0,0.4) !important; }
     .metric-card {
         background: linear-gradient(180deg, rgba(201,162,58,0.09), rgba(255,255,255,0.02));
         padding: 0.9rem 1rem;
@@ -153,18 +155,12 @@ def main():
     with col2:
         # logo: preferir assets/logo.jpg se existir, senão usar logo.png
         logo_path = "assets/logo.jpg" if os.path.exists("assets/logo.jpg") else "assets/logo.png"
-        # Ler arquivo e converter para data URI (base64) para garantir que o HTML carregue a imagem
+        # Use st.image para renderizar (mais confiável em Streamlit)
         try:
-            mime_type = mimetypes.guess_type(logo_path)[0] or 'image/png'
-            with open(logo_path, 'rb') as _f:
-                _b = _f.read()
-            _b64 = base64.b64encode(_b).decode('utf-8')
-            data_uri = f"data:{mime_type};base64,{_b64}"
             st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
-            st.markdown(f'<img src="{data_uri}" class="vava-logo" width="150" />', unsafe_allow_html=True)
+            st.image(logo_path, width=150)
             st.markdown('</div>', unsafe_allow_html=True)
-        except Exception as _e:
-            # fallback para mostrar um placeholder em caso de erro
+        except Exception:
             st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
             st.markdown('<div style="width:150px;height:150px;border-radius:999px;background:#C9A23A;display:inline-block"></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
