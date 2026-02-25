@@ -13,6 +13,8 @@ import pandas as pd
 from decimal import Decimal
 import os
 from dotenv import load_dotenv
+import base64
+import mimetypes
 
 from src.infrastructure.google_sheets_adapter import GoogleSheetsAdapter
 from src.domain.cost_analysis_service import CostAnalysisService
@@ -22,9 +24,19 @@ from src.ports.data_source import DataSourceError
 load_dotenv()
 
 # Configuração da página
+# Se houver favicon em assets, carregue os bytes para usar como page_icon
+_favicon_path = "assets/favicon.png" if os.path.exists("assets/favicon.png") else None
+_favicon_bytes = None
+if _favicon_path:
+    try:
+        with open(_favicon_path, 'rb') as _f:
+            _favicon_bytes = _f.read()
+    except Exception:
+        _favicon_bytes = None
+
 st.set_page_config(
     page_title="Vava Doces - Análise de Custos",
-    page_icon="🍰",
+    page_icon=_favicon_bytes or "🍰",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -141,9 +153,21 @@ def main():
     with col2:
         # logo: preferir assets/logo.jpg se existir, senão usar logo.png
         logo_path = "assets/logo.jpg" if os.path.exists("assets/logo.jpg") else "assets/logo.png"
-        st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
-        st.markdown(f'<img src="{logo_path}" class="vava-logo" width="150" />', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Ler arquivo e converter para data URI (base64) para garantir que o HTML carregue a imagem
+        try:
+            mime_type = mimetypes.guess_type(logo_path)[0] or 'image/png'
+            with open(logo_path, 'rb') as _f:
+                _b = _f.read()
+            _b64 = base64.b64encode(_b).decode('utf-8')
+            data_uri = f"data:{mime_type};base64,{_b64}"
+            st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
+            st.markdown(f'<img src="{data_uri}" class="vava-logo" width="150" />', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        except Exception as _e:
+            # fallback para mostrar um placeholder em caso de erro
+            st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
+            st.markdown('<div style="width:150px;height:150px;border-radius:999px;background:#C9A23A;display:inline-block"></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
     st.title("🍰 Vava Doces - Análise de Custos e Faturamento")
     st.markdown("_Ferramenta de análise de custos de produção e faturamento_")
     st.markdown('</div>', unsafe_allow_html=True)
