@@ -1,3 +1,8 @@
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 name: Deploy MkDocs site to GitHub Pages
 
 on:
@@ -10,9 +15,13 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # persist-credentials true permite usar o GITHUB_TOKEN para push (padrão é true)
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -35,4 +44,3 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           keep_files: false
-
