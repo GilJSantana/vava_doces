@@ -89,7 +89,7 @@ uv run streamlit run app.py
 # http://localhost:8501
 ```
 
-Para mais detalhes sobre a configuração do Streamlit, consulte [STREAMLIT_SETUP.md](./STREAMLIT_SETUP.md).
+Para mais detalhes sobre a configuração do Streamlit, consulte [STREAMLIT_SETUP.md](./docs/STREAMLIT_SETUP.md).
 
 ---
 
@@ -170,3 +170,7 @@ Contribuições são bem-vindas. Abra issues para descrever bugs ou melhorias e 
 ---
 
 _Boa prática: sempre rode a suíte de testes (`uv run pytest`) antes de abrir um PR._
+
+---
+
+> Observação: a documentação do projeto foi organizada na pasta `docs/`. Consulte `docs/` para guias, sumários e o roadmap do projeto.
