@@ -24,7 +24,6 @@ def test_credentials_file():
     assert cred_path is not None, "GOOGLE_APPLICATION_CREDENTIALS não definido"
     if Path(cred_path).exists():
         print(f"✅ SUCESSO: Arquivo de credenciais encontrado!")
-        return True
     else:
         print(f"❌ ERRO: Arquivo de credenciais NÃO encontrado")
         print(f"\n💡 Solução:")
@@ -45,7 +44,6 @@ def test_sheet_id():
     assert sheet_id is not None, "GOOGLE_SHEET_ID não definido"
     assert len(sheet_id.strip()) > 20, "Sheet ID parece inválido"
     print(f"✅ SUCESSO: Sheet ID parece válido")
-    return True
 
 
 def test_google_sheets_connection():
@@ -96,8 +94,6 @@ def test_google_sheets_connection():
         print(f"\n📊 Abas encontradas:")
         for i, sheet in enumerate(spreadsheet.worksheets(), 1):
             print(f"   {i}. {sheet.title} ({sheet.row_count}x{sheet.col_count} células)")
-
-        return True
 
     except FileNotFoundError as e:
         print(f"❌ ERRO: Arquivo de credenciais não encontrado: {e}")
