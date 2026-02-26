@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 # Carregar variáveis de ambiente
 load_dotenv()
 
+
 def extract_sheet_id(url):
     """Extrair ID da planilha de uma URL"""
     # Padrão 1: URL completa
@@ -21,6 +22,7 @@ def extract_sheet_id(url):
     if re.match(r'^[a-zA-Z0-9-_]+$', url):
         return url
     return None
+
 
 def test_sheet_access():
     """Testar acesso à planilha e listar informações"""
@@ -40,9 +42,10 @@ def test_sheet_access():
         print(f"   URL/ID da planilha: {sheet_url}")
 
         # Verificar arquivo de credenciais
+        assert cred_path is not None, "GOOGLE_APPLICATION_CREDENTIALS não definido"
         if not Path(cred_path).exists():
             print(f"\n❌ ERRO: Arquivo de credenciais não encontrado!")
-            return False
+            assert False, "Arquivo de credenciais não encontrado"
 
         print(f"\n✅ Arquivo de credenciais encontrado")
 
@@ -51,7 +54,7 @@ def test_sheet_access():
         if not sheet_id:
             print(f"❌ ERRO: Não consegui extrair o ID da planilha da URL")
             print(f"   A URL deve conter: /spreadsheets/d/[ID]/")
-            return False
+            assert False, "Não foi possível extrair ID da planilha"
 
         print(f"✅ ID da planilha extraído: {sheet_id}")
 
@@ -119,20 +122,26 @@ def test_sheet_access():
                 print(f"\n💡 Solução:")
                 print(f"   - Este documento pode não ser uma planilha (ex: Google Doc, Presentation)")
                 print(f"   - Verifique se a URL aponta para uma planilha (Google Sheets)")
-                print(f"   - URL esperada padrão: https://docs.google.com/spreadsheets/d/...")
+                print(f"   - URL esperada padrão: https://docs.google.com/spreadsheets/d/..." )
 
-            return False
+            assert False, f"APIError ao acessar planilha: {error_msg}"
 
     except ImportError as e:
         print(f"❌ ERRO: Biblioteca não instalada: {e}")
         print(f"\n💡 Solução: Execute 'uv install' ou 'pip install gspread google-auth-oauthlib'")
-        return False
+        assert False, f"Biblioteca não instalada: {e}"
     except Exception as e:
         print(f"❌ ERRO: {type(e).__name__}: {e}")
-        return False
+        assert False, f"Erro inesperado: {e}"
+
 
 if __name__ == "__main__":
-    success = test_sheet_access()
+    success = False
+    try:
+        success = test_sheet_access()
+    except AssertionError as e:
+        print(f"AssertionError: {e}")
+        success = False
 
     print("\n" + "="*70)
     if success:
@@ -140,4 +149,3 @@ if __name__ == "__main__":
     else:
         print("⚠️  Há problemas na conexão. Verifique as sugestões acima.")
     print("="*70 + "\n")
-
