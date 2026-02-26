@@ -10,13 +10,26 @@ nav:
   - Project Report: PROJECT_COMPLETION_REPORT.txt
   - Files Summary: FILES_SUMMARY.txt
   - Final Checklist: FINAL_CHECKLIST.txt
+  - README Refatoracao: README_REFATORACAO.txt
 
 theme:
   name: material
+  # Use the project logo and favicon (copiados to docs/images/)
+  logo: 'images/logo.png'
+  favicon: 'images/favicon.png'
+  palette:
+    scheme: default
+    primary: 'green'
+    accent: 'amber'
+  font:
+    text: 'Playfair Display'
+    code: 'Roboto Mono'
+
+extra_css:
+  - 'assets/css/extra.css'
 
 markdown_extensions:
   - toc:
       permalink: true
   - admonition
   - footnotes
-
