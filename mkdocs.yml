@@ -1,0 +1,22 @@
+site_name: 'Vava Doces Docs'
+site_description: 'Documentação do projeto Vava Doces'
+site_author: 'Vava Doces Dev'
+repo_name: ''
+nav:
+  - Home: index.md
+  - Quick Start: QUICK_START_STREAMLIT.md
+  - Refatoring Summary: REFACTORING_SUMMARY.md
+  - Roadmap: NEXT_STEPS.md
+  - Project Report: PROJECT_COMPLETION_REPORT.txt
+  - Files Summary: FILES_SUMMARY.txt
+  - Final Checklist: FINAL_CHECKLIST.txt
+
+theme:
+  name: material
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - admonition
+  - footnotes
+
