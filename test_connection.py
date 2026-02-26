@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 # Carregar variáveis de ambiente
 load_dotenv()
 
+
 def test_credentials_file():
     """Teste 1: Verificar se o arquivo de credenciais existe"""
     print("\n" + "="*60)
@@ -20,6 +21,7 @@ def test_credentials_file():
     cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     print(f"📍 Caminho esperado: {cred_path}")
 
+    assert cred_path is not None, "GOOGLE_APPLICATION_CREDENTIALS não definido"
     if Path(cred_path).exists():
         print(f"✅ SUCESSO: Arquivo de credenciais encontrado!")
         return True
@@ -28,7 +30,8 @@ def test_credentials_file():
         print(f"\n💡 Solução:")
         print(f"   1. Crie o diretório: mkdir -p credencial")
         print(f"   2. Copie seu arquivo JSON para: {cred_path}")
-        return False
+        assert False, "Arquivo de credenciais não encontrado"
+
 
 def test_sheet_id():
     """Teste 2: Verificar ID da planilha"""
@@ -39,12 +42,11 @@ def test_sheet_id():
     sheet_id = os.getenv("GOOGLE_SHEET_ID")
     print(f"📍 Valor configurado: {sheet_id}")
 
-    if sheet_id and len(sheet_id.strip()) > 20:  # IDs do Google Sheets geralmente tem esse tamanho
-        print(f"✅ SUCESSO: Sheet ID parece válido")
-        return True
-    else:
-        print(f"❌ ERRO: Sheet ID inválido ou não configurado")
-        return False
+    assert sheet_id is not None, "GOOGLE_SHEET_ID não definido"
+    assert len(sheet_id.strip()) > 20, "Sheet ID parece inválido"
+    print(f"✅ SUCESSO: Sheet ID parece válido")
+    return True
+
 
 def test_google_sheets_connection():
     """Teste 3: Conectar com Google Sheets"""
@@ -54,9 +56,10 @@ def test_google_sheets_connection():
 
     cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
+    assert cred_path is not None, "GOOGLE_APPLICATION_CREDENTIALS não definido"
     if not Path(cred_path).exists():
         print(f"⏭️  PULADO: Arquivo de credenciais não encontrado")
-        return False
+        assert False, "Arquivo de credenciais não encontrado"
 
     try:
         import gspread
@@ -98,10 +101,11 @@ def test_google_sheets_connection():
 
     except FileNotFoundError as e:
         print(f"❌ ERRO: Arquivo de credenciais não encontrado: {e}")
-        return False
+        assert False, f"Arquivo de credenciais não encontrado: {e}"
     except Exception as e:
         print(f"❌ ERRO: {type(e).__name__}: {e}")
-        return False
+        assert False, f"Erro ao conectar: {e}"
+
 
 def main():
     """Executar todos os testes"""
@@ -112,13 +116,28 @@ def main():
     results = []
 
     # Teste 1
-    results.append(("Arquivo de Credenciais", test_credentials_file()))
+    try:
+        test_credentials_file()
+        results.append(("Arquivo de Credenciais", True))
+    except AssertionError as e:
+        print(f"AssertionError: {e}")
+        results.append(("Arquivo de Credenciais", False))
 
     # Teste 2
-    results.append(("ID da Planilha", test_sheet_id()))
+    try:
+        test_sheet_id()
+        results.append(("ID da Planilha", True))
+    except AssertionError as e:
+        print(f"AssertionError: {e}")
+        results.append(("ID da Planilha", False))
 
     # Teste 3
-    results.append(("Conexão Google Sheets", test_google_sheets_connection()))
+    try:
+        test_google_sheets_connection()
+        results.append(("Conexão Google Sheets", True))
+    except AssertionError as e:
+        print(f"AssertionError: {e}")
+        results.append(("Conexão Google Sheets", False))
 
     # Resumo
     print("\n" + "="*60)
@@ -146,6 +165,6 @@ def main():
         print("\n❌ Há problemas que precisam ser corrigidos.")
         return 1
 
+
 if __name__ == "__main__":
     sys.exit(main())
-

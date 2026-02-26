@@ -6,6 +6,7 @@ Teste para validar que o app.py carrega sem erros de sintaxe
 import sys
 import ast
 
+
 def test_syntax():
     """Verifica se o arquivo Python tem sintaxe válida"""
     try:
@@ -13,23 +14,26 @@ def test_syntax():
             code = f.read()
         ast.parse(code)
         print("✅ Sintaxe do app.py está válida")
-        return True
+        assert True
     except SyntaxError as e:
         print(f"❌ Erro de sintaxe em app.py: {e}")
-        return False
+        assert False, f"Erro de sintaxe: {e}"
+
 
 def test_imports():
     """Tenta importar o módulo"""
     try:
-        import app
+        import app  # noqa: F401
         print("✅ Módulo app.py importado com sucesso")
-        return True
+        assert True
     except ImportError as e:
         print(f"⚠️  Erro de importação (esperado sem streamlit): {e}")
-        return True
+        # Considerado ok para o propósito deste teste local
+        assert True
     except Exception as e:
         print(f"❌ Erro ao importar app.py: {e}")
-        return False
+        assert False, f"Erro ao importar app.py: {e}"
+
 
 def test_functions_exist():
     """Verifica se as funções esperadas existem"""
@@ -58,21 +62,35 @@ def test_functions_exist():
 
     if missing:
         print(f"⚠️  Funções não encontradas: {', '.join(missing)}")
-        return False
+        assert False, f"Funções faltando: {', '.join(missing)}"
     else:
         print(f"✅ Todas as funções esperadas foram encontradas ({len(expected_functions)})")
-        return True
+        assert True
+
 
 if __name__ == "__main__":
     print("="*60)
     print("🧪 TESTE DE CARREGAMENTO - app.py")
     print("="*60)
 
-    results = [
-        ("Sintaxe", test_syntax()),
-        ("Funções", test_functions_exist()),
-        ("Imports", test_imports()),
+    tests = [
+        ("Sintaxe", test_syntax),
+        ("Funções", test_functions_exist),
+        ("Imports", test_imports),
     ]
+
+    results = []
+
+    for name, func in tests:
+        try:
+            func()
+            results.append((name, True))
+        except AssertionError as e:
+            print(f"AssertionError em {name}: {e}")
+            results.append((name, False))
+        except Exception as e:
+            print(f"Erro inesperado em {name}: {e}")
+            results.append((name, False))
 
     print("\n" + "="*60)
     print("📊 RESUMO")
