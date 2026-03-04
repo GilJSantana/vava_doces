@@ -400,6 +400,18 @@ def show_revenue_impact(product_service):
             st.warning("⚠️ Não foi possível encontrar coluna de nome de produto")
             return
 
+        # Filtrar apenas produtos válidos (remover linhas vazias)
+        # Um produto é válido se tiver nome preenchido
+        produtos_df = produtos_df[produtos_df[nome_col].notna() & (produtos_df[nome_col] != "")]
+
+        # Se tiver coluna de preço, filtrar também por preço válido
+        if preco_col:
+            produtos_df = produtos_df[produtos_df[preco_col].notna() & (produtos_df[preco_col] != "")]
+
+        if produtos_df.empty:
+            st.warning("⚠️ Nenhum produto válido encontrado")
+            return
+
         # Calcular impacto
         st.subheader("📊 Análise de Impacto por Produto")
 
@@ -437,12 +449,12 @@ def show_revenue_impact(product_service):
 
         # Converter colunas numéricas para formato de moeda
         if preco_col:
-            display_df["Preço Formatado"] = display_df[preco_col].apply(
+            display_df["Preço"] = display_df[preco_col].apply(
                 lambda x: format_currency(parse_currency(x)) if parse_currency(x) is not None else "N/A"
             )
 
         if margem_col:
-            display_df["Margem Formatada"] = display_df[margem_col].apply(
+            display_df["Margem"] = display_df[margem_col].apply(
                 lambda x: f"{parse_currency(x):.1f}%" if parse_currency(x) is not None else "N/A"
             )
 
@@ -451,9 +463,9 @@ def show_revenue_impact(product_service):
         if categoria_col:
             cols_to_show.append(categoria_col)
         if preco_col:
-            cols_to_show.append("Preço Formatado")
+            cols_to_show.append("Preço")
         if margem_col:
-            cols_to_show.append("Margem Formatada")
+            cols_to_show.append("Margem")
         if find_col(["ativo", "active"]):
             cols_to_show.append(find_col(["ativo", "active"]))
 
