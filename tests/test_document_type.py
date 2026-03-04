@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 def inspect_document():
     """Inspecionar qual tipo de documento é"""
     print("\n" + "="*70)
@@ -64,25 +63,25 @@ def inspect_document():
             if 'spreadsheet' in mime_type:
                 print(f"   ✅ É uma PLANILHA (Google Sheets)")
                 print(f"   Tipo: {mime_type}")
-                assert True
+                return True
             elif 'document' in mime_type:
                 print(f"   ❌ É um DOCUMENTO (Google Docs) - NÃO é Sheets!")
                 print(f"   Tipo: {mime_type}")
                 print(f"\n💡 Solução: Use o ID de uma Planilha, não de um Documento")
-                assert False, "Documento não é uma planilha"
+                return False
             elif 'presentation' in mime_type:
                 print(f"   ❌ É uma APRESENTAÇÃO (Google Slides) - NÃO é Sheets!")
                 print(f"   Tipo: {mime_type}")
                 print(f"\n💡 Solução: Use o ID de uma Planilha, não de uma Apresentação")
-                assert False, "Documento é uma apresentação, não uma planilha"
+                return False
             else:
                 print(f"   ❓ Tipo desconhecido: {mime_type}")
-                assert False, "Tipo desconhecido"
+                return False
 
         elif response.status == 404:
             print(f"\n❌ ERRO 404: Documento não encontrado!")
             print(f"   O ID pode estar errado ou o documento foi deletado")
-            assert False, "Documento não encontrado (404)"
+            return False
 
         elif response.status == 403:
             print(f"\n❌ ERRO 403: Permissão negada!")
@@ -95,25 +94,19 @@ def inspect_document():
             email = creds.get('client_email')
             print(f"      {email}")
             print(f"   2. Dê permissão de Visualizador (Reader)")
-            assert False, "Permissão negada (403)"
+            return False
 
         else:
             print(f"\n❌ ERRO HTTP {response.status}")
             print(f"   Resposta: {response.data.decode('utf-8')}")
-            assert False, f"HTTP {response.status}"
+            return False
 
     except Exception as e:
         print(f"❌ ERRO: {type(e).__name__}: {e}")
-        assert False, f"Erro inesperado: {e}"
-
+        return False
 
 if __name__ == "__main__":
-    success = True
-    try:
-        inspect_document()
-    except AssertionError as e:
-        print(f"AssertionError: {e}")
-        success = False
+    success = inspect_document()
 
     print("\n" + "="*70)
     if success:
@@ -126,3 +119,4 @@ if __name__ == "__main__":
         print("   3. A URL será: https://docs.google.com/spreadsheets/d/[ID]/")
         print("   4. Copie o [ID] e coloque no .env")
     print("="*70 + "\n")
+

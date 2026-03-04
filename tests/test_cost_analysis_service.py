@@ -49,3 +49,41 @@ def test_calculate_cost_per_recipe_missing_columns_raises_value_error():
         assert False, "Expected ValueError due to missing columns"
     except ValueError as e:
         assert "missing required column" in str(e)
+
+
+def test_calculate_cost_per_product_happy_path():
+    # Arrange: construct a dataframe with expected columns
+    df = pd.DataFrame([
+        {"ProductName": "Brigadeiro", "QtyPerProduct": 2, "UnitCost": 3.5},
+        {"ProductName": "Brigadeiro", "QtyPerProduct": 1, "UnitCost": 4.0},
+        {"ProductName": "Beijinho", "QtyPerProduct": 1.5, "UnitCost": 2.0},
+    ])
+
+    service = CostAnalysisService(FakeDataSource(df))
+
+    # Act
+    result = service.calculate_cost_per_product("Produtos")
+
+    # Assert
+    assert isinstance(result, dict)
+    assert result["Brigadeiro"] == Decimal("2") * Decimal("3.5") + Decimal("1") * Decimal("4.0")
+    assert result["Beijinho"] == Decimal("1.5") * Decimal("2.0")
+
+
+def test_calculate_cost_per_product_empty_sheet_returns_empty_dict():
+    df = pd.DataFrame([])
+    service = CostAnalysisService(FakeDataSource(df))
+
+    result = service.calculate_cost_per_product("Produtos")
+    assert result == {}
+
+
+def test_calculate_cost_per_product_missing_columns_raises_value_error():
+    df = pd.DataFrame([{"nome": "Brigadeiro"}])
+    service = CostAnalysisService(FakeDataSource(df))
+
+    try:
+        service.calculate_cost_per_product("Produtos")
+        assert False, "Expected ValueError due to missing columns"
+    except ValueError as e:
+        assert "missing required columns" in str(e).lower()

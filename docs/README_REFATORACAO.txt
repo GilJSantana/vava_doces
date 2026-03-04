@@ -164,7 +164,7 @@ identidade visual consistente e moderna.
 ✅ Escalável para o Futuro
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Data: 25 de Fevereiro de 2026
-Desenvolvedor: Vava Doces Dev Team
+Desenvolvedor: Gsantana
 Versão: 1.0.0
 Status: ✅ OPERACIONAL E PRONTO PARA PRODUÇÃO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

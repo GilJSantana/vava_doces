@@ -194,7 +194,7 @@ Em caso de problemas:
 Data: 25 de Fevereiro de 2026
 Status: ✅ PROJETO COMPLETO E OPERACIONAL
 Versão: 1.0.0
-Autor: Vava Doces Dev Team
+Autor: Gsantana
 
 ================================================================
 

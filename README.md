@@ -2,11 +2,11 @@
   <img src="assets/logo.png" alt="Vava Doces Logo" width="200" height="200" style="border-radius: 20px;">
 </div>
 
-# Vava Doces - Análise de Custos e Faturamento
+# Vava Doces - Análise de Produtos e Vendas
 
 ## 📋 Sobre o Projeto
 
-Este projeto fornece ferramentas para análise de custos de produção e faturamento para a loja Vava Doces. A ideia é conectar os dados (planilhas Google / Excel) a serviços de domínio que calculam custo por receita, margens e outras métricas de negócio.
+Este projeto fornece ferramentas para análise de produtos, custos e vendas para a loja Vava Doces. A ideia é conectar os dados (planilhas Google / Excel) a serviços de domínio que calculam custo por produto, margens e outras métricas de negócio.
 
 O repositório foi organizado com boas práticas (injeção de dependência, separação entre *ports* e *adapters*, e testes orientados por TDD) para facilitar manutenção e evolução.
 
@@ -28,7 +28,7 @@ O repositório foi organizado com boas práticas (injeção de dependência, sep
 - `main.py` — script principal (em desenvolvimento).
   - `src/ports/data_source.py` — contrato/porta `DataSource` e exceção `DataSourceError`.
   - `src/infrastructure/google_sheets_adapter.py` — adaptador que implementa `DataSource` e acessa Google Sheets (usa `gspread`).
-  - `src/domain/cost_analysis_service.py` — serviço de domínio que implementa regras e calcula custo por receita (injeção de `DataSource`).
+  - `src/domain/cost_analysis_service.py` — serviço de domínio que implementa regras e calcula custo por produto (injeção de `DataSource`).
 - `tests/` — suíte de testes (pytest)
   - `tests/test_cost_analysis_service.py` — testes de unidade para `CostAnalysisService` (usa um `FakeDataSource`).
   - `tests/test_google_sheets_adapter.py` — testes do adaptador com mocks do `gspread`.
@@ -89,7 +89,7 @@ uv run streamlit run app.py
 # http://localhost:8501
 ```
 
-Para mais detalhes sobre a configuração do Streamlit, consulte [STREAMLIT_SETUP.md](./docs/STREAMLIT_SETUP.md).
+Para mais detalhes sobre a configuração do Streamlit, consulte [STREAMLIT_SETUP.md](./STREAMLIT_SETUP.md).
 
 ---
 
@@ -125,8 +125,8 @@ Principais princípios: SOLID (SRP, DIP, ISP, OCP) e testes unitários para regr
 
 ## Como o `CostAnalysisService` é esperado agir
 
-- Método principal disponível: `calculate_cost_per_recipe(sheet_name: str) -> Dict[str, Decimal]`.
-- Entrada esperada: um `DataFrame` com pelo menos as colunas (case-insensitive) `recipe`, `qty`, `unit_price`.
+- Método principal disponível: `calculate_cost_per_product(sheet_name: str = "Produtos") -> Dict[str, Decimal]`.
+- Entrada esperada: um `DataFrame` com pelo menos as colunas (case-insensitive) `productname`, `qtyperproduct`, `unitcost`.
 - Comportamento:
   - Se a folha estiver vazia, retorna `{}`.
   - Se faltar coluna obrigatória, lança `ValueError` com mensagem clara.
@@ -170,7 +170,3 @@ Contribuições são bem-vindas. Abra issues para descrever bugs ou melhorias e 
 ---
 
 _Boa prática: sempre rode a suíte de testes (`uv run pytest`) antes de abrir um PR._
-
----
-
-> Observação: a documentação do projeto foi organizada na pasta `docs/`. Consulte `docs/` para guias, sumários e o roadmap do projeto.
