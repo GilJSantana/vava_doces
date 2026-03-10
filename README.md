@@ -2,171 +2,157 @@
   <img src="assets/logo.png" alt="Vava Doces Logo" width="200" height="200" style="border-radius: 20px;">
 </div>
 
-# Vava Doces - Análise de Produtos e Vendas
+# Vava Doces - Análise de Custos, Margens e Rentabilidade
 
-## 📋 Sobre o Projeto
+## Sobre o Projeto
 
-Este projeto fornece ferramentas para análise de produtos, custos e vendas para a loja Vava Doces. A ideia é conectar os dados (planilhas Google / Excel) a serviços de domínio que calculam custo por produto, margens e outras métricas de negócio.
+Este repositório apresenta um pipeline de dados aplicado a um pequeno negócio real: a loja Vava Doces. O projeto integra planilhas operacionais (produtos, receitas, materia-prima e vendas), processa os dados com regras de negocio e disponibiliza analises em um cockpit Streamlit.
 
-O repositório foi organizado com boas práticas (injeção de dependência, separação entre *ports* e *adapters*, e testes orientados por TDD) para facilitar manutenção e evolução.
-
----
-
-## 🧭 Visão rápida
-
-- Linguagem: Python
-- Gerenciador de ambiente/execução aqui usado: `uv` (conforme seu fluxo)
-- Testes: `pytest`
-- Principais bibliotecas: `pandas`, `gspread` (para Google Sheets; adaptador), `decimal` (para precisão financeira)
+O objetivo e transformar dados dispersos em informacao acionavel para gestao: custo por produto, margem, rentabilidade e impacto no faturamento.
 
 ---
 
-## 🗂 Estrutura relevante do projeto
+## Problema de Negocio e Contexto
 
-### Funcionalidades principais:
+A Vava Doces enfrentava um cenario comum em pequenos negocios:
 
-- `main.py` — script principal (em desenvolvimento).
-  - `src/ports/data_source.py` — contrato/porta `DataSource` e exceção `DataSourceError`.
-  - `src/infrastructure/google_sheets_adapter.py` — adaptador que implementa `DataSource` e acessa Google Sheets (usa `gspread`).
-  - `src/domain/cost_analysis_service.py` — serviço de domínio que implementa regras e calcula custo por produto (injeção de `DataSource`).
-- `tests/` — suíte de testes (pytest)
-  - `tests/test_cost_analysis_service.py` — testes de unidade para `CostAnalysisService` (usa um `FakeDataSource`).
-  - `tests/test_google_sheets_adapter.py` — testes do adaptador com mocks do `gspread`.
-  - `tests/test_streamlit_app.py` — testes para funções auxiliares da aplicação Streamlit.
-- `RECEITAS AWI.xlsx` — planilha de referência/entrada para alinhamento de esquema (não é usada diretamente pelos testes).
+- Nao havia cadastro estruturado e confiavel de produtos.
+- A compra de materia-prima era operacional, sem visao consolidada de custo por item vendido.
+- O sistema contabil registrava vendas com inconsistencias de padronizacao.
+- Embora o dono percebesse o negocio "sem dividas", o caixa chegava pressionado no fim do ano, reduzindo capacidade de investimento.
+
+Esse contexto gera uma dor central: vender nao significa necessariamente lucrar. Sem modelo de custo e margem por produto, decisoes de preco e mix de vendas ficam no escuro.
 
 ---
 
-## Como rodar localmente (com `uv`)
+## Principais Perguntas que o Projeto Responde
 
-Observação: neste repositório você informou que está usando o gerenciador `uv`. Os comandos abaixo assumem que as dependências foram instaladas no ambiente gerenciado por `uv`.
+1. Quais produtos realmente geram lucro e quais apenas aumentam volume?
+2. Quanto custa produzir (ou adquirir) cada produto, considerando sua composicao?
+3. Qual e a margem de contribuicao por produto e por categoria?
+4. Quais produtos tem maior impacto no faturamento total?
+5. Onde existem distorcoes entre preco praticado e custo real?
+6. Quais ajustes de preco podem melhorar caixa sem comprometer competitividade?
+7. Como priorizar compras de materia-prima e producao com base em rentabilidade?
 
-### 1. Instalar dependências
+---
+
+## Como Funciona (Arquitetura)
+
+A arquitetura segue separacao clara entre regra de negocio e infraestrutura:
+
+- `Ports` (`src/ports/data_source.py`): define o contrato `DataSource` para leitura de dados.
+- `Adapters` (`src/infrastructure/google_sheets_adapter.py`): implementa acesso a Google Sheets via `gspread`.
+- `Domain Services`:
+  - `src/domain/cost_analysis_service.py`: calcula custo por produto e validacoes de schema.
+  - `src/domain/product_analysis_service.py`: consolida metricas de produtos, margem e impacto de faturamento.
+- `App` (`app.py`): interface Streamlit para visualizacao e apoio a decisao.
+
+Esse desenho facilita testes, manutencao e troca de fonte de dados sem quebrar regras de negocio.
+
+---
+
+## Resultados Esperados para o Dono do Negocio
+
+- Visibilidade clara de custo, margem e rentabilidade por produto.
+- Base objetiva para ajustar precificacao e mix de vendas.
+- Reducao de decisoes por intuicao e maior confianca na gestao do caixa.
+- Identificacao de produtos que drenam margem ou imobilizam capital.
+- Prioridade de investimento em produtos mais rentaveis.
+
+---
+
+## Estrutura Relevante do Projeto
+
+- `app.py` - aplicacao Streamlit (cockpit de analise).
+- `src/ports/data_source.py` - contrato de acesso a dados (`DataSource`) e erro de integracao.
+- `src/infrastructure/google_sheets_adapter.py` - adaptador de leitura da planilha Google Sheets.
+- `src/domain/cost_analysis_service.py` - regras de custo por produto.
+- `src/domain/product_analysis_service.py` - regras para analise de produtos, margem e faturamento.
+- `tests/` - suite com testes de dominio, infraestrutura e aplicacao:
+  - `tests/test_cost_analysis_service.py`
+  - `tests/test_google_sheets_adapter.py`
+  - `tests/test_streamlit_app.py`
+  - `tests/test_integration.py`
+- `scripts/run_app.sh` - script auxiliar para iniciar o Streamlit.
+
+---
+
+## Como Rodar Localmente (com `uv`)
+
+Os comandos abaixo assumem uso de `uv` no Linux (bash).
+
+### 1) Instalar dependencias
 
 ```bash
-# Instalar todas as dependências
-uv install
-# Ou, se preferir, recrie o ambiente/instale localmente:
-# python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+uv sync
 ```
 
-### 2. Configurar credenciais do Google Sheets
+Se preferir executar sem sincronizar lock completo:
 
 ```bash
-# Copiar arquivo de exemplo
-cp .env.example .env
-
-# Editar com seus dados
-nano .env
+uv pip install -e .
 ```
 
-Configure:
-- `GOOGLE_APPLICATION_CREDENTIALS`: Caminho para o JSON da Service Account
-- `GOOGLE_SHEET_ID`: ID da sua planilha
+### 2) Configurar credenciais do Google Sheets
 
-### 3. Rodar testes
+Crie um arquivo `.env` na raiz com:
 
 ```bash
-# Rodar todos os testes
+GOOGLE_APPLICATION_CREDENTIALS="/caminho/absoluto/para/service-account.json"
+GOOGLE_SHEET_ID="SEU_SHEET_ID"
+```
+
+### 3) Rodar testes
+
+```bash
 uv run pytest -q
-
-# Rodar teste específico
-
-# Rodar com cobertura
-uv run pytest --cov=src tests/
 ```
 
-### 4. Executar a aplicação Streamlit
+### 4) Executar o Streamlit
 
 ```bash
-# Usando o script (recomendado)
-./run_app.sh
-
-# Ou diretamente
 uv run streamlit run app.py
-
-# Abrir no navegador
-# http://localhost:8501
 ```
 
-Para mais detalhes sobre a configuração do Streamlit, consulte [STREAMLIT_SETUP.md](./STREAMLIT_SETUP.md).
-
----
-
-2) Rodar testes (usa o pytest no ambiente uv):
-
-uv run pytest -q
-# Exemplo genérico (adapte conforme seu uso do uv):
-
-3) Rodar um teste específico:
-3. Defina a variável de ambiente antes de rodar a aplicação/tests:
+Ou via script auxiliar:
 
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS="/caminho/para/service-account.json"
+bash scripts/run_app.sh
 ```
 
-
-B) Autenticação local (desenvolvimento):
-
-- Alternativa: `gcloud auth application-default login` para usar suas credenciais de usuário localmente (não recomendado para CI).
-
+Aplicacao disponivel em `http://localhost:8501`.
 
 ---
 
-## Contratos, design e boas práticas aplicadas
+## Boas Praticas Aplicadas
 
-- `CostAnalysisService` (domain): contém regras de negócio (cálculo de custo) e validação. Recebe um `DataSource` por injeção de dependência.
-- Erros: adaptadores normalizam exceções para `DataSourceError` para facilitar tratamento e testes.
-- Testes escritos com TDD em mente: primeiro os testes de domínio com mocks/fakes, depois implementação da infraestrutura.
-
-Principais princípios: SOLID (SRP, DIP, ISP, OCP) e testes unitários para regras de negócio.
-
----
-
-## Como o `CostAnalysisService` é esperado agir
-
-- Método principal disponível: `calculate_cost_per_product(sheet_name: str = "Produtos") -> Dict[str, Decimal]`.
-- Entrada esperada: um `DataFrame` com pelo menos as colunas (case-insensitive) `productname`, `qtyperproduct`, `unitcost`.
-- Comportamento:
-  - Se a folha estiver vazia, retorna `{}`.
-  - Se faltar coluna obrigatória, lança `ValueError` com mensagem clara.
-  - Usa `decimal.Decimal` para somas de valores monetários (evita imprecisão de floats).
+- Arquitetura em camadas com `ports/adapters` (baixo acoplamento).
+- Inversao de dependencia: dominio depende de contratos, nao de bibliotecas externas.
+- Principios SOLID (com foco em SRP, DIP e OCP).
+- TDD e testes unitarios para regras de negocio criticas.
+- Tratamento de erros de integracao com excecoes especificas.
+- Organizacao voltada para evolucao incremental e onboarding tecnico.
 
 ---
 
-## Execução de desenvolvimento (fluxo recomendado)
+## Proximos Passos e Melhorias
 
-- Use TDD: escreva um teste unitário em `tests/` que descreva o comportamento desejado do domínio.
-- Faça o teste falhar (red).
-- Implemente a lógica mínima no `CostAnalysisService`/adapter (green).
-- Refatore preservando os testes.
-
----
-
-## Riscos e pontos de atenção
-
-- Credenciais no repositório: não comitar arquivos de chave.
-- Formato dos dados: células vazias, separadores decimais (vírgula vs ponto) podem causar `ValueError`. Normalizar no adaptador se precisar.
-- Quotas da API Google: para leituras frequentes, implemente cache ou backoff.
+- Evoluir validacao de schema das abas com relatorio de inconsistencias.
+- Adicionar monitoramento de qualidade dos dados (campos obrigatorios, duplicidades, nulos).
+- Criar indicadores de tendencia (margem ao longo do tempo, sazonalidade e ruptura).
+- Publicar documentacao tecnica no MkDocs + GitHub Pages.
+- Configurar CI/CD com execucao de testes e checks de qualidade a cada PR.
 
 ---
 
-## Próximos passos e melhorias sugeridas
+## Contato
 
-- Adicionar verificação de schema (validar cabeçalho com regras configuráveis) e um adaptador de validação antes do serviço de domínio.
-- Implementar caching para leituras frequentes (ex.: Redis ou cache local com TTL).
-- Expor um CLI simples ou uma API HTTP (FastAPI/Flask) para executar análises remotamente.
-- Adicionar um pipeline de CI (GitHub Actions) que:
-  - Instale dependências (usando `uv` se aplicável),
-  - Rode `uv run pytest -q`,
-  - Não exponha credenciais (use secrets do repositório).
+Projeto desenvolvido por **Gsantana**.
+
+- Email: `gilmar.jesus@gmail.com`
+- Sugestoes e melhorias: abra uma issue ou pull request neste repositorio.
 
 ---
 
-## Contato e contribuições
-
-Contribuições são bem-vindas. Abra issues para descrever bugs ou melhorias e PRs para mudanças implementadas com testes.
-
----
-
-_Boa prática: sempre rode a suíte de testes (`uv run pytest`) antes de abrir um PR._
+> Este projeto representa uma transicao pratica para a area de dados: conecta modelagem de negocio, engenharia de software e analise para gerar impacto real em pequenas empresas.
