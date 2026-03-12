@@ -53,12 +53,12 @@ class CostAnalysisService:
         """
         Loads rows from the given sheet and calculates total cost per product.
 
-        Expected minimal columns in the sheet (case-insensitive):
-        - nome do produto (product name)
-        - quantidade por produto (qty per product)
-        - custo unitário (unit cost)
+        Expected minimal columns (case-insensitive):
+        - product identifier (ID do Produto or Nome do Produto)
+        - quantity used in recipe
+        - unit cost
 
-        Returns a dict mapping product name -> total cost (Decimal).
+        Returns a dict mapping product id/name -> total cost (Decimal).
         Raises ValueError for missing columns.
         """
         try:
@@ -69,18 +69,30 @@ class CostAnalysisService:
         if df is None or df.empty:
             return {}
 
-        product_col = self._find_column(df.columns, ["Nome do Produto", "ProductName", "product_name", "Nome Produto"])
-        qty_col = self._find_column(df.columns, ["Quantidade por Produto", "QtyPerProduct", "qty", "quantidade", "Quantidade"])
-        cost_col = self._find_column(df.columns, ["Custo Unitário", "UnitCost", "unit_price", "Custo Unitario"])
+        product_id_col = self._find_column(df.columns, ["ID do Produto", "ProductID", "product_id", "ProdutoID"])
+        product_name_col = self._find_column(df.columns, ["Nome do Produto", "ProductName", "product_name", "Nome Produto"])
+        qty_col = self._find_column(
+            df.columns,
+            ["Quantidade por Produto", "Quantidade", "Quantidade Receita", "QtyPerProduct", "qty", "quantidade", "Qtde"],
+        )
+        cost_col = self._find_column(
+            df.columns,
+            ["Custo Unitário", "Custo Unitario", "UnitCost", "unit_price", "Custo por Unidade"],
+        )
 
-        if not product_col or not qty_col or not cost_col:
+        if not qty_col or not cost_col or (not product_id_col and not product_name_col):
             raise ValueError("Sheet is missing required columns for product cost calculation")
 
         results: Dict[str, Decimal] = {}
 
         for _, row in df.iterrows():
-            product = row[product_col]
-            if pd.isna(product) or str(product).strip() == "":
+            product_key = None
+            if product_id_col:
+                product_key = row[product_id_col]
+            if (product_key is None or str(product_key).strip() == "") and product_name_col:
+                product_key = row[product_name_col]
+
+            if pd.isna(product_key) or str(product_key).strip() == "":
                 continue
 
             qty = self._parse_decimal(row[qty_col])
@@ -89,7 +101,8 @@ class CostAnalysisService:
                 continue
 
             total = qty * unit_cost
-            results[product] = results.get(product, Decimal("0")) + total
+            key = str(product_key).strip()
+            results[key] = results.get(key, Decimal("0")) + total
 
         return results
 
