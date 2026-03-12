@@ -12,7 +12,7 @@ def show_analise_detalhada(service, product_service):
     render_separator()
 
     try:
-        tab1, tab2, tab3 = st.tabs(["Custos por Produto", "Margens", "Relatórios"])
+        tab1, tab2, tab3 = st.tabs(["Custo de Produção por Produto", "Margens", "Relatórios"])
 
         with tab1:
             st.subheader("Custo de Produção por Produto")

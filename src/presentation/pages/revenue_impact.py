@@ -68,13 +68,16 @@ def show_revenue_impact(product_service):
                     lambda x: format_currency(x) if pd.notna(x) else "N/A"
                 )
 
+        if "Custo Total (R$)" in display_df.columns:
+            display_df = display_df.rename(columns={"Custo Total (R$)": "Custo de Produção (R$)"})
+
         if "Margem (%)" in display_df.columns:
             display_df["Margem"] = display_df["Margem (%)"].apply(
                 lambda x: f"{x:.1f}%" if pd.notna(x) else "N/A"
             )
 
         cols_to_show = ["Produto"]
-        for col in ["Categoria", "Preço", "Custo Total (R$)", "Margem", "Margem Bruta (R$)", "Ativo"]:
+        for col in ["Categoria", "Preço", "Custo de Produção (R$)", "Margem", "Margem Bruta (R$)", "Ativo"]:
             if col in display_df.columns:
                 cols_to_show.append(col)
 
