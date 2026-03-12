@@ -6,70 +6,73 @@
 
 ## Sobre o Projeto
 
-Este repositório apresenta um pipeline de dados aplicado a um pequeno negócio real: a loja Vava Doces. O projeto integra planilhas operacionais (produtos, receitas, materia-prima e vendas), processa os dados com regras de negocio e disponibiliza analises em um cockpit Streamlit.
+Este repositório apresenta um pipeline de dados aplicado a um pequeno negócio real: a loja Vava Doces. O projeto integra planilhas operacionais (produtos, receitas, matéria-prima e vendas), processa os dados com regras de negócio e disponibiliza análises em um cockpit Streamlit.
 
-O objetivo e transformar dados dispersos em informacao acionavel para gestao: custo por produto, margem, rentabilidade e impacto no faturamento.
+O objetivo é transformar dados dispersos em informação acionável para gestão: custo por produto, margem, rentabilidade e impacto no faturamento.
+
+Este projeto faz parte da minha transição profissional para área de dados, unindo minha experiência prévia em tecnologia (QA, automação, infraestrutura AWS) com análise orientada a negócio.
 
 ---
 
-## Problema de Negocio e Contexto
+## Problema de Negócio e Contexto
 
-A Vava Doces enfrentava um cenario comum em pequenos negocios:
+A Vava Doces enfrentava um cenário comum em pequenos negócios:
 
-- Nao havia cadastro estruturado e confiavel de produtos.
-- A compra de materia-prima era operacional, sem visao consolidada de custo por item vendido.
-- O sistema contabil registrava vendas com inconsistencias de padronizacao.
-- Embora o dono percebesse o negocio "sem dividas", o caixa chegava pressionado no fim do ano, reduzindo capacidade de investimento.
+- Não havia cadastro estruturado e confiável de produtos.
+- A compra de matéria-prima era operacional, sem visão consolidada de custo por item vendido.
+- O sistema contábil registrava vendas com inconsistências de padronização.
+- Embora o dono percebesse o negócio "sem dívidas", o caixa chegava pressionado no fim do ano, reduzindo capacidade de investimento.
 
-Esse contexto gera uma dor central: vender nao significa necessariamente lucrar. Sem modelo de custo e margem por produto, decisoes de preco e mix de vendas ficam no escuro.
+Esse contexto gera uma dor central: vender não significa necessariamente lucrar. Sem modelo de custo e margem por produto, decisões de preço e mix de vendas ficam no escuro.
 
 ---
 
 ## Principais Perguntas que o Projeto Responde
 
 1. Quais produtos realmente geram lucro e quais apenas aumentam volume?
-2. Quanto custa produzir (ou adquirir) cada produto, considerando sua composicao?
-3. Qual e a margem de contribuicao por produto e por categoria?
-4. Quais produtos tem maior impacto no faturamento total?
-5. Onde existem distorcoes entre preco praticado e custo real?
-6. Quais ajustes de preco podem melhorar caixa sem comprometer competitividade?
-7. Como priorizar compras de materia-prima e producao com base em rentabilidade?
+2. Quanto custa produzir (ou adquirir) cada produto, considerando sua composição?
+3. Qual é a margem de contribuição por produto e por categoria?
+4. Quais produtos têm maior impacto no faturamento total?
+5. Onde existem distorções entre preço praticado e custo real?
+6. Quais ajustes de preço podem melhorar caixa sem comprometer competitividade?
+7. Como priorizar compras de matéria-prima e produção com base em rentabilidade?
 
 ---
 
 ## Como Funciona (Arquitetura)
 
-A arquitetura segue separacao clara entre regra de negocio e infraestrutura:
+A arquitetura segue separação clara entre regra de negócio e infraestrutura:
 
 - `Ports` (`src/ports/data_source.py`): define o contrato `DataSource` para leitura de dados.
 - `Adapters` (`src/infrastructure/google_sheets_adapter.py`): implementa acesso a Google Sheets via `gspread`.
 - `Domain Services`:
-  - `src/domain/cost_analysis_service.py`: calcula custo por produto e validacoes de schema.
-  - `src/domain/product_analysis_service.py`: consolida metricas de produtos, margem e impacto de faturamento.
-- `App` (`app.py`): interface Streamlit para visualizacao e apoio a decisao.
+  - `src/domain/cost_analysis_service.py`: calcula custo por produto e validações de schema.
+  - `src/domain/product_analysis_service.py`: consolida métricas de produtos, margem e impacto de faturamento.
+- `App` (`app.py`): interface Streamlit para visualização e apoio à decisão.
 
-Esse desenho facilita testes, manutencao e troca de fonte de dados sem quebrar regras de negocio.
+Esse desenho facilita testes, manutenção e troca de fonte de dados sem quebrar regras de negócio.
 
 ---
 
-## Resultados Esperados para o Dono do Negocio
+## Resultados Esperados para o Dono do Negócio
 
 - Visibilidade clara de custo, margem e rentabilidade por produto.
-- Base objetiva para ajustar precificacao e mix de vendas.
-- Reducao de decisoes por intuicao e maior confianca na gestao do caixa.
-- Identificacao de produtos que drenam margem ou imobilizam capital.
-- Prioridade de investimento em produtos mais rentaveis.
+- Base objetiva para ajustar precificação e mix de vendas.
+- Redução de decisões por intuição e maior confiança na gestão do caixa.
+- Identificação de produtos que drenam margem ou imobilizam capital.
+- Prioridade de investimento em produtos mais rentáveis.
+- Permitir ao dono entender por que, mesmo sem dívidas aparentes, o caixa termina o ano pressionado, identificando exatamente onde a margem é perdida.
 
 ---
 
 ## Estrutura Relevante do Projeto
 
-- `app.py` - aplicacao Streamlit (cockpit de analise).
-- `src/ports/data_source.py` - contrato de acesso a dados (`DataSource`) e erro de integracao.
+- `app.py` - aplicação Streamlit (cockpit de análise).
+- `src/ports/data_source.py` - contrato de acesso a dados (`DataSource`) e erro de integração.
 - `src/infrastructure/google_sheets_adapter.py` - adaptador de leitura da planilha Google Sheets.
 - `src/domain/cost_analysis_service.py` - regras de custo por produto.
-- `src/domain/product_analysis_service.py` - regras para analise de produtos, margem e faturamento.
-- `tests/` - suite com testes de dominio, infraestrutura e aplicacao:
+- `src/domain/product_analysis_service.py` - regras para análise de produtos, margem e faturamento.
+- `tests/` - suite com testes de domínio, infraestrutura e aplicação:
   - `tests/test_cost_analysis_service.py`
   - `tests/test_google_sheets_adapter.py`
   - `tests/test_streamlit_app.py`
@@ -82,7 +85,7 @@ Esse desenho facilita testes, manutencao e troca de fonte de dados sem quebrar r
 
 Os comandos abaixo assumem uso de `uv` no Linux (bash).
 
-### 1) Instalar dependencias
+### 1) Instalar dependências
 
 ```bash
 uv sync
@@ -121,28 +124,28 @@ Ou via script auxiliar:
 bash scripts/run_app.sh
 ```
 
-Aplicacao disponivel em `http://localhost:8501`.
+Aplicação disponível em `http://localhost:8501`.
 
 ---
 
-## Boas Praticas Aplicadas
+## Boas Práticas Aplicadas
 
 - Arquitetura em camadas com `ports/adapters` (baixo acoplamento).
-- Inversao de dependencia: dominio depende de contratos, nao de bibliotecas externas.
-- Principios SOLID (com foco em SRP, DIP e OCP).
-- TDD e testes unitarios para regras de negocio criticas.
-- Tratamento de erros de integracao com excecoes especificas.
-- Organizacao voltada para evolucao incremental e onboarding tecnico.
+- Inversão de dependência: domínio depende de contratos, não de bibliotecas externas.
+- Princípios SOLID (com foco em SRP, DIP e OCP).
+- TDD e testes unitários para regras de negócio críticas.
+- Tratamento de erros de integração com exceções específicas.
+- Organização voltada para evolução incremental e onboarding técnico.
 
 ---
 
-## Proximos Passos e Melhorias
+## Próximos Passos e Melhorias
 
-- Evoluir validacao de schema das abas com relatorio de inconsistencias.
-- Adicionar monitoramento de qualidade dos dados (campos obrigatorios, duplicidades, nulos).
-- Criar indicadores de tendencia (margem ao longo do tempo, sazonalidade e ruptura).
-- Publicar documentacao tecnica no MkDocs + GitHub Pages.
-- Configurar CI/CD com execucao de testes e checks de qualidade a cada PR.
+- Evoluir validação de schema das abas com relatório de inconsistências.
+- Adicionar monitoramento de qualidade dos dados (campos obrigatórios, duplicidades, nulos).
+- Criar indicadores de tendência (margem ao longo do tempo, sazonalidade e ruptura).
+- Publicar documentação técnica no MkDocs + GitHub Pages.
+- Configurar CI/CD com execução de testes e checks de qualidade a cada PR.
 
 ---
 
@@ -151,8 +154,8 @@ Aplicacao disponivel em `http://localhost:8501`.
 Projeto desenvolvido por **Gsantana**.
 
 - Email: `gilmar.jesus@gmail.com`
-- Sugestoes e melhorias: abra uma issue ou pull request neste repositorio.
+- Sugestões e melhorias: abra uma issue ou pull request neste repositório.
 
 ---
 
-> Este projeto representa uma transicao pratica para a area de dados: conecta modelagem de negocio, engenharia de software e analise para gerar impacto real em pequenas empresas.
+> Este projeto representa uma transição prática para a área de dados: conecta modelagem de negócio, engenharia de software e análise para gerar impacto real em pequenas empresas.
