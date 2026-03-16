@@ -23,14 +23,18 @@ class ProductAnalysisService:
         self._cache_receita = None
         self._cache_materia_prima = None
         self._cache_produtos = None
+        self._cache_vendas = None
         self._receita_loaded = False
         self._materia_prima_loaded = False
         self._produtos_loaded = False
+        self._vendas_loaded = False
         self._cache_recipe_cost_base = None
         self._cache_product_cost_breakdown = None
         self._cache_product_cost_summary = None
         self._cache_products_with_sales_impact = None
         self._cache_recipe_cost_issues = None
+        self._cache_sales_summary = None
+        self._cache_profitability_analysis = None
 
     def _copy_df(self, df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
         """Retorna cópia defensiva do DataFrame cacheado."""
@@ -70,6 +74,22 @@ class ProductAnalysisService:
             self._produtos_loaded = True
         return self._copy_df(self._cache_produtos)
 
+    def _get_vendas_data(self) -> Optional[pd.DataFrame]:
+        """Carrega dados de vendas/faturamento com cache por instância do serviço."""
+        if not self._vendas_loaded:
+            self._cache_vendas = self._load_first_sheet(
+                [
+                    "Vendas Diarias",
+                    "Vendas Diárias",
+                    "Resumo Diário",
+                    "Resumo Diario",
+                    "Faturamento",
+                    "Vendas",
+                ]
+            )
+            self._vendas_loaded = True
+        return self._copy_df(self._cache_vendas)
+
     def _find_column(self, df: pd.DataFrame, candidates: list[str]) -> Optional[str]:
         """Encontra coluna por comparação normalizada (acentos, espaços e underscores)."""
         if df is None:
@@ -98,10 +118,209 @@ class ProductAnalysisService:
         mixed_mask = has_comma & has_dot
         text.loc[mixed_mask] = text.loc[mixed_mask].str.replace(".", "", regex=False)
         text = text.str.replace(",", ".", regex=False)
-        return pd.to_numeric(text, errors="coerce")
+        values = pd.to_numeric(text, errors="coerce")
+        return pd.Series(values, index=series.index)
 
     def _to_clean_key_series(self, series: pd.Series) -> pd.Series:
         return series.astype(str).str.strip().str.upper()
+
+    def _to_name_key_series(self, series: pd.Series) -> pd.Series:
+        """Normaliza nomes para chaves de junção tolerantes a variações de formatação."""
+        return series.fillna("").astype(str).map(self._normalize_text)
+
+    def _build_products_catalog(self) -> pd.DataFrame:
+        """Retorna catálogo canônico de produtos (ID + Nome) da aba Produtos."""
+        produtos_df = self._get_produtos_data()
+        if produtos_df is None or produtos_df.empty:
+            return pd.DataFrame(columns=["ID do Produto", "Produto"])
+
+        produtos = produtos_df.copy()
+        product_id_col = self._find_column(
+            produtos,
+            ["ID do Produto", "ID", "ProductID", "product_id", "ProdutoID", "id_produto"],
+        )
+        product_name_col = self._find_column(
+            produtos,
+            ["Nome do Produto", "ProductName", "product_name", "Produto"],
+        )
+
+        if not product_id_col:
+            return pd.DataFrame(columns=["ID do Produto", "Produto"])
+
+        produtos["ID do Produto"] = self._to_clean_key_series(produtos[product_id_col])
+        produtos["Produto"] = (
+            produtos[product_name_col].astype(str).str.strip() if product_name_col else ""
+        )
+
+        produtos = produtos[produtos["ID do Produto"].str.strip() != ""].copy()
+        produtos = produtos.drop_duplicates(subset=["ID do Produto"], keep="first")
+        return produtos[["ID do Produto", "Produto"]].reset_index(drop=True)
+
+    def get_registered_products(self) -> pd.DataFrame:
+        """Retorna os produtos cadastrados na aba Produtos (ID + Nome)."""
+        return self._build_products_catalog().copy()
+
+    def _build_sales_summary(self) -> pd.DataFrame:
+        """Agrega volume de vendas e faturamento total por produto."""
+        if self._cache_sales_summary is not None:
+            return self._cache_sales_summary.copy()
+
+        vendas_df = self._get_vendas_data()
+        if vendas_df is None or vendas_df.empty:
+            self._cache_sales_summary = pd.DataFrame(
+                columns=["ID do Produto", "Nome do Produto", "Volume de Vendas", "Faturamento Total"]
+            )
+            return self._cache_sales_summary.copy()
+
+        vendas = vendas_df.copy()
+        product_id_col = self._find_column(
+            vendas,
+            ["ID do Produto", "ID", "ProductID", "product_id", "ProdutoID", "id_produto", "SKU"],
+        )
+        product_name_col = self._find_column(
+            vendas,
+            ["Nome do Produto", "Produto", "ProductName", "product_name"],
+        )
+        volume_col = self._find_column(
+            vendas,
+            [
+                "Quantidade Vendida",
+                "Qtd Vendida",
+                "Quantidade",
+                "Qtde",
+                "Volume de Vendas",
+                "Volume",
+                "Qtd",
+                "quantity",
+            ],
+        )
+        revenue_col = self._find_column(
+            vendas,
+            [
+                "Faturamento Total",
+                "Receita Total",
+                "Valor Total",
+                "Total",
+                "Faturamento",
+                "Receita",
+                "Valor da Venda",
+                "Total Venda",
+            ],
+        )
+        price_col = self._find_column(
+            vendas,
+            [
+                "Preço de Venda",
+                "Preco de Venda",
+                "Preço Unitário",
+                "Preco Unitario",
+                "Preço",
+                "Preco",
+                "Valor Unitário",
+                "Valor Unitario",
+            ],
+        )
+
+        if not product_id_col and not product_name_col:
+            self._cache_sales_summary = pd.DataFrame(
+                columns=["ID do Produto", "Nome do Produto", "Volume de Vendas", "Faturamento Total"]
+            )
+            return self._cache_sales_summary.copy()
+
+        vendas["ID do Produto"] = (
+            self._to_clean_key_series(vendas[product_id_col]) if product_id_col else ""
+        )
+        vendas["Nome do Produto"] = (
+            vendas[product_name_col].astype(str).str.strip() if product_name_col else ""
+        )
+        vendas = vendas[
+            (vendas["ID do Produto"].astype(str).str.strip() != "")
+            | (vendas["Nome do Produto"].astype(str).str.strip() != "")
+        ].copy()
+
+        vendas["Volume de Vendas"] = (
+            self._to_numeric_series(vendas[volume_col]) if volume_col else pd.Series([0] * len(vendas), index=vendas.index)
+        )
+
+        if revenue_col:
+            vendas["Faturamento Total"] = self._to_numeric_series(vendas[revenue_col])
+        elif price_col and volume_col:
+            vendas["Faturamento Total"] = self._to_numeric_series(vendas[price_col]) * vendas["Volume de Vendas"]
+        else:
+            vendas["Faturamento Total"] = pd.Series([0] * len(vendas), index=vendas.index)
+
+        summary = (
+            vendas.groupby(["ID do Produto", "Nome do Produto"], dropna=False)
+            .agg({"Volume de Vendas": "sum", "Faturamento Total": "sum"})
+            .reset_index()
+        )
+        self._cache_sales_summary = summary
+        return self._cache_sales_summary.copy()
+
+    def get_product_profitability_analysis(self) -> pd.DataFrame:
+        """Retorna base analítica consolidada para gráficos de faturamento e rentabilidade."""
+        if self._cache_profitability_analysis is not None:
+            return self._cache_profitability_analysis.copy()
+
+        produtos = self.get_products_with_sales_impact()
+        if produtos is None or produtos.empty:
+            self._cache_profitability_analysis = pd.DataFrame()
+            return self._cache_profitability_analysis.copy()
+
+        analysis = produtos.copy()
+        analysis["Nome do Produto"] = analysis["Nome do Produto"].astype(str).str.strip()
+        analysis["ID do Produto"] = self._to_clean_key_series(analysis["ID do Produto"])
+        analysis["Chave Nome"] = self._to_name_key_series(analysis["Nome do Produto"])
+
+        sales_summary = self._build_sales_summary()
+        if not sales_summary.empty:
+            sales_by_id = (
+                sales_summary[["ID do Produto", "Volume de Vendas", "Faturamento Total"]]
+                .groupby("ID do Produto", dropna=False)
+                .sum()
+                .reset_index()
+            )
+            analysis = analysis.merge(sales_by_id, on="ID do Produto", how="left")
+
+            sales_by_name = (
+                sales_summary.assign(**{"Chave Nome": self._to_name_key_series(sales_summary["Nome do Produto"])})
+                [["Chave Nome", "Volume de Vendas", "Faturamento Total"]]
+                .groupby("Chave Nome", dropna=False)
+                .sum()
+                .reset_index()
+            )
+            analysis = analysis.merge(
+                sales_by_name,
+                on="Chave Nome",
+                how="left",
+                suffixes=("", "_nome"),
+            )
+            analysis["Volume de Vendas"] = analysis["Volume de Vendas"].fillna(analysis["Volume de Vendas_nome"])
+            analysis["Faturamento Total"] = analysis["Faturamento Total"].fillna(analysis["Faturamento Total_nome"])
+            analysis = analysis.drop(columns=["Volume de Vendas_nome", "Faturamento Total_nome"])
+        else:
+            analysis["Volume de Vendas"] = 0.0
+            analysis["Faturamento Total"] = 0.0
+
+        analysis["Preço"] = pd.to_numeric(analysis["Preço"], errors="coerce")
+        analysis["Custo Total (R$)"] = pd.to_numeric(analysis["Custo Total (R$)"], errors="coerce")
+        analysis["Volume de Vendas"] = pd.to_numeric(analysis["Volume de Vendas"], errors="coerce").fillna(0.0)
+        analysis["Faturamento Total"] = pd.to_numeric(analysis["Faturamento Total"], errors="coerce")
+
+        computed_revenue = analysis["Preço"].fillna(0.0) * analysis["Volume de Vendas"]
+        analysis["Faturamento Total"] = analysis["Faturamento Total"].fillna(computed_revenue).fillna(0.0)
+
+        analysis["Custo Real"] = analysis["Custo Total (R$)"].fillna(0.0)
+        analysis["Margem de Contribuição (R$)"] = analysis["Preço"].fillna(0.0) - analysis["Custo Real"]
+        analysis["Margem de Contribuição (%)"] = 0.0
+        valid_price_mask = analysis["Preço"].fillna(0.0) > 0
+        analysis.loc[valid_price_mask, "Margem de Contribuição (%)"] = (
+            analysis.loc[valid_price_mask, "Margem de Contribuição (R$)"]
+            / analysis.loc[valid_price_mask, "Preço"]
+        ) * 100
+
+        self._cache_profitability_analysis = analysis.drop(columns=["Chave Nome"])
+        return self._cache_profitability_analysis.copy()
 
     def _build_recipe_cost_base(self) -> pd.DataFrame:
         """
@@ -172,6 +391,17 @@ class ProductAnalysisService:
                 "Valor do Ingrediente",
             ],
         )
+        receita_unit_measure_col = self._find_column(
+            receita,
+            [
+                "Unidade de Medida",
+                "Unidade Medida",
+                "Unidade",
+                "Unit of Measurement",
+                "UnitOfMeasure",
+                "unit_measure",
+            ],
+        )
 
         # Matéria-prima (opcional quando receita já traz custo do ingrediente)
         materia_ingredient_id_col = self._find_column(
@@ -228,6 +458,11 @@ class ProductAnalysisService:
             self._to_numeric_series(receita[receita_qty_col])
             if receita_qty_col
             else pd.Series([pd.NA] * len(receita), index=receita.index)
+        )
+        receita["Unidade de Medida"] = (
+            receita[receita_unit_measure_col].astype(str).str.strip()
+            if receita_unit_measure_col
+            else ""
         )
         receita["Custo da Receita (R$)"] = (
             self._to_numeric_series(receita[receita_item_cost_col])
@@ -298,6 +533,7 @@ class ProductAnalysisService:
             "ID do Ingrediente",
             "Ingrediente",
             "Quantidade Receita",
+            "Unidade de Medida",
             "Custo Unitário MP (R$)",
             "Custo da Receita (R$)",
             "Custo do Ingrediente (R$)",
@@ -338,21 +574,42 @@ class ProductAnalysisService:
             return self._cache_product_cost_summary.copy()
 
         base = self._build_recipe_cost_base()
+        products_catalog = self._build_products_catalog()
+
         if base.empty:
+            recipe_summary = pd.DataFrame(
+                columns=["ID do Produto", "Custo Total (R$)", "Qtd Ingredientes"]
+            )
+        else:
+            recipe_summary = (
+                base.groupby(["ID do Produto"], dropna=False)
+                .agg(
+                    {
+                        "Custo do Ingrediente (R$)": lambda s: s.sum(min_count=1),
+                        "Ingrediente": lambda s: s.astype(str)
+                        .str.strip()
+                        .replace("", pd.NA)
+                        .dropna()
+                        .nunique(),
+                    }
+                )
+                .reset_index()
+            )
+            recipe_summary.columns = ["ID do Produto", "Custo Total (R$)", "Qtd Ingredientes"]
+
+        if not products_catalog.empty:
+            summary = products_catalog.merge(recipe_summary, on="ID do Produto", how="left")
+        elif not recipe_summary.empty:
+            fallback_products = (
+                base[["ID do Produto", "Produto"]].drop_duplicates(subset=["ID do Produto"]).copy()
+            )
+            summary = fallback_products.merge(recipe_summary, on="ID do Produto", how="left")
+        else:
             self._cache_product_cost_summary = pd.DataFrame()
             return self._cache_product_cost_summary.copy()
 
-        summary = (
-            base.groupby(["ID do Produto", "Produto"], dropna=False)
-            .agg(
-                {
-                    "Custo do Ingrediente (R$)": lambda s: s.sum(min_count=1),
-                    "Ingrediente": lambda s: s.astype(str).str.strip().replace("", pd.NA).dropna().nunique(),
-                }
-            )
-            .reset_index()
-        )
-        summary.columns = ["ID do Produto", "Produto", "Custo Total (R$)", "Qtd Ingredientes"]
+        summary["Qtd Ingredientes"] = pd.to_numeric(summary["Qtd Ingredientes"], errors="coerce").fillna(0).astype(int)
+
         self._cache_product_cost_summary = summary.sort_values(
             "Custo Total (R$)", ascending=False, na_position="last"
         )
@@ -413,12 +670,12 @@ class ProductAnalysisService:
         if price_col:
             produtos["Preço"] = self._to_numeric_series(produtos[price_col])
         else:
-            produtos["Preço"] = pd.NA
+            produtos["Preço"] = pd.Series([float("nan")] * len(produtos), index=produtos.index, dtype="float64")
 
         if margin_col:
             produtos["Margem (%)"] = self._to_numeric_series(produtos[margin_col])
         else:
-            produtos["Margem (%)"] = pd.NA
+            produtos["Margem (%)"] = pd.Series([float("nan")] * len(produtos), index=produtos.index, dtype="float64")
         produtos["Margem (%)"] = pd.to_numeric(produtos["Margem (%)"], errors="coerce")
 
         if category_col:
@@ -438,16 +695,19 @@ class ProductAnalysisService:
                 how="left",
             )
         else:
-            produtos["Custo Total (R$)"] = pd.NA
+            produtos["Custo Total (R$)"] = pd.Series([float("nan")] * len(produtos), index=produtos.index, dtype="float64")
+
+        produtos["Custo Total (R$)"] = pd.to_numeric(produtos["Custo Total (R$)"], errors="coerce")
 
         # Calcular margem caso não exista, usando preço e custo
         needs_margin = produtos["Margem (%)"].isna() & produtos["Preço"].notna() & produtos["Custo Total (R$)"].notna()
         valid_price = produtos["Preço"] > 0
         compute_mask = needs_margin & valid_price
-        produtos.loc[compute_mask, "Margem (%)"] = (
-            (produtos.loc[compute_mask, "Preço"] - produtos.loc[compute_mask, "Custo Total (R$)"])
-            / produtos.loc[compute_mask, "Preço"]
+        calculated_margin = (
+            (produtos["Preço"] - produtos["Custo Total (R$)"])
+            / produtos["Preço"]
         ) * 100
+        produtos["Margem (%)"] = produtos["Margem (%)"].where(~compute_mask, calculated_margin)
 
         produtos["Margem Bruta (R$)"] = produtos["Preço"] - produtos["Custo Total (R$)"]
 
