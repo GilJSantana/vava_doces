@@ -34,13 +34,15 @@ def build_product_labels(df: pd.DataFrame, id_col: str, name_col: str) -> pd.Ser
     )
 
 
-def render_metric_card(col, title: str, value: str) -> None:
+def render_metric_card(col, title: str, value: str, caption: str | None = None) -> None:
     """Renderiza card de métrica com estilo padrão."""
     with col:
         st.markdown(
             f"<div class='metric-card'><div class='card-title'>{title}</div><div class='card-value'>{value}</div></div>",
             unsafe_allow_html=True,
         )
+        if caption:
+            st.caption(caption)
 
 
 def render_app_header(

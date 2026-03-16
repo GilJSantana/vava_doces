@@ -12,6 +12,7 @@ dependencies = [
     "pytest>=9.0.2",
     "pytest-mock>=3.15.1",
     "pandas-stubs~=2.3.3",
+    "plotly>=5.19",
 ]
 
 [project.optional-dependencies]
