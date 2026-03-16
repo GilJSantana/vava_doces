@@ -2,6 +2,7 @@
 
 import pandas as pd
 import streamlit as st
+from pandas.io.formats.style import Styler
 
 
 def render_separator() -> None:
@@ -9,10 +10,13 @@ def render_separator() -> None:
     st.markdown("---")
 
 
-def render_wrapped_dataframe(df: pd.DataFrame) -> None:
+def render_wrapped_dataframe(
+    df: pd.DataFrame | Styler,
+    column_config: dict | None = None,
+) -> None:
     """Renderiza dataframe em wrapper visual padronizado."""
     st.markdown('<div class="dataframe-wrapper">', unsafe_allow_html=True)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, use_container_width=True, hide_index=True, column_config=column_config)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
