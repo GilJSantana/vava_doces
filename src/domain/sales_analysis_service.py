@@ -158,6 +158,72 @@ def _parse_sales_date(series: pd.Series) -> pd.Series:
     return parsed
 
 
+def _choose_date_format_for_source(raw_dates: pd.Series) -> str:
+    """Choose dominant date format for a single source file.
+
+    Heuristic based on numeric tokens from ``dd/mm/yyyy`` or ``mm/dd/yyyy``:
+    - if first token > 12 appears more often, prefer BR (``%d/%m/%Y``)
+    - if second token > 12 appears more often, prefer US (``%m/%d/%Y``)
+    - tie or no signal defaults to US for backward compatibility.
+    """
+    text = raw_dates.astype(str).str.strip()
+    parts = text.str.extract(r"^\s*(\d{1,2})/(\d{1,2})/(\d{4})\s*$")
+    left = pd.to_numeric(parts[0], errors="coerce")
+    right = pd.to_numeric(parts[1], errors="coerce")
+
+    br_votes = int(((left > 12) & (right <= 12)).sum())
+    us_votes = int(((right > 12) & (left <= 12)).sum())
+
+    if br_votes > us_votes:
+        return "%d/%m/%Y"
+    return "%m/%d/%Y"
+
+
+def _parse_sales_dates_with_source(df: pd.DataFrame) -> pd.DataFrame:
+    """Parse dates per source file to avoid cross-file format ambiguity."""
+    out = df.copy()
+    if "data" not in out.columns:
+        out["data"] = pd.NaT
+        out["parse_strategy"] = "none"
+        return out
+
+    out["data_raw"] = out["data"].astype(str).str.strip()
+    out["parse_strategy"] = ""
+    out["data"] = pd.NaT
+
+    if "_source_file" in out.columns:
+        grouped = out.groupby("_source_file", dropna=False)
+        for source_name, idx in grouped.groups.items():
+            raw = out.loc[idx, "data_raw"]
+            primary_fmt = _choose_date_format_for_source(raw)
+            secondary_fmt = "%d/%m/%Y" if primary_fmt == "%m/%d/%Y" else "%m/%d/%Y"
+
+            parsed = pd.to_datetime(raw, format=primary_fmt, errors="coerce")
+            missing = parsed.isna()
+            if missing.any():
+                parsed.loc[missing] = pd.to_datetime(
+                    raw[missing], format=secondary_fmt, errors="coerce"
+                )
+
+            still_missing = parsed.isna()
+            if still_missing.any():
+                parsed.loc[still_missing] = pd.to_datetime(
+                    raw[still_missing], format="%Y-%m-%d", errors="coerce"
+                )
+
+            out.loc[idx, "data"] = parsed
+            label_source = str(source_name) if source_name is not None else "unknown"
+            out.loc[idx, "parse_strategy"] = (
+                f"source={label_source}|primary={primary_fmt}|fallback={secondary_fmt}"
+            )
+    else:
+        parsed = _parse_sales_date(out["data_raw"])
+        out["data"] = parsed
+        out["parse_strategy"] = "global|primary=%m/%d/%Y|fallback=%d/%m/%Y"
+
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Extract layer
 # ---------------------------------------------------------------------------
@@ -250,8 +316,7 @@ class SalesTransformer:
         df = df[keep].rename(columns=available).copy()
 
         if "data" in df.columns:
-            df["data_raw"] = df["data"].astype(str).str.strip()
-            df["data"] = _parse_sales_date(df["data"])
+            df = _parse_sales_dates_with_source(df)
 
         for col in ("qtd", "valor_venda", "valor_total"):
             if col in df.columns:
@@ -300,13 +365,72 @@ def _deduplicate(df: pd.DataFrame) -> pd.DataFrame:
     Dedup key: ``num_venda`` + ``produto_key`` when both are present;
     falls back to full-row dedup otherwise.
     """
+    deduped, _ = _deduplicate_with_audit(df)
+    return deduped
+
+
+def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Drop duplicates and return audit metadata."""
     before = len(df)
     subset = [c for c in ("num_venda", "produto_key") if c in df.columns] or None
-    df = df.drop_duplicates(subset=subset)
-    removed = before - len(df)
+
+    working = df.copy()
+    # Cross-file only dedup: preserve duplicates inside the same source file.
+    if subset and "_source_file" in working.columns:
+        source_marker = working["_source_file"].fillna("unknown").astype(str)
+        working["_source_file_norm"] = source_marker
+
+        # Pick a canonical source per business key based on first appearance order.
+        key_block = working[subset + ["_source_file_norm"]].copy()
+        first_source_by_key = (
+            key_block.drop_duplicates(subset=subset, keep="first")
+            .set_index(subset)["_source_file_norm"]
+        )
+
+        canonical_source = key_block.set_index(subset).index.map(first_source_by_key)
+        multi_source_key = key_block.groupby(subset)["_source_file_norm"].transform("nunique") > 1
+        cross_file_duplicate = multi_source_key & (working["_source_file_norm"] != canonical_source.to_numpy())
+        working["_is_duplicate"] = cross_file_duplicate
+    else:
+        working["_is_duplicate"] = working.duplicated(subset=subset, keep="first")
+
+    removed_rows = working[working["_is_duplicate"]].copy()
+
+    deduped = working[~working["_is_duplicate"]].drop(
+        columns=[c for c in ("_is_duplicate", "_source_file_norm") if c in working.columns]
+    )
+    removed = before - len(deduped)
+
+    removed_by_source = {}
+    if not removed_rows.empty and "_source_file" in removed_rows.columns:
+        removed_by_source = (
+            removed_rows["_source_file"]
+            .fillna("unknown")
+            .astype(str)
+            .value_counts()
+            .to_dict()
+        )
+
+    removed_by_month = {}
+    if not removed_rows.empty and "data" in removed_rows.columns:
+        months = pd.to_datetime(removed_rows["data"], errors="coerce").dt.to_period("M")
+        removed_by_month = (
+            months.dropna().astype(str).value_counts().sort_index().to_dict()
+        )
+
     if removed:
         logger.info("_deduplicate: removed %d duplicate row(s).", removed)
-    return df
+
+    audit = {
+        "before": before,
+        "after": int(len(deduped)),
+        "removed": int(removed),
+        "key_columns": subset if subset is not None else "full_row",
+        "dedup_scope": "cross_file_only" if (subset and "_source_file" in df.columns) else "global",
+        "removed_by_source_file": removed_by_source,
+        "removed_by_month": removed_by_month,
+    }
+    return deduped, audit
 
 
 # ---------------------------------------------------------------------------
@@ -474,4 +598,47 @@ class SalesETLPipeline:
         result = _finalise(joined)
         logger.info("SalesETLPipeline: finished — %d row(s) in output.", len(result))
         return result
+
+    def run_with_audit(self) -> tuple[pd.DataFrame, dict]:
+        """Execute the full ETL pipeline and return result plus audit details."""
+        empty = pd.DataFrame(columns=OUTPUT_COLUMNS + ["sem_cadastro"])
+        empty_audit = {
+            "raw_rows": 0,
+            "transformed_rows": 0,
+            "dedup": {
+                "before": 0,
+                "after": 0,
+                "removed": 0,
+                "key_columns": ["num_venda", "produto_key"],
+                "removed_by_source_file": {},
+                "removed_by_month": {},
+            },
+            "parse_strategies": {},
+        }
+
+        raw_sales = self._sales_extractor.extract()
+        if raw_sales.empty:
+            logger.warning("SalesETLPipeline: no sales data — returning empty.")
+            return empty, empty_audit
+
+        raw_products = self._products_extractor.extract()
+        sales = self._sales_transformer.transform(raw_sales)
+        products = self._products_transformer.transform(raw_products)
+
+        parse_strategies = {}
+        if "parse_strategy" in sales.columns:
+            parse_strategies = sales["parse_strategy"].value_counts().to_dict()
+
+        sales_dedup, dedup_audit = _deduplicate_with_audit(sales)
+        joined = self._joiner.join(sales_dedup, products)
+        result = _finalise(joined)
+
+        audit = {
+            "raw_rows": int(len(raw_sales)),
+            "transformed_rows": int(len(sales)),
+            "dedup": dedup_audit,
+            "parse_strategies": parse_strategies,
+        }
+        logger.info("SalesETLPipeline: finished with audit — %d row(s) in output.", len(result))
+        return result, audit
 

@@ -14,6 +14,8 @@ import pandas as pd
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
+from src.ports.data_source import DriveDataSource
+
 logger = logging.getLogger(__name__)
 
 # MIME types we know how to read as tabular data
@@ -36,7 +38,7 @@ def build_drive_credentials(credential_file: str) -> service_account.Credentials
     )
 
 
-class GoogleDriveAdapter:
+class GoogleDriveAdapter(DriveDataSource):
     """Lists and downloads tabular files from a Google Drive folder.
 
     Args:
@@ -95,4 +97,6 @@ class GoogleDriveAdapter:
         except Exception as exc:  # noqa: BLE001
             logger.warning("GoogleDriveAdapter: skipping %s — %s", name, exc)
             return None
+
+
 

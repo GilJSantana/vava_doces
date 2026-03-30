@@ -128,6 +128,21 @@ class ProductAnalysisService:
         """Normaliza nomes para chaves de junção tolerantes a variações de formatação."""
         return series.fillna("").astype(str).map(self._normalize_text)
 
+    def _find_product_id_column(self, df: pd.DataFrame) -> Optional[str]:
+        """Encontra coluna de ID do produto, incluindo casos de cabeçalho vazio."""
+        product_id_col = self._find_column(
+            df,
+            ["ID do Produto", "ID", "ProductID", "product_id", "ProdutoID", "id_produto", "SKU"],
+        )
+        if product_id_col is not None:
+            return product_id_col
+
+        for col in df.columns:
+            series = df[col].astype(str).str.strip().str.upper()
+            if series.str.match(r"^PROD[-_ ]?\d+", na=False).any():
+                return col
+        return None
+
     def _build_products_catalog(self) -> pd.DataFrame:
         """Retorna catálogo canônico de produtos (ID + Nome) da aba Produtos."""
         produtos_df = self._get_produtos_data()
@@ -135,16 +150,13 @@ class ProductAnalysisService:
             return pd.DataFrame(columns=["ID do Produto", "Produto"])
 
         produtos = produtos_df.copy()
-        product_id_col = self._find_column(
-            produtos,
-            ["ID do Produto", "ID", "ProductID", "product_id", "ProdutoID", "id_produto"],
-        )
+        product_id_col = self._find_product_id_column(produtos)
         product_name_col = self._find_column(
             produtos,
             ["Nome do Produto", "ProductName", "product_name", "Produto"],
         )
 
-        if not product_id_col:
+        if product_id_col is None:
             return pd.DataFrame(columns=["ID do Produto", "Produto"])
 
         produtos["ID do Produto"] = self._to_clean_key_series(produtos[product_id_col])
@@ -157,8 +169,27 @@ class ProductAnalysisService:
         return produtos[["ID do Produto", "Produto"]].reset_index(drop=True)
 
     def get_registered_products(self) -> pd.DataFrame:
-        """Retorna os produtos cadastrados na aba Produtos (ID + Nome)."""
-        return self._build_products_catalog().copy()
+        """Retorna os produtos cadastrados na aba Produtos preservando linhas válidas da planilha."""
+        produtos_df = self._get_produtos_data()
+        if produtos_df is None or produtos_df.empty:
+            return pd.DataFrame(columns=["ID do Produto", "Produto"])
+
+        produtos = produtos_df.copy()
+        product_id_col = self._find_product_id_column(produtos)
+        product_name_col = self._find_column(
+            produtos,
+            ["Nome do Produto", "ProductName", "product_name", "Produto"],
+        )
+
+        if product_id_col is None:
+            return pd.DataFrame(columns=["ID do Produto", "Produto"])
+
+        produtos["ID do Produto"] = self._to_clean_key_series(produtos[product_id_col])
+        produtos["Produto"] = (
+            produtos[product_name_col].astype(str).str.strip() if product_name_col else ""
+        )
+        produtos = produtos[produtos["ID do Produto"].str.strip() != ""].copy()
+        return produtos[["ID do Produto", "Produto"]].reset_index(drop=True)
 
     def _build_sales_summary(self) -> pd.DataFrame:
         """Agrega volume de vendas e faturamento total por produto."""
@@ -446,39 +477,43 @@ class ProductAnalysisService:
             self._cache_recipe_cost_base = pd.DataFrame()
             return self._cache_recipe_cost_base.copy()
 
-        receita["ID do Produto"] = self._to_clean_key_series(receita[receita_product_id_col])
-        receita = receita[(receita["ID do Produto"].notna()) & (receita["ID do Produto"] != "")]
+        receita.loc[:, "ID do Produto"] = self._to_clean_key_series(receita[receita_product_id_col])
+        receita = receita.loc[
+            (receita["ID do Produto"].notna()) & (receita["ID do Produto"] != "")
+        ].copy()
 
-        receita["Produto"] = (
+        receita.loc[:, "Produto"] = (
             receita[receita_product_name_col].astype(str).str.strip()
             if receita_product_name_col
             else ""
         )
-        receita["Quantidade Receita"] = (
+        receita.loc[:, "Quantidade Receita"] = (
             self._to_numeric_series(receita[receita_qty_col])
             if receita_qty_col
             else pd.Series([pd.NA] * len(receita), index=receita.index)
         )
-        receita["Unidade de Medida"] = (
+        receita.loc[:, "Unidade de Medida"] = (
             receita[receita_unit_measure_col].astype(str).str.strip()
             if receita_unit_measure_col
             else ""
         )
-        receita["Custo da Receita (R$)"] = (
+        receita.loc[:, "Custo da Receita (R$)"] = (
             self._to_numeric_series(receita[receita_item_cost_col])
             if receita_item_cost_col
             else pd.Series([pd.NA] * len(receita), index=receita.index)
         )
 
         if receita_ingredient_id_col:
-            receita["ID do Ingrediente"] = self._to_clean_key_series(receita[receita_ingredient_id_col])
+            receita.loc[:, "ID do Ingrediente"] = self._to_clean_key_series(
+                receita[receita_ingredient_id_col]
+            )
         else:
-            receita["ID do Ingrediente"] = ""
+            receita.loc[:, "ID do Ingrediente"] = ""
 
         if receita_ingredient_name_col:
-            receita["Ingrediente"] = receita[receita_ingredient_name_col].astype(str).str.strip()
+            receita.loc[:, "Ingrediente"] = receita[receita_ingredient_name_col].astype(str).str.strip()
         else:
-            receita["Ingrediente"] = ""
+            receita.loc[:, "Ingrediente"] = ""
 
         if can_use_materia:
             materia["Custo Unitário MP (R$)"] = self._to_numeric_series(materia[materia_unit_cost_col])
