@@ -22,7 +22,7 @@ from src.presentation.chart_style import (
 
 @st.cache_data
 def load_sales_data_cached() -> Optional[pd.DataFrame]:
-    """Load sales data from gold layer (fato_vendas + dim_produto join).
+    """Load sales data from gold layer (fato_vendas + dim_produto + dim_tempo).
 
     Falls back to raw pipeline if gold unavailable.
     Returns None when no data is available.
@@ -32,17 +32,22 @@ def load_sales_data_cached() -> Optional[pd.DataFrame]:
         adapter = GoldParquetAdapter()
         fato_vendas = adapter.load_gold("fato_vendas")
         dim_produto = adapter.load_gold("dim_produto")
-        
-        # Join to get product names
+        dim_tempo = adapter.load_gold("dim_tempo")
+
+        # Join to get product names and dates
         df = fato_vendas.merge(dim_produto, on="produto_id", how="left")
-        
+        df = df.merge(dim_tempo[["data_id", "data"]], on="data_id", how="left")
+
         # Rename columns to match expected schema
         df = df.rename(columns={
             "nome_produto": "produto",
             "quantidade": "qtd",
-            "valor_total": "valor_venda",
             "valor_unitario": "valor_unit",
         })
+        
+        # Ensure valor_venda is available for compatibility
+        if "valor_venda" not in df.columns and "valor_total" in df.columns:
+            df["valor_venda"] = df["valor_total"]
         
         return df
 
