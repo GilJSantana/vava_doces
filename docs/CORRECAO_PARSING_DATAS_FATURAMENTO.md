@@ -104,6 +104,26 @@ python tests/test_date_filtering_fix.py
 - [ ] Aplicar no Streamlit (página faturamento)
 - [ ] Commit e push para GitHub
 
+## Atualização 2026-03-23: Parsing por arquivo e auditoria de deduplicação
+
+Para resolver o caso de janeiro (dias `01` a `12`) com datas ambíguas,
+foi adotada estratégia de parsing por `_source_file` no ETL:
+
+1. Detectar formato dominante do arquivo (`%d/%m/%Y` ou `%m/%d/%Y`) por heurística.
+2. Aplicar formato dominante em lote por arquivo.
+3. Aplicar fallback no formato alternativo e, por fim, ISO (`%Y-%m-%d`).
+
+Além disso, foi adicionada auditoria de deduplicação:
+
+- Total antes/depois de dedup.
+- Total removido.
+- Remoções por arquivo de origem.
+- Remoções por mês.
+
+Na página `Faturamento`, os contadores de auditoria ETL aparecem no
+expansível de diagnóstico para explicar diferenças como `1906` no arquivo vs
+`1900` no app (duplicatas removidas na chave `num_venda + produto_key`).
+
 ---
 
 **Status**: ✅ Corrigido e Testado
