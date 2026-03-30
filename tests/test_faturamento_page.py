@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datechrome://vivaldi-webui/startpage?section=Speed-dials&background-color=#2e2f37
+from datetime import date
 
 import pandas as pd
 
 from src.presentation.pages.faturamento import _apply_filters, _normalize_data
+
 
 
 def test_normalize_data_keeps_datetime_without_reparsing_shift():
