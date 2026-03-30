@@ -1,9 +1,10 @@
-"""Página de impacto no faturamento."""
+"""Página de impacto no faturamento com dados do gold layer."""
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.infrastructure.gold_adapter import GoldParquetAdapter
 from src.presentation.chart_style import (
     apply_clean_xy_axes,
     apply_minimal_figure_style,
@@ -12,6 +13,7 @@ from src.presentation.chart_style import (
 )
 from src.presentation.components import build_product_labels, render_separator, render_wrapped_dataframe
 from src.presentation.formatters import format_currency
+from src.presentation.pages.sales_shared import load_sales_data_cached
 
 
 def clean_product_name(series: pd.Series) -> pd.Series:

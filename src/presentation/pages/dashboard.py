@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.infrastructure.gold_adapter import GoldParquetAdapter
 from src.presentation.chart_style import (
     apply_bar_colors_by_y,
     apply_clean_xy_axes,
@@ -36,33 +37,32 @@ def _to_numeric_currency_series(series: pd.Series) -> pd.Series:
     text = text.str.replace(",", ".", regex=False)
     values = pd.to_numeric(text, errors="coerce")
     return pd.Series(values, index=series.index)
-def _build_cost_production_figure(product_service, color_map: dict[str, str]) -> go.Figure | None:
-    """Restore and render horizontal production-cost chart."""
-    if product_service is None:
+
+
+def _build_cost_production_figure(dim_produto: pd.DataFrame, fato_vendas: pd.DataFrame, color_map: dict[str, str]) -> go.Figure | None:
+    """Build horizontal production-cost chart from gold layer dimensions."""
+    if dim_produto is None or fato_vendas is None:
         return None
 
-    summary = product_service.get_product_cost_summary()
-    if summary is None or summary.empty:
-        return None
-
-    cost_df = summary.copy()
-    if "Custo Total (R$)" not in cost_df.columns or "Produto" not in cost_df.columns:
-        return None
-
-    cost_df["Custo Numérico"] = _to_numeric_currency_series(cost_df["Custo Total (R$)"])
-    cost_df = cost_df[cost_df["Custo Numérico"].notna() & (cost_df["Custo Numérico"] > 0)]
+    # Group fato_vendas by produto_id and sum custo
+    cost_by_produto = fato_vendas.groupby("produto_id").agg({"custo": "sum"}).reset_index()
+    
+    # Join with dim_produto to get names
+    cost_df = cost_by_produto.merge(dim_produto, on="produto_id", how="left")
+    cost_df = cost_df.rename(columns={"nome_produto": "produto"})
+    
     if cost_df.empty:
         return None
 
-    cost_df = cost_df.sort_values("Custo Numérico", ascending=False).head(10)
+    cost_df = cost_df.sort_values("custo", ascending=False).head(10)
 
     fig = go.Figure(
         data=[
             go.Bar(
-                x=cost_df["Custo Numérico"],
-                y=cost_df["Produto"],
+                x=cost_df["custo"],
+                y=cost_df["produto"],
                 orientation="h",
-                customdata=cost_df[["Custo Numérico"]].values,
+                customdata=cost_df[["custo"]].values,
                 hovertemplate="<b>%{y}</b><br>Custo: R$ %{customdata[0]:.2f}<extra></extra>",
             )
         ]
@@ -75,26 +75,21 @@ def _build_cost_production_figure(product_service, color_map: dict[str, str]) ->
 
 
 @st.cache_data
-def _prepare_costs_dataframe(cost_summary: pd.DataFrame) -> pd.DataFrame:
-    """Normalize cost summary to canonical schema: id, custo_total."""
-    if cost_summary is None or cost_summary.empty:
+def _prepare_costs_dataframe(fato_vendas: pd.DataFrame, dim_produto: pd.DataFrame) -> pd.DataFrame:
+    """Prepare cost summary from gold layer fato_vendas."""
+    if fato_vendas is None or fato_vendas.empty:
         return pd.DataFrame(columns=["id", "custo_total"])
 
-    base = cost_summary.copy()
-    id_col = "ID do Produto" if "ID do Produto" in base.columns else "id"
-    cost_col = "Custo Total (R$)" if "Custo Total (R$)" in base.columns else "custo_total"
-
-    if id_col not in base.columns or cost_col not in base.columns:
-        return pd.DataFrame(columns=["id", "custo_total"])
-
+    # Group by produto_id and sum custo
+    cost_by_produto = fato_vendas.groupby("produto_id").agg({"custo": "sum"}).reset_index()
+    cost_by_produto = cost_by_produto.merge(dim_produto[["produto_id"]], on="produto_id", how="inner")
+    
     df_costs = pd.DataFrame(
         {
-            "id": base[id_col].astype(str).str.strip(),
-            "custo_total": _to_numeric_currency_series(base[cost_col]),
+            "id": cost_by_produto["produto_id"].astype(str),
+            "custo_total": cost_by_produto["custo"],
         }
     )
-    df_costs = df_costs[df_costs["id"] != ""].copy()
-    df_costs["custo_total"] = df_costs["custo_total"].fillna(0.0)
     return df_costs
 
 
@@ -175,14 +170,13 @@ def _render_cost_kpi_card(column, icon: str, title: str, value: str) -> None:
         )
 
 
-def _render_cost_kpi_grid(product_service) -> None:
-    """Render 5-card KPI grid for production cost metrics."""
-    if product_service is None:
-        st.warning("⚠️ Serviço de custos indisponível para cálculo dos KPIs.")
+def _render_cost_kpi_grid(fato_vendas: pd.DataFrame) -> None:
+    """Render 5-card KPI grid for production cost metrics from gold layer."""
+    if fato_vendas is None or fato_vendas.empty:
+        st.warning("⚠️ Não há dados de custo disponíveis.")
         return
 
-    cost_summary = product_service.get_product_cost_summary()
-    df_custos = _prepare_costs_dataframe(cost_summary)
+    df_custos = _prepare_costs_dataframe(fato_vendas, pd.DataFrame())
     kpis = _compute_cost_kpis(df_custos)
 
     _inject_cost_kpi_card_styles()
@@ -215,22 +209,18 @@ def _render_high_level_kpis(kpis: dict[str, float]) -> None:
     )
 
 
-def _collect_product_names(df: pd.DataFrame, product_service) -> list[str]:
-    """Collect product names present in revenue and cost datasets."""
+def _collect_product_names(df: pd.DataFrame) -> list[str]:
+    """Collect product names from sales data."""
     names: list[str] = []
-    if "produto" in df.columns:
+    if df is not None and "produto" in df.columns:
         names.extend(df["produto"].dropna().astype(str).tolist())
-
-    if product_service is not None:
-        cost_summary = product_service.get_product_cost_summary()
-        if cost_summary is not None and not cost_summary.empty and "Produto" in cost_summary.columns:
-            names.extend(cost_summary["Produto"].dropna().astype(str).tolist())
     return names
 
 
-def _render_visual_section(df: pd.DataFrame, product_service) -> None:
-    """Render revenue and cost analyses with a unified vibrant palette."""
-    product_names = _collect_product_names(df, product_service)
+
+def _render_visual_section(df: pd.DataFrame, dim_produto: pd.DataFrame, fato_vendas: pd.DataFrame) -> None:
+    """Render revenue and cost analyses using gold layer dimensions."""
+    product_names = _collect_product_names(df)
     color_map = build_color_map(product_names)
 
     with st.container(border=True):
@@ -256,9 +246,9 @@ def _render_visual_section(df: pd.DataFrame, product_service) -> None:
 
     with st.container(border=True):
         st.subheader("Análise de Custos de Produção")
-        _render_cost_kpi_grid(product_service)
+        _render_cost_kpi_grid(fato_vendas)
         st.markdown("\n")
-        fig_cost = _build_cost_production_figure(product_service, color_map)
+        fig_cost = _build_cost_production_figure(dim_produto, fato_vendas, color_map)
         if fig_cost is None:
             st.warning("⚠️ Não há dados de custo disponíveis para exibir o gráfico.")
         else:
@@ -266,8 +256,8 @@ def _render_visual_section(df: pd.DataFrame, product_service) -> None:
 
 
 def show_dashboard(service, product_service):
-    """Renderiza página inicial de insights com visão consolidada."""
-    del service  # Dashboard usa pipeline de vendas + serviço de custos.
+    """Renderiza página inicial de insights com dados do gold layer."""
+    del service, product_service  # Dashboard usa gold layer
 
     inject_roboto_font()
     st.header("📊 Dashboard")
@@ -279,6 +269,16 @@ def show_dashboard(service, product_service):
         st.warning("⚠️ Não foi possível carregar dados de vendas para o dashboard.")
         return
 
+    # Load additional gold dimensions
+    try:
+        adapter = GoldParquetAdapter()
+        dim_produto = adapter.load_gold("dim_produto")
+        fato_vendas = adapter.load_gold("fato_vendas")
+    except Exception:
+        st.warning("⚠️ Não foi possível carregar dimensões do gold layer.")
+        dim_produto = None
+        fato_vendas = None
+
     with st.container(border=True):
         st.subheader("Visão High-Level")
         kpis = compute_high_level_kpis(sales_df)
@@ -286,4 +286,4 @@ def show_dashboard(service, product_service):
 
     st.markdown("\n")
 
-    _render_visual_section(sales_df, product_service)
+    _render_visual_section(sales_df, dim_produto, fato_vendas)

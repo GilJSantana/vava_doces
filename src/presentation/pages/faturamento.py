@@ -1,14 +1,11 @@
-"""Página de faturamento focada em auditoria e exploração de dados brutos.
+"""Página de faturamento focada em exploração de dados de vendas.
 
-FASES 1-6 de Correção: Diagnóstico robusto de parsing de datas e filtros.
-
-Pipeline:
-    Load → Diagnose → Normalize (com parser robusto) → Filter → Paginate → Render
+Agora usa gold layer (fato_vendas + dim_tempo) para dados já validados e tipados.
+Sem diagnóstico de parsing - apenas carregamento, filtro e exibição.
 """
 
 from __future__ import annotations
 
-import logging
 import math
 from datetime import date
 
@@ -18,214 +15,26 @@ import streamlit as st
 from src.presentation.pages.sales_shared import (
     format_brl,
     load_sales_data_cached,
-    load_sales_data_with_audit_cached,
     to_excel_bytes,
 )
-
-logger = logging.getLogger(__name__)
 
 # --- CONFIGURAÇÃO ---
 ITENS_POR_PAGINA_OPCOES = [10, 20, 50, 100]
 
 
-# ============================================================================
-# FASE 1: DIAGNÓSTICO E ANÁLISE DE PARSING
-# ============================================================================
-
-
-def _diagnose_date_parsing(df_raw: pd.DataFrame) -> dict:
-    """FASE 1: Diagnóstico completo do parsing de datas.
-    
-    Compara 3 formatos diferentes para identificar qual é mais válido.
-    
-    Returns:
-        dict com informações de parsing para cada formato
-    """
-    raw_col = "data_raw" if "data_raw" in df_raw.columns else "data"
-    if raw_col not in df_raw.columns:
-        return {"error": "Coluna 'data' não encontrada"}
-
-    raw_text = df_raw[raw_col].astype(str).str.strip()
-
-    # Amostra bruta para inspeção
-    amostra_bruta = raw_text.head(20).tolist()
-
-    # Mês direto da string: "mm/dd/yyyy" -> token 0
-    mes_string = pd.to_numeric(raw_text.str.split("/").str[0], errors="coerce")
-    mes_string_counts = mes_string.value_counts(dropna=False).sort_index().to_dict()
-
-    # Test 1: Formato US (mm/dd/yyyy) - comum em arquivos Excel
-    test_us = pd.to_datetime(raw_text, format="%m/%d/%Y", errors="coerce")
-    count_us = test_us.notna().sum()
-
-    # Test 2: Formato BR (dd/mm/yyyy) - padrão brasileiro
-    test_br = pd.to_datetime(raw_text, format="%d/%m/%Y", errors="coerce")
-    count_br = test_br.notna().sum()
-
-    # Test 3: Parsing automático - infer_datetime_format
-    test_auto = pd.to_datetime(raw_text, errors="coerce")
-    count_auto = test_auto.notna().sum()
-
-    mes_us_counts = test_us.dt.month.value_counts(dropna=False).sort_index().to_dict()
-    mes_auto_counts = test_auto.dt.month.value_counts(dropna=False).sort_index().to_dict()
-
-    fev_us = ((test_us >= "2026-02-01") & (test_us <= "2026-02-28")).sum()
-    fev_auto = ((test_auto >= "2026-02-01") & (test_auto <= "2026-02-28")).sum()
-    
-    # Identifica melhor formato
-    melhor = max(
-        ("US", count_us),
-        ("BR", count_br),
-        ("AUTO", count_auto),
-        key=lambda x: x[1],
-    )[0]
-    
-    return {
-        "raw_column": raw_col,
-        "amostra_bruta": amostra_bruta,
-        "total_registros": len(df_raw),
-        "mes_string_counts": mes_string_counts,
-        "mes_us_counts": mes_us_counts,
-        "mes_auto_counts": mes_auto_counts,
-        "fev_us": int(fev_us),
-        "fev_auto": int(fev_auto),
-        "formato_us_valido": count_us,
-        "formato_br_valido": count_br,
-        "formato_auto_valido": count_auto,
-        "melhor_formato": melhor,
-    }
-
-
-# ============================================================================
-# FASE 2: PARSER ROBUSTO E NORMALIZAÇÃO
-# ============================================================================
-
-
-def _parse_date_safe(date_series: pd.Series) -> pd.Series:
-    """FASE 2.1: Parser robusto para múltiplos formatos de data.
-    
-    Estratégia:
-    1. Tenta formato US (mm/dd/yyyy) primeiro (mais comum em CSVs)
-    2. Fallback para parsing automático em casos não parseados
-    3. Nunca deixa NaT silencioso - registra em log
-    
-    Args:
-        date_series: Series com strings de data
-        
-    Returns:
-        Series com Timestamps parseados
-    """
-    # Tentativa 1: Formato US (mm/dd/yyyy)
-    parsed = pd.to_datetime(date_series, format="%m/%d/%Y", errors="coerce")
-    
-    # Fallback: casos não parseados
-    mask = parsed.isna()
-    if mask.any():
-        parsed_fallback = pd.to_datetime(
-            date_series[mask], 
-            errors="coerce",
-            dayfirst=False  # Não assume brasileiro por enquanto
-        )
-        parsed.loc[mask] = parsed_fallback
-    
-    return parsed
-
-
-def _normalize_data(df: pd.DataFrame) -> pd.DataFrame:
-    """FASE 2.2: Normalização com parser robusto (sem silenciar NaT).
-    
-    Processa:
-    - Textos (cliente, produto, categoria)
-    - Datas com parser robusto
-    - Numéricos com fallback a 0.0
-    - Validação de integridade
-    
-    Args:
-        df: DataFrame bruto
-        
-    Returns:
-        DataFrame normalizado
-    """
-    df = df.copy()
-
-    # ===== TEXTOS =====
-    if "cliente" in df.columns:
-        df["cliente"] = df["cliente"].fillna("").astype(str).str.strip().str.upper()
-    else:
-        df["cliente"] = "N/A"
-
-    if "produto" in df.columns:
-        df["produto"] = df["produto"].fillna("").astype(str).str.strip()
-    else:
-        df["produto"] = "N/A"
-
-    if "categoria" not in df.columns:
-        df["categoria"] = "N/A"
-
-    # ===== DATAS (com parser robusto FASE 2.1) =====
-    if "data" in df.columns:
-        if pd.api.types.is_datetime64_any_dtype(df["data"]):
-            df["data"] = pd.to_datetime(df["data"], errors="coerce")
-        else:
-            df["data"] = _parse_date_safe(df["data"].astype(str))
-        
-        # FASE 4.1: Log de erros (hardening)
-        invalid_count = df["data"].isna().sum()
-        if invalid_count > 0:
-            logger.warning(
-                f"_normalize_data: {invalid_count} datas inválidas detectadas "
-                f"({100 * invalid_count / len(df):.1f}% da base)"
-            )
-    else:
-        df["data"] = pd.NaT
-
-    # ===== NUMÉRICOS =====
-    cols_numericas = ["qtd", "valor_venda", "valor_total", "lucro_est", "custo_unit"]
-    for col in cols_numericas:
-        if col not in df.columns:
-            df[col] = 0.0
-        else:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-
-    # Garante valor_total válido (FASE 2.2: Task 2.3)
-    mask_recalc = df["valor_total"] <= 0
-    if mask_recalc.any():
-        df.loc[mask_recalc, "valor_total"] = (
-            df.loc[mask_recalc, "valor_venda"] * df.loc[mask_recalc, "qtd"]
-        )
-
-    # FASE 4.2: Assert de integridade
-    valid_date_ratio = df["data"].notna().mean()
-    if valid_date_ratio < 0.99:
-        logger.warning(
-            f"_normalize_data: Integridade comprometida. "
-            f"Apenas {valid_date_ratio:.2%} de datas válidas"
-        )
-
-    return df
-
-
-# ============================================================================
-# FASE 3, 6: FILTROS E PAGINAÇÃO
-# ============================================================================
-
-
 def _apply_filters(
     df: pd.DataFrame, data_inicio: date, data_fim: date, clientes: list[str]
 ) -> pd.DataFrame:
-    """FASE 3, 6: Aplica filtros de data e cliente sobre DataFrame normalizado.
-    
-    Importante: Sempre trabalha sobre cópia para não mutar original.
-    Nunca filtra antes de validar datas.
+    """Aplica filtros de data e cliente.
     
     Args:
-        df: DataFrame normalizado
-        data_inicio: Data inicial do período (ou None)
-        data_fim: Data final do período (ou None)
-        clientes: Lista de clientes selecionados (ou vazio para todos)
+        df: DataFrame do gold layer
+        data_inicio: Data inicial do período
+        data_fim: Data final do período
+        clientes: Lista de clientes selecionados (vazio = todos)
         
     Returns:
-        DataFrame filtrado (cópia)
+        DataFrame filtrado
     """
     df_filtered = df.copy()
 
@@ -244,57 +53,35 @@ def _apply_filters(
 
 
 def _paginate_dataframe(df: pd.DataFrame, page: int, page_size: int) -> pd.DataFrame:
-    """Retorna apenas o slice de dados para a página atual.
-    
-    Args:
-        df: DataFrame completo (já filtrado)
-        page: Número da página (1-indexed)
-        page_size: Itens por página
-        
-    Returns:
-        Slice do DataFrame para exibição
-    """
+    """Retorna slice de dados para a página atual."""
     start = (page - 1) * page_size
     end = start + page_size
     return df.iloc[start:end]
 
 
-# ============================================================================
-# UI PRINCIPAL
-# ============================================================================
-
-
 def show_faturamento() -> None:
-    """Renderiza página de auditoria com diagnóstico robusto de parsing.
-    
-    FASES 1-6:
-    - FASE 1: Diagnóstico de parsing
-    - FASE 2: Normalização com parser robusto
-    - FASE 3: Aplicação de filtros
-    - FASE 4: Hardening (logs e validação)
-    - FASE 5: Estrutura correta (parse → normalize → filter → paginate)
-    - FASE 6: Integração completa com UI
-    """
-    st.header("💹 Faturamento (Auditoria)")
-    st.caption("Exploração detalhada com diagnóstico robusto de parsing de datas (Fases 1-6).")
+    """Renderiza página de faturamento com dados do gold layer."""
+    st.header("💹 Faturamento")
+    st.caption("Exploração de dados de vendas com filtros por data e cliente.")
 
-    # === FASE 1: Carregamento e Diagnóstico ===
-    df_raw, etl_audit = load_sales_data_with_audit_cached()
-    if df_raw is None:
-        df_raw = load_sales_data_cached()
-        etl_audit = etl_audit or {}
-
-    if df_raw is None or df_raw.empty:
+    # Carregar dados do gold layer
+    sales_df = load_sales_data_cached()
+    if sales_df is None or sales_df.empty:
         st.warning("⚠️ Nenhum dado de vendas encontrado.")
         return
 
-    # Executar diagnóstico (FASE 1)
-    diagnostic_info = _diagnose_date_parsing(df_raw)
+    # Preparar base para filtro
+    df_base = sales_df.copy()
+    
+    # Garantir coluna data em datetime
+    if "data" in df_base.columns:
+        df_base["data"] = pd.to_datetime(df_base["data"], errors="coerce")
+    
+    # Garantir coluna cliente
+    if "cliente" not in df_base.columns:
+        df_base["cliente"] = "N/A"
 
-    # === FASE 2: Normalização com parser robusto ===
-    df_base = _normalize_data(df_raw)
-
-    # === FASE 3, 6: Controles de Filtros ===
+    # === FILTROS ===
     with st.container():
         st.subheader("Filtros")
         c1, c2, c3 = st.columns([1, 1, 2])
@@ -330,13 +117,13 @@ def show_faturamento() -> None:
                 "Clientes", options=lista_clientes, placeholder="Todos os clientes"
             )
 
-    # === FASE 3: Aplicação de Filtros ===
+    # Aplicar filtros
     df_filtered = _apply_filters(
         df_base, data_inicio, data_fim, clientes_selecionados
     )
 
-    # === FASE 6: Métricas Agregadas ===
-    faturamento_total = df_filtered["valor_total"].sum()
+    # Métricas agregadas
+    faturamento_total = df_filtered.get("valor_total", pd.Series(dtype=float)).sum()
     total_registros = len(df_filtered)
 
     st.markdown("---")
@@ -344,7 +131,7 @@ def show_faturamento() -> None:
         f"### Total Filtrado: **{format_brl(faturamento_total)}** ({total_registros} registros)"
     )
 
-    # === FASE 6: Paginação ===
+    # === PAGINAÇÃO ===
     c_page, c_size = st.columns([2, 5])
     with c_size:
         page_size = st.selectbox(
@@ -358,176 +145,64 @@ def show_faturamento() -> None:
             "Página", min_value=1, max_value=total_pages, value=1
         )
 
-    # === FASE 6: Slice para exibição ===
+    # Slice para exibição
     df_page = _paginate_dataframe(df_filtered, page, page_size).copy()
 
-    # === FASE 6: Formatação para Exibição ===
+    # Formatação para exibição
     df_display = df_page.copy()
     if not df_display.empty:
-        df_display["Data"] = df_display["data"].dt.strftime("%d/%m/%Y")
-        df_display["Valor Total"] = df_display["valor_total"].apply(format_brl)
-        df_display["Valor Unit"] = df_display["valor_venda"].apply(format_brl)
-        df_display["Qtd"] = df_display["qtd"].apply(
-            lambda x: f"{int(x)}" if x.is_integer() else f"{x:.2f}"
-        )
+        if "data" in df_display.columns:
+            df_display["Data"] = df_display["data"].dt.strftime("%d/%m/%Y")
+        if "valor_total" in df_display.columns:
+            df_display["Valor Total"] = df_display["valor_total"].apply(format_brl)
+        if "valor_unitario" in df_display.columns:
+            df_display["Valor Unit"] = df_display["valor_unitario"].apply(format_brl)
+        if "quantidade" in df_display.columns:
+            df_display["Qtd"] = df_display["quantidade"].apply(
+                lambda x: f"{int(x)}" if float(x) == int(x) else f"{x:.2f}"
+            )
     else:
-        # Garante colunas mesmo vazio
         df_display["Data"] = []
         df_display["Valor Total"] = []
         df_display["Valor Unit"] = []
         df_display["Qtd"] = []
 
     # Seleção e renomeação de colunas finais
-    colunas_finais = {
-        "Data": "Data",
-        "cliente": "Cliente",
-        "produto": "Produto",
-        "categoria": "Categoria",
-        "Qtd": "Qtd",
-        "Valor Unit": "Valor Unit",
-        "Valor Total": "Valor Total",
-    }
+    colunas_para_exibir = []
+    mapeamento = {}
+    
+    if "Data" in df_display.columns:
+        colunas_para_exibir.append("Data")
+        mapeamento["Data"] = "Data"
+    if "cliente" in df_display.columns:
+        colunas_para_exibir.append("cliente")
+        mapeamento["cliente"] = "Cliente"
+    if "produto" in df_display.columns:
+        colunas_para_exibir.append("produto")
+        mapeamento["produto"] = "Produto"
+    if "Qtd" in df_display.columns:
+        colunas_para_exibir.append("Qtd")
+        mapeamento["Qtd"] = "Qtd"
+    if "Valor Unit" in df_display.columns:
+        colunas_para_exibir.append("Valor Unit")
+        mapeamento["Valor Unit"] = "Valor Unit"
+    if "Valor Total" in df_display.columns:
+        colunas_para_exibir.append("Valor Total")
+        mapeamento["Valor Total"] = "Valor Total"
 
     # Exibir Tabela
-    st.dataframe(
-        df_display[list(colunas_finais.keys())].rename(columns=colunas_finais),
-        width="stretch",
-        hide_index=True,
-    )
-
-    # =========================================================================
-    # DIAGNÓSTICO COMPLETO E VALIDAÇÃO (FASES 1-4)
-    # =========================================================================
-    with st.expander("🔍 Diagnóstico Completo de Parsing e Integridade de Dados"):
-        dedup_audit = etl_audit.get("dedup", {}) if isinstance(etl_audit, dict) else {}
-
-        st.subheader("FASE 0: Auditoria ETL (Carga e Deduplicação)")
-        col_etl_1, col_etl_2, col_etl_3 = st.columns(3)
-        with col_etl_1:
-            st.metric("Total RAW ETL", int(etl_audit.get("raw_rows", len(df_raw)) or 0))
-        with col_etl_2:
-            st.metric("Após Deduplicação", int(dedup_audit.get("after", len(df_raw)) or 0))
-        with col_etl_3:
-            st.metric("Duplicatas Removidas", int(dedup_audit.get("removed", 0) or 0))
-
-        if dedup_audit.get("removed_by_month"):
-            st.write("**Duplicatas removidas por mês:**")
-            st.json(dedup_audit.get("removed_by_month", {}))
-
-        if etl_audit.get("parse_strategies"):
-            st.write("**Estratégias de parsing aplicadas por arquivo:**")
-            st.json(etl_audit.get("parse_strategies", {}))
-
-        
-        # === FASE 1: Inspeção de dados brutos ===
-        st.subheader("FASE 1: Inspeção de Dados Brutos")
-        st.write(f"**Coluna fonte do diagnóstico:** `{diagnostic_info.get('raw_column', 'data')}`")
-        st.write("**Amostra das primeiras 5 datas (formato raw do CSV):**")
-        st.code(str(diagnostic_info.get("amostra_bruta", [])[:5]))
-        st.write("**Mês extraído direto da string (token antes da primeira '/'):**")
-        st.json(diagnostic_info.get("mes_string_counts", {}))
-
-        # === FASE 1.3: Comparação de interpretações ===
-        st.subheader("FASE 1.3: Comparação de Interpretações de Formato")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric(
-                "Formato US\n(mm/dd/yyyy)",
-                diagnostic_info.get("formato_us_valido", 0),
-            )
-        with col2:
-            st.metric(
-                "Formato BR\n(dd/mm/yyyy)",
-                diagnostic_info.get("formato_br_valido", 0),
-            )
-        with col3:
-            st.metric(
-                "Formato AUTO",
-                diagnostic_info.get("formato_auto_valido", 0),
-            )
-
-        best_fmt = diagnostic_info.get("melhor_formato", "UNKNOWN")
-        st.success(f"✅ Formato predominante identificado: **{best_fmt}**")
-
-        # === FASE 2-3: Contadores principais de integridade ===
-        st.subheader("FASE 2-3: Contadores de Integridade de Dados")
-        col_a, col_b, col_c, col_d = st.columns(4)
-
-        with col_a:
-            st.metric("Total RAW\n(Carregado)", len(df_raw))
-        with col_b:
-            st.metric("Total BASE\n(Normalizado)", len(df_base))
-        with col_c:
-            valid_dates = df_base["data"].notna().sum()
-            st.metric("Datas Válidas", valid_dates)
-        with col_d:
-            invalid_dates = df_base["data"].isna().sum()
-            if invalid_dates > 0:
-                st.metric("⚠️ Datas Inválidas", invalid_dates)
-            else:
-                st.metric("✅ Datas Inválidas", invalid_dates)
-
-        # === FASE 3: Distribuição mensal ===
-        st.subheader("FASE 3: Distribuição Mensal de Registros")
-        if not df_base["data"].isna().all():
-            monthly_dist = df_base["data"].dt.to_period("M").value_counts().sort_index()
-            st.bar_chart(monthly_dist, use_container_width=True)
-            st.write("**Contagem por mês:**")
-            st.dataframe(
-                monthly_dist.reset_index()
-                .rename(columns={"data": "Mês", "count": "Total Registros"}),
-                hide_index=True,
-            )
-        else:
-            st.warning("⚠️ Nenhuma data válida para distribuição mensal")
-
-        # === FASE 3.1: Teste isolado (fevereiro 2026) ===
-        st.subheader("FASE 3.1: Teste Isolado - Fevereiro 2026")
-        st.write("Esperado: ~3348 registros (validação do parsing)")
-        st.write("**Contagem por mês (parsing explícito US):**")
-        st.json(diagnostic_info.get("mes_us_counts", {}))
-        st.write("**Contagem por mês (parsing automático):**")
-        st.json(diagnostic_info.get("mes_auto_counts", {}))
-        st.write(
-            f"**Comparação direta fevereiro:** US={diagnostic_info.get('fev_us', 0)} | AUTO={diagnostic_info.get('fev_auto', 0)}"
+    if colunas_para_exibir:
+        st.dataframe(
+            df_display[colunas_para_exibir].rename(columns=mapeamento),
+            width="stretch",
+            hide_index=True,
         )
-        try:
-            df_fev = df_base[
-                (df_base["data"] >= "2026-02-01")
-                & (df_base["data"] <= "2026-02-28")
-            ]
-            st.metric("Registros encontrados em Fevereiro", len(df_fev))
-            
-            if len(df_fev) < 100:
-                st.error(
-                    f"❌ FALHA DE PARSING: Apenas {len(df_fev)} registros em fevereiro. "
-                    "Se esperava ~3348, há problema crítico no parsing de datas. "
-                    "Verifique o formato no CSV."
-                )
-            elif len(df_fev) < 2000:
-                st.warning(
-                    f"⚠️ PARCIALMENTE OK: {len(df_fev)} registros encontrados. "
-                    "Mais que 100, mas inferior ao esperado de ~3348."
-                )
-            else:
-                st.success(
-                    f"✅ PARSING CORRETO: {len(df_fev)} registros em fevereiro "
-                    "(próximo do esperado de ~3348)"
-                )
-        except Exception as e:
-            st.error(f"❌ Erro ao filtrar fevereiro: {e}")
+    else:
+        st.info("Nenhuma coluna para exibir.")
 
-        # === FASE 2.3: Exemplo de dados normalizados ===
-        st.subheader("FASE 2.3: Amostra de Dados Normalizados (primeiras 10 linhas)")
-        if not df_base.empty:
-            st.dataframe(
-                df_base[["data", "cliente", "produto", "valor_total"]].head(10),
-                hide_index=True,
-            )
-
-    # === FASE 6: Exportação ===
-    col_csv, col_xlsx = st.columns(2)
+    # === EXPORTAÇÃO ===
     if not df_filtered.empty:
+        col_csv, col_xlsx = st.columns(2)
         csv_data = df_filtered.to_csv(index=False).encode("utf-8")
         with col_csv:
             st.download_button(
@@ -547,6 +222,4 @@ def show_faturamento() -> None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
-
-
 

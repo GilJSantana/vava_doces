@@ -9,7 +9,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.domain.sales_analysis_service import SalesETLPipeline
+from src.domain.service_factory import create_product_analysis_service_with_gold
+from src.infrastructure.gold_adapter import GoldParquetAdapter
+from src.ports.data_source import DataSourceError
 from src.presentation.chart_style import (
     apply_clean_xy_axes,
     apply_minimal_figure_style,
@@ -20,30 +22,52 @@ from src.presentation.chart_style import (
 
 @st.cache_data
 def load_sales_data_cached() -> Optional[pd.DataFrame]:
-    """Load sales data once and reuse across pages.
+    """Load sales data from gold layer (fato_vendas + dim_produto join).
 
-    Returns None when the pipeline cannot provide rows.
+    Falls back to raw pipeline if gold unavailable.
+    Returns None when no data is available.
     """
     try:
-        df = SalesETLPipeline.from_env().run()
-        if df is None or df.empty:
-            return None
+        # Try gold layer first (deduplicated, typed, pre-aggregated)
+        adapter = GoldParquetAdapter()
+        fato_vendas = adapter.load_gold("fato_vendas")
+        dim_produto = adapter.load_gold("dim_produto")
+        
+        # Join to get product names
+        df = fato_vendas.merge(dim_produto, on="produto_id", how="left")
+        
+        # Rename columns to match expected schema
+        df = df.rename(columns={
+            "nome_produto": "produto",
+            "quantidade": "qtd",
+            "valor_total": "valor_venda",
+            "valor_unitario": "valor_unit",
+        })
+        
         return df
+
+    except (DataSourceError, FileNotFoundError):
+        # Fallback to raw pipeline if gold missing
+        try:
+            service = create_product_analysis_service_with_gold(use_gold=False)
+            sales_raw = service.get_sales_data(prefer_gold=False)
+            return sales_raw
+        except Exception:
+            return None
     except Exception:
         return None
 
 
 @st.cache_data
 def load_sales_data_with_audit_cached() -> tuple[Optional[pd.DataFrame], dict]:
-    """Load sales data plus ETL audit details.
+    """Load sales data from gold layer with audit info.
 
-    Returns ``(None, {})`` when the pipeline cannot provide rows.
+    Returns ``(None, {})`` when no data is available.
     """
     try:
-        df, audit = SalesETLPipeline.from_env().run_with_audit()
-        if df is None or df.empty:
-            return None, audit or {}
-        return df, audit or {}
+        df = load_sales_data_cached()
+        audit = {"source": "gold", "rows": len(df) if df is not None else 0}
+        return df, audit
     except Exception:
         return None, {}
 
@@ -79,30 +103,35 @@ def format_brl(value: float) -> str:
 
 
 def enrich_sales_metrics(df: pd.DataFrame) -> pd.DataFrame:
-    """Create normalized financial columns used by dashboard and audit views."""
+    """Prepare sales data for dashboard views.
+    
+    Gold layer already has pre-calculated margins, so minimal enrichment needed.
+    """
     base = df.copy()
-    base["qtd"] = to_numeric_safe(base.get("qtd", pd.Series(dtype=float)))
-    base["valor_venda"] = to_numeric_safe(base.get("valor_venda", pd.Series(dtype=float)))
-    base["custo_unit"] = to_numeric_safe(base.get("custo_unit", pd.Series(dtype=float)))
+    base["qtd"] = to_numeric_safe(base.get("qtd", base.get("quantidade", pd.Series(dtype=float))))
+    base["valor_venda"] = to_numeric_safe(base.get("valor_venda", base.get("valor_total", pd.Series(dtype=float))))
+    base["valor_unit"] = to_numeric_safe(base.get("valor_unit", base.get("valor_unitario", pd.Series(dtype=float))))
+    base["custo_unit"] = to_numeric_safe(base.get("custo_unit", base.get("custo", pd.Series(dtype=float))))
 
-    valor_total_src = base.get("valor_total", pd.Series(dtype=float))
-    base["valor_total_calc"] = to_numeric_safe(valor_total_src)
-    missing_mask = base["valor_total_calc"] <= 0
-    base.loc[missing_mask, "valor_total_calc"] = (
-        base.loc[missing_mask, "valor_venda"] * base.loc[missing_mask, "qtd"]
-    )
-
-    base["custo_total_calc"] = base["custo_unit"] * base["qtd"]
-    base["lucro_total_calc"] = base["valor_total_calc"] - base["custo_total_calc"]
+    # valor_total is already in gold layer
+    base["valor_total_calc"] = to_numeric_safe(base.get("valor_total", pd.Series(dtype=float)))
+    
+    # custo_total is already in gold layer
+    base["custo_total_calc"] = to_numeric_safe(base.get("custo", pd.Series(dtype=float)) * base["qtd"])
+    
+    # margem is already in gold layer (valor_total - custo) / quantidade
+    base["lucro_total_calc"] = base["qtd"] * to_numeric_safe(base.get("margem", pd.Series(dtype=float)))
+    
     base["data"] = pd.to_datetime(base.get("data", pd.Series(dtype=str)), errors="coerce")
     return base
 
 
 def compute_high_level_kpis(df: pd.DataFrame) -> dict[str, float]:
-    """Compute high-level KPIs for dashboard cards."""
+    """Compute high-level KPIs from gold layer data."""
     data = enrich_sales_metrics(df)
     faturamento_total = float(data["valor_total_calc"].sum())
-    custo_total = float(data["custo_total_calc"].sum())
+    # custo is already in gold layer
+    custo_total = float(data.get("custo", pd.Series(dtype=float)).sum())
     lucro_total = float(data["lucro_total_calc"].sum())
     return {
         "faturamento_total": faturamento_total,
