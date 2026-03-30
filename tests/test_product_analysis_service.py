@@ -282,3 +282,38 @@ def test_profitability_analysis_falls_back_to_sales_merge_by_name_when_id_is_mis
     assert analysis.iloc[0]["Faturamento Total"] == 40.0
 
 
+def test_get_registered_products_preserves_valid_rows_from_products_sheet():
+    produtos_df = pd.DataFrame(
+        [
+            {"ID do Produto": "PROD-001", "Nome do Produto": "Brigadeiro"},
+            {"ID do Produto": "prod-001", "Nome do Produto": "Brigadeiro v2"},
+            {"ID do Produto": "PROD-002", "Nome do Produto": "Beijinho"},
+            {"ID do Produto": "", "Nome do Produto": "Linha inválida"},
+        ]
+    )
+
+    service = ProductAnalysisService(DictDataSource({"Produtos": produtos_df}))
+
+    registered = service.get_registered_products()
+
+    assert len(registered) == 3
+    assert registered["ID do Produto"].tolist() == ["PROD-001", "PROD-001", "PROD-002"]
+
+
+def test_get_registered_products_detects_id_in_blank_header_column():
+    produtos_df = pd.DataFrame(
+        [
+            {"": "PROD-001", "Nome do Produto": "Brigadeiro"},
+            {"": "PROD-002", "Nome do Produto": "Beijinho"},
+            {"": "", "Nome do Produto": "Linha inválida"},
+        ]
+    )
+
+    service = ProductAnalysisService(DictDataSource({"Produtos": produtos_df}))
+
+    registered = service.get_registered_products()
+
+    assert len(registered) == 2
+    assert registered["ID do Produto"].tolist() == ["PROD-001", "PROD-002"]
+
+
