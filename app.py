@@ -9,6 +9,7 @@ Esta aplicação oferece interface interativa para:
 """
 
 import os
+from pathlib import Path
 from typing import Callable
 
 import streamlit as st
@@ -24,6 +25,7 @@ from src.presentation.navigation import (
     PAGE_DETAILED_ANALYSIS,
     PAGE_PRODUCTION_COSTS,
     PAGE_REVENUE_IMPACT,
+    PAGE_FATURAMENTO,
     render_sidebar as render_navigation_sidebar,
 )
 from src.presentation.pages import (
@@ -31,6 +33,7 @@ from src.presentation.pages import (
     show_dashboard,
     show_production_costs,
     show_revenue_impact,
+    show_faturamento,
 )
 from src.presentation.theme import apply_global_styles
 
@@ -38,18 +41,13 @@ from src.presentation.theme import apply_global_styles
 load_dotenv()
 
 # Configuração da página
-_favicon_path = "assets/favicon.png" if os.path.exists("assets/favicon.png") else None
-_favicon_bytes = None
-if _favicon_path:
-    try:
-        with open(_favicon_path, "rb") as _f:
-            _favicon_bytes = _f.read()
-    except Exception:
-        _favicon_bytes = None
+_PROJECT_ROOT = Path(__file__).resolve().parent
+_favicon_path = _PROJECT_ROOT / "assets" / "favicon.png"
+_page_icon = str(_favicon_path) if _favicon_path.exists() else "🍰"
 
 st.set_page_config(
     page_title="Vava Doces - Análise de Produtos e Vendas",
-    page_icon=_favicon_bytes or "🍰",
+    page_icon=_page_icon,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -60,6 +58,7 @@ PAGE_HANDLERS: dict[str, Callable] = {
     PAGE_DASHBOARD: lambda _service, _product_service: show_dashboard(_service, _product_service),
     PAGE_PRODUCTION_COSTS: lambda _service, _product_service: show_production_costs(_product_service),
     PAGE_REVENUE_IMPACT: lambda _service, _product_service: show_revenue_impact(_product_service),
+    PAGE_FATURAMENTO: lambda _service, _product_service: show_faturamento(),
     PAGE_DETAILED_ANALYSIS: lambda _service, _product_service: show_analise_detalhada(_service, _product_service),
 }
 
@@ -89,12 +88,17 @@ def get_product_service(_adapter):
     return ProductAnalysisService(data_source=_adapter)
 
 
-def get_services(adapter: GoogleSheetsAdapter):
+def get_services(adapter: object) -> tuple[object | None, object | None]:
     """Inicializa serviços de domínio."""
     return build_analysis_services(
         adapter=adapter,
         product_service_factory=get_product_service,
     )
+
+
+def init_services(adapter: object) -> tuple[object | None, object | None]:
+    """Wrapper tipado para o controlador principal."""
+    return get_services(adapter)
 
 
 def render_selected_page(page: str, service, product_service):
@@ -111,7 +115,7 @@ def main():
     run_app_controller(
         render_header_fn=render_app_header,
         render_sidebar_fn=lambda: render_navigation_sidebar(get_adapter),
-        init_services_fn=get_services,
+        init_services_fn=init_services,
         render_page_fn=render_selected_page,
     )
 
