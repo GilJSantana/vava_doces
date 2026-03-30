@@ -4,23 +4,14 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.presentation.chart_style import (
+    apply_clean_xy_axes,
+    apply_minimal_figure_style,
+    build_color_map,
+    colors_for_labels,
+)
 from src.presentation.components import build_product_labels, render_separator, render_wrapped_dataframe
 from src.presentation.formatters import format_currency
-
-
-CHART_BG = "#f9f9f9"
-AXIS_TEXT = "#2d2d2d"
-GRID_COLOR = "#e0e0e0"
-PARETO_PALETTE = [
-    "#636EFA",
-    "#EF553B",
-    "#00CC96",
-    "#AB63FA",
-    "#FFA15A",
-    "#19D3F3",
-    "#FF6692",
-    "#B6E880",
-]
 
 
 def clean_product_name(series: pd.Series) -> pd.Series:
@@ -31,15 +22,7 @@ def clean_product_name(series: pd.Series) -> pd.Series:
 def build_base_figure() -> go.Figure:
     """Cria figura Plotly padronizada para o tema analítico."""
     fig = go.Figure()
-    fig.update_layout(
-        template="plotly_white",
-        paper_bgcolor=CHART_BG,
-        plot_bgcolor=CHART_BG,
-        font={"color": AXIS_TEXT, "size": 12},
-        margin={"l": 24, "r": 24, "t": 24, "b": 24},
-        showlegend=False,
-        hovermode="closest",
-    )
+    apply_minimal_figure_style(fig, showlegend=False, hovermode="closest")
     return fig
 
 
@@ -55,6 +38,7 @@ def build_revenue_pareto_chart(analysis_df: pd.DataFrame) -> go.Figure | None:
     )
     chart_df["len_nome"] = chart_df["Produto Limpo"].str.len()
     chart_df = chart_df.sort_values(["len_nome", "Produto Limpo"], ascending=[True, True])
+    color_map = build_color_map(chart_df["Produto Limpo"].tolist())
 
     fig = build_base_figure()
     fig.add_trace(
@@ -62,7 +46,11 @@ def build_revenue_pareto_chart(analysis_df: pd.DataFrame) -> go.Figure | None:
             x=chart_df["Faturamento Total"],
             y=chart_df["Produto Limpo"],
             orientation="h",
-            marker={"color": "#2563EB", "cornerradius": 18, "line": {"width": 0}},
+            marker={
+                "color": colors_for_labels(chart_df["Produto Limpo"], color_map),
+                "cornerradius": 18,
+                "line": {"width": 0},
+            },
             customdata=chart_df[["Volume de Vendas", "Margem de Contribuição (R$)", "Custo Real"]].to_numpy(),
             hovertemplate=(
                 "Produto: %{y}<br>"
@@ -77,20 +65,8 @@ def build_revenue_pareto_chart(analysis_df: pd.DataFrame) -> go.Figure | None:
     max_name_len = int(chart_df["len_nome"].max()) if not chart_df.empty else 0
     left_margin = min(max(240, max_name_len * 8), 480)
     fig.update_layout(margin={"l": left_margin, "r": 24, "t": 16, "b": 20})
-    fig.update_xaxes(title_text="Faturamento Total (R$)", showgrid=False, zeroline=False, showline=False)
-    fig.update_yaxes(
-        title_text="",
-        automargin=True,
-        tickangle=0,
-        ticklabelposition="outside",
-        tickfont={"color": AXIS_TEXT, "size": 11, "family": "Arial Black, Arial, sans-serif"},
-        showgrid=True,
-        gridcolor=GRID_COLOR,
-        gridwidth=1,
-        categoryorder="array",
-        categoryarray=chart_df["Produto Limpo"].tolist(),
-        autorange="reversed",
-    )
+    apply_clean_xy_axes(fig, x_title="Faturamento Total (R$)", x_tickprefix="R$ ", y_title="")
+    fig.update_yaxes(categoryorder="array", categoryarray=chart_df["Produto Limpo"].tolist(), autorange="reversed")
     return fig
 
 
@@ -107,6 +83,7 @@ def build_profitability_scatter_chart(analysis_df: pd.DataFrame) -> go.Figure | 
     chart_df["Tamanho"] = chart_df["Faturamento Total"].clip(lower=0).fillna(0)
     max_size = chart_df["Tamanho"].max() or 1
     marker_sizes = (chart_df["Tamanho"] / max_size * 28).clip(lower=10)
+    color_map = build_color_map(chart_df["Produto Limpo"].tolist())
 
     avg_volume = float(chart_df["Volume de Vendas"].mean())
     avg_margin = float(chart_df["Margem de Contribuição (%)"].mean())
@@ -122,7 +99,7 @@ def build_profitability_scatter_chart(analysis_df: pd.DataFrame) -> go.Figure | 
             mode="markers",
             marker={
                 "size": marker_sizes.tolist(),
-                "color": "#7C3AED",
+                "color": colors_for_labels(chart_df["Produto Limpo"], color_map),
                 "line": {"width": 1, "color": "rgba(45,45,45,0.18)"},
                 "opacity": 0.72,
             },
@@ -142,15 +119,7 @@ def build_profitability_scatter_chart(analysis_df: pd.DataFrame) -> go.Figure | 
         )
     )
     fig.update_layout(showlegend=False, hovermode="closest")
-    fig.update_xaxes(title_text="Volume de Vendas", showgrid=False, zeroline=False, showline=False)
-    fig.update_yaxes(
-        title_text="Margem de Contribuição (%)",
-        showgrid=True,
-        gridcolor=GRID_COLOR,
-        gridwidth=1,
-        zeroline=False,
-        showline=False,
-    )
+    apply_clean_xy_axes(fig, x_title="Volume de Vendas", y_title="Margem de Contribuição (%)")
     fig.add_vline(x=avg_volume, line_dash="dash", line_color="#7A7A7A", opacity=0.7)
     fig.add_hline(y=avg_margin, line_dash="dash", line_color="#7A7A7A", opacity=0.7)
 
@@ -166,8 +135,8 @@ def build_profitability_scatter_chart(analysis_df: pd.DataFrame) -> go.Figure | 
             y=y_pos,
             text=label,
             showarrow=False,
-            font={"color": AXIS_TEXT, "size": 11},
-            bgcolor="rgba(249,249,249,0.75)",
+            font={"color": "#1F2937", "size": 11},
+            bgcolor="rgba(255,255,255,0.82)",
         )
     return fig
 
@@ -194,7 +163,7 @@ def build_price_vs_cost_chart(analysis_df: pd.DataFrame) -> go.Figure | None:
             y=chart_df["Produto Limpo"],
             orientation="h",
             name="Preço de Venda",
-            marker={"color": "#2E8B57", "cornerradius": 18, "line": {"width": 0}},
+            marker={"color": "#1F77B4", "cornerradius": 18, "line": {"width": 0}},
             hovertemplate="Produto: %{y}<br>Preço de Venda: R$ %{x:.2f}<extra></extra>",
         )
     )
@@ -204,30 +173,24 @@ def build_price_vs_cost_chart(analysis_df: pd.DataFrame) -> go.Figure | None:
             y=chart_df["Produto Limpo"],
             orientation="h",
             name="Custo de Produção",
-            marker={"color": "#F4A261", "cornerradius": 18, "line": {"width": 0}},
+            marker={"color": "#FF7F0E", "cornerradius": 18, "line": {"width": 0}},
             hovertemplate="Produto: %{y}<br>Custo de Produção: R$ %{x:.2f}<extra></extra>",
         )
     )
     fig.update_layout(
         barmode="group",
         showlegend=True,
-        legend={"orientation": "h", "y": 1.08, "x": 0, "font": {"color": AXIS_TEXT}},
+        legend={
+            "orientation": "h",
+            "y": -0.18,
+            "x": 0,
+            "bgcolor": "rgba(0,0,0,0)",
+            "borderwidth": 0,
+        },
         margin={"l": left_margin, "r": 24, "t": 16, "b": 20},
     )
-    fig.update_xaxes(title_text="Valor (R$)", showgrid=False, zeroline=False, showline=False)
-    fig.update_yaxes(
-        title_text="",
-        automargin=True,
-        tickangle=0,
-        ticklabelposition="outside",
-        tickfont={"color": AXIS_TEXT, "size": 11, "family": "Arial Black, Arial, sans-serif"},
-        showgrid=True,
-        gridcolor=GRID_COLOR,
-        gridwidth=1,
-        categoryorder="array",
-        categoryarray=chart_df["Produto Limpo"].tolist(),
-        autorange="reversed",
-    )
+    apply_clean_xy_axes(fig, x_title="Valor (R$)", x_tickprefix="R$ ", y_title="")
+    fig.update_yaxes(categoryorder="array", categoryarray=chart_df["Produto Limpo"].tolist(), autorange="reversed")
     return fig
 
 
@@ -329,7 +292,7 @@ def show_revenue_impact(product_service):
             if pareto_fig is None:
                 st.info("ℹ️ Ainda não há faturamento consolidado suficiente para montar o gráfico de impacto.")
             else:
-                st.plotly_chart(pareto_fig, use_container_width=True)
+                st.plotly_chart(pareto_fig, width="stretch")
 
         with tab_rentabilidade:
             st.subheader("🎯 Matriz de Rentabilidade")
@@ -337,7 +300,7 @@ def show_revenue_impact(product_service):
             if scatter_fig is None:
                 st.info("ℹ️ Ainda não há volume de vendas suficiente para montar a matriz de rentabilidade.")
             else:
-                st.plotly_chart(scatter_fig, use_container_width=True)
+                st.plotly_chart(scatter_fig, width="stretch")
 
         with tab_preco_custo:
             st.subheader("⚖️ Preço de Venda vs. Custo de Produção")
@@ -345,7 +308,7 @@ def show_revenue_impact(product_service):
             if price_vs_cost_fig is None:
                 st.info("ℹ️ Ainda não há dados suficientes para comparar preço e custo por produto.")
             else:
-                st.plotly_chart(price_vs_cost_fig, use_container_width=True)
+                st.plotly_chart(price_vs_cost_fig, width="stretch")
 
         render_separator()
         st.subheader("📥 Download")

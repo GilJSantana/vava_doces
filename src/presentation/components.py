@@ -1,8 +1,13 @@
 """Componentes e utilitários de renderização Streamlit."""
 
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 from pandas.io.formats.style import Styler
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def render_separator() -> None:
@@ -16,7 +21,7 @@ def render_wrapped_dataframe(
 ) -> None:
     """Renderiza dataframe em wrapper visual padronizado."""
     st.markdown('<div class="dataframe-wrapper">', unsafe_allow_html=True)
-    st.dataframe(df, use_container_width=True, hide_index=True, column_config=column_config)
+    st.dataframe(df, width="stretch", hide_index=True, column_config=column_config)
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -51,12 +56,16 @@ def render_app_header(
     logo_path: str = "assets/logo.png",
 ) -> None:
     """Renderiza cabeçalho principal com logotipo, título e subtítulo."""
+    resolved_logo_path = PROJECT_ROOT / logo_path
     st.markdown('<div class="header">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         try:
             st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
-            st.image(logo_path, width=150)
+            if resolved_logo_path.exists():
+                st.image(str(resolved_logo_path), width=150)
+            else:
+                raise FileNotFoundError(str(resolved_logo_path))
             st.markdown('</div>', unsafe_allow_html=True)
         except Exception:
             st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)

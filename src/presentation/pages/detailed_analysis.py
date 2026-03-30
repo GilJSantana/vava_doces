@@ -1,7 +1,9 @@
 """Página de análise detalhada."""
 
+import plotly.graph_objects as go
 import streamlit as st
 
+from src.presentation.chart_style import apply_clean_xy_axes, apply_minimal_figure_style, build_color_map, colors_for_labels
 from src.presentation.components import build_product_labels, render_separator
 from src.presentation.formatters import format_currency
 
@@ -39,12 +41,28 @@ def show_analise_detalhada(service, product_service):
                     media = analise_df["Custo Total (R$)"].mean()
                     st.metric("Custo de Produção Médio", format_currency(media))
 
-                st.bar_chart(analise_df.set_index("Produto Label"))
+                plot_df = analise_df.copy()
+                color_map = build_color_map(plot_df["Produto Label"].tolist())
+                fig = go.Figure(
+                    data=[
+                        go.Bar(
+                            x=plot_df["Custo Total (R$)"],
+                            y=plot_df["Produto Label"],
+                            orientation="h",
+                            marker={"color": colors_for_labels(plot_df["Produto Label"], color_map), "line": {"width": 0}},
+                            hovertemplate="Produto: %{y}<br>Custo: R$ %{x:.2f}<extra></extra>",
+                        )
+                    ]
+                )
+                apply_minimal_figure_style(fig, showlegend=False, hovermode="y unified")
+                apply_clean_xy_axes(fig, x_title="Custo de Produção (R$)", x_tickprefix="R$ ", y_title="")
+                fig.update_layout(margin={"l": 240, "r": 24, "t": 16, "b": 20})
+                st.plotly_chart(fig, width="stretch")
 
                 display_df = analise_df.copy()
                 display_df["Custo Total (R$)"] = display_df["Custo Total (R$)"].apply(format_currency)
                 display_df = display_df.rename(columns={"Custo Total (R$)": "Custo de Produção (R$)"})
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
+                st.dataframe(display_df, width="stretch", hide_index=True)
             else:
                 st.info("ℹ️ Nenhum dado disponível para análise")
 

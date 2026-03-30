@@ -18,6 +18,7 @@ import streamlit as st
 from src.presentation.pages.sales_shared import (
     format_brl,
     load_sales_data_cached,
+    load_sales_data_with_audit_cached,
     to_excel_bytes,
 )
 
@@ -40,23 +41,36 @@ def _diagnose_date_parsing(df_raw: pd.DataFrame) -> dict:
     Returns:
         dict com informações de parsing para cada formato
     """
-    if "data" not in df_raw.columns:
+    raw_col = "data_raw" if "data_raw" in df_raw.columns else "data"
+    if raw_col not in df_raw.columns:
         return {"error": "Coluna 'data' não encontrada"}
-    
+
+    raw_text = df_raw[raw_col].astype(str).str.strip()
+
     # Amostra bruta para inspeção
-    amostra_bruta = df_raw["data"].head(20).tolist()
-    
+    amostra_bruta = raw_text.head(20).tolist()
+
+    # Mês direto da string: "mm/dd/yyyy" -> token 0
+    mes_string = pd.to_numeric(raw_text.str.split("/").str[0], errors="coerce")
+    mes_string_counts = mes_string.value_counts(dropna=False).sort_index().to_dict()
+
     # Test 1: Formato US (mm/dd/yyyy) - comum em arquivos Excel
-    test_us = pd.to_datetime(df_raw["data"], format="%m/%d/%Y", errors="coerce")
+    test_us = pd.to_datetime(raw_text, format="%m/%d/%Y", errors="coerce")
     count_us = test_us.notna().sum()
-    
+
     # Test 2: Formato BR (dd/mm/yyyy) - padrão brasileiro
-    test_br = pd.to_datetime(df_raw["data"], format="%d/%m/%Y", errors="coerce")
+    test_br = pd.to_datetime(raw_text, format="%d/%m/%Y", errors="coerce")
     count_br = test_br.notna().sum()
-    
+
     # Test 3: Parsing automático - infer_datetime_format
-    test_auto = pd.to_datetime(df_raw["data"], errors="coerce")
+    test_auto = pd.to_datetime(raw_text, errors="coerce")
     count_auto = test_auto.notna().sum()
+
+    mes_us_counts = test_us.dt.month.value_counts(dropna=False).sort_index().to_dict()
+    mes_auto_counts = test_auto.dt.month.value_counts(dropna=False).sort_index().to_dict()
+
+    fev_us = ((test_us >= "2026-02-01") & (test_us <= "2026-02-28")).sum()
+    fev_auto = ((test_auto >= "2026-02-01") & (test_auto <= "2026-02-28")).sum()
     
     # Identifica melhor formato
     melhor = max(
@@ -67,8 +81,14 @@ def _diagnose_date_parsing(df_raw: pd.DataFrame) -> dict:
     )[0]
     
     return {
+        "raw_column": raw_col,
         "amostra_bruta": amostra_bruta,
         "total_registros": len(df_raw),
+        "mes_string_counts": mes_string_counts,
+        "mes_us_counts": mes_us_counts,
+        "mes_auto_counts": mes_auto_counts,
+        "fev_us": int(fev_us),
+        "fev_auto": int(fev_auto),
         "formato_us_valido": count_us,
         "formato_br_valido": count_br,
         "formato_auto_valido": count_auto,
@@ -144,7 +164,10 @@ def _normalize_data(df: pd.DataFrame) -> pd.DataFrame:
 
     # ===== DATAS (com parser robusto FASE 2.1) =====
     if "data" in df.columns:
-        df["data"] = _parse_date_safe(df["data"].astype(str))
+        if pd.api.types.is_datetime64_any_dtype(df["data"]):
+            df["data"] = pd.to_datetime(df["data"], errors="coerce")
+        else:
+            df["data"] = _parse_date_safe(df["data"].astype(str))
         
         # FASE 4.1: Log de erros (hardening)
         invalid_count = df["data"].isna().sum()
@@ -256,7 +279,10 @@ def show_faturamento() -> None:
     st.caption("Exploração detalhada com diagnóstico robusto de parsing de datas (Fases 1-6).")
 
     # === FASE 1: Carregamento e Diagnóstico ===
-    df_raw = load_sales_data_cached()
+    df_raw, etl_audit = load_sales_data_with_audit_cached()
+    if df_raw is None:
+        df_raw = load_sales_data_cached()
+        etl_audit = etl_audit or {}
 
     if df_raw is None or df_raw.empty:
         st.warning("⚠️ Nenhum dado de vendas encontrado.")
@@ -373,11 +399,33 @@ def show_faturamento() -> None:
     # DIAGNÓSTICO COMPLETO E VALIDAÇÃO (FASES 1-4)
     # =========================================================================
     with st.expander("🔍 Diagnóstico Completo de Parsing e Integridade de Dados"):
+        dedup_audit = etl_audit.get("dedup", {}) if isinstance(etl_audit, dict) else {}
+
+        st.subheader("FASE 0: Auditoria ETL (Carga e Deduplicação)")
+        col_etl_1, col_etl_2, col_etl_3 = st.columns(3)
+        with col_etl_1:
+            st.metric("Total RAW ETL", int(etl_audit.get("raw_rows", len(df_raw)) or 0))
+        with col_etl_2:
+            st.metric("Após Deduplicação", int(dedup_audit.get("after", len(df_raw)) or 0))
+        with col_etl_3:
+            st.metric("Duplicatas Removidas", int(dedup_audit.get("removed", 0) or 0))
+
+        if dedup_audit.get("removed_by_month"):
+            st.write("**Duplicatas removidas por mês:**")
+            st.json(dedup_audit.get("removed_by_month", {}))
+
+        if etl_audit.get("parse_strategies"):
+            st.write("**Estratégias de parsing aplicadas por arquivo:**")
+            st.json(etl_audit.get("parse_strategies", {}))
+
         
         # === FASE 1: Inspeção de dados brutos ===
         st.subheader("FASE 1: Inspeção de Dados Brutos")
+        st.write(f"**Coluna fonte do diagnóstico:** `{diagnostic_info.get('raw_column', 'data')}`")
         st.write("**Amostra das primeiras 5 datas (formato raw do CSV):**")
         st.code(str(diagnostic_info.get("amostra_bruta", [])[:5]))
+        st.write("**Mês extraído direto da string (token antes da primeira '/'):**")
+        st.json(diagnostic_info.get("mes_string_counts", {}))
 
         # === FASE 1.3: Comparação de interpretações ===
         st.subheader("FASE 1.3: Comparação de Interpretações de Formato")
@@ -436,6 +484,13 @@ def show_faturamento() -> None:
         # === FASE 3.1: Teste isolado (fevereiro 2026) ===
         st.subheader("FASE 3.1: Teste Isolado - Fevereiro 2026")
         st.write("Esperado: ~3348 registros (validação do parsing)")
+        st.write("**Contagem por mês (parsing explícito US):**")
+        st.json(diagnostic_info.get("mes_us_counts", {}))
+        st.write("**Contagem por mês (parsing automático):**")
+        st.json(diagnostic_info.get("mes_auto_counts", {}))
+        st.write(
+            f"**Comparação direta fevereiro:** US={diagnostic_info.get('fev_us', 0)} | AUTO={diagnostic_info.get('fev_auto', 0)}"
+        )
         try:
             df_fev = df_base[
                 (df_base["data"] >= "2026-02-01")
@@ -492,4 +547,6 @@ def show_faturamento() -> None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
+
+
 

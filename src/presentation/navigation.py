@@ -9,11 +9,13 @@ PAGE_DASHBOARD = "📊 Dashboard"
 PAGE_PRODUCTION_COSTS = "💰 Custos de Produção"
 PAGE_REVENUE_IMPACT = "💹 Impacto no Faturamento"
 PAGE_DETAILED_ANALYSIS = "🔍 Análise Detalhada"
+PAGE_FATURAMENTO = "💹 Faturamento (Auditoria)"
 
 PAGE_OPTIONS = [
     PAGE_DASHBOARD,
     PAGE_PRODUCTION_COSTS,
     PAGE_REVENUE_IMPACT,
+    PAGE_FATURAMENTO,
     PAGE_DETAILED_ANALYSIS,
 ]
 
@@ -26,7 +28,7 @@ def render_sidebar(get_adapter_fn: Callable[[], object | None]) -> tuple[object 
             unsafe_allow_html=True,
         )
 
-        if st.button("🔄 Atualizar dados", use_container_width=True):
+        if st.button("🔄 Atualizar dados", width="stretch"):
             st.cache_resource.clear()
             st.rerun()
 
