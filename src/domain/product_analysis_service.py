@@ -4,22 +4,34 @@ Consolida dados das abas Receita, Matéria Prima e Produtos para apresentação 
 """
 
 from decimal import Decimal
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 import unicodedata
 
 import pandas as pd
 
 from src.ports.data_source import DataSource, DataSourceError
 
+if TYPE_CHECKING:
+    from src.ports.data_source import GoldDataSource
+
 
 class ProductAnalysisService:
     """
     Serviço que integra dados de Receita, Matéria Prima e Produtos
     para análise consolidada de custos e impacto no faturamento.
+
+    Suporta dois modos de operação:
+    1. Raw (padrão): Lê dados brutos de Receita, Matéria Prima, Produtos e Vendas
+    2. Gold (opcional): Lê dados normalizados e deduplicated do Parquet star schema
     """
 
-    def __init__(self, data_source: DataSource):
+    def __init__(
+        self,
+        data_source: DataSource,
+        gold_source: Optional["GoldDataSource"] = None,
+    ):
         self.data_source = data_source
+        self.gold_source = gold_source  # Opcional: port para gold layer
         self._cache_receita = None
         self._cache_materia_prima = None
         self._cache_produtos = None
@@ -89,6 +101,42 @@ class ProductAnalysisService:
             )
             self._vendas_loaded = True
         return self._copy_df(self._cache_vendas)
+
+    def _get_vendas_data_from_gold(self) -> Optional[pd.DataFrame]:
+        """Carrega dados de vendas do gold layer (fato_vendas.parquet).
+
+        Retorna None se gold_source não estiver disponível ou se o arquivo
+        não existir. O caller pode fazer fallback para raw data.
+        """
+        if self.gold_source is None:
+            return None
+
+        try:
+            df = self.gold_source.load_gold("fato_vendas")
+            return df
+        except Exception:
+            # Fallback silencioso: retorna None e caller usa raw data
+            return None
+
+    def get_sales_data(self, prefer_gold: bool = False) -> Optional[pd.DataFrame]:
+        """Carrega dados de vendas, com opção de preferir gold sobre raw.
+
+        Args:
+            prefer_gold: Se True, tenta gold layer primeiro; se False, usa raw.
+
+        Returns:
+            DataFrame com dados de vendas, ou None se não encontrar.
+        """
+        if prefer_gold:
+            # Tenta gold primeiro
+            gold_data = self._get_vendas_data_from_gold()
+            if gold_data is not None:
+                return gold_data
+            # Fallback para raw
+            return self._get_vendas_data()
+        else:
+            # Padrão: usa raw
+            return self._get_vendas_data()
 
     def _find_column(self, df: pd.DataFrame, candidates: list[str]) -> Optional[str]:
         """Encontra coluna por comparação normalizada (acentos, espaços e underscores)."""

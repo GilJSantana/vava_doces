@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Literal
 import pandas as pd
 
 
@@ -21,6 +21,31 @@ class DriveDataSource(ABC):
     @abstractmethod
     def read_as_dataframe(self, file_meta: dict) -> Optional[pd.DataFrame]:
         """Download ``file_meta`` and return it as a DataFrame, or None on failure."""
+        pass
+
+
+class GoldDataSource(ABC):
+    """Port for Gold layer (star schema) adapters — reads Parquet dimension/fact tables.
+
+    The gold layer is organized as:
+      - dim_produto.parquet  (product dimension)
+      - dim_tempo.parquet    (temporal dimension)
+      - fato_vendas.parquet  (sales fact table)
+    """
+
+    @abstractmethod
+    def load_gold(self, layer: Literal["dim_produto", "dim_tempo", "fato_vendas"]) -> pd.DataFrame:
+        """Load a gold layer Parquet table by name.
+
+        Args:
+            layer: Name of the gold layer to load ('dim_produto', 'dim_tempo', or 'fato_vendas').
+
+        Returns:
+            DataFrame containing the requested gold layer.
+
+        Raises:
+            DataSourceError: If the file is missing or cannot be read.
+        """
         pass
 
 
