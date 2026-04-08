@@ -219,3 +219,6 @@ __marimo__/
 *.xlsx
 !data/README.md
 
+# Development patterns (learning only, not part of project)
+/python-patterns/
+
