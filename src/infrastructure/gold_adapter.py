@@ -8,13 +8,18 @@ from src.ports.data_source import GoldDataSource, DataSourceError
 
 
 class GoldParquetAdapter(GoldDataSource):
-    """Adapter for reading gold layer (star schema) Parquet files from disk.
+    """Adapter for reading gold layer Parquet files from disk.
 
     Expects Parquet files in the following structure:
       gold_dir/
-        ├── dim_produto.parquet   (141 rows in production)
-        ├── dim_tempo.parquet     (28 rows in production)
-        └── fato_vendas.parquet   (3,348 rows in production)
+        ├── dim_produto.parquet
+        ├── dim_tempo.parquet
+        ├── dim_canal.parquet
+        ├── fato_vendas.parquet
+        ├── agg_vendas_dia.parquet
+        ├── agg_vendas_canal.parquet
+        ├── agg_vendas_produto.parquet
+        └── agg_vendas_tempo.parquet
 
     Uses pyarrow engine for Parquet I/O.
     """
@@ -33,7 +38,17 @@ class GoldParquetAdapter(GoldDataSource):
         self._cache: dict[str, pd.DataFrame] = {}
 
     def load_gold(
-        self, layer: Literal["dim_produto", "dim_tempo", "fato_vendas"]
+        self,
+        layer: Literal[
+            "dim_produto",
+            "dim_tempo",
+            "dim_canal",
+            "fato_vendas",
+            "agg_vendas_dia",
+            "agg_vendas_canal",
+            "agg_vendas_produto",
+            "agg_vendas_tempo",
+        ],
     ) -> pd.DataFrame:
         """Load a gold layer Parquet table.
 
