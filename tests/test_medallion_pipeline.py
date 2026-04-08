@@ -10,11 +10,8 @@ Fixtures build minimal DataFrames that exercise edge cases:
 
 from __future__ import annotations
 
-import io
-import os
 import sys
 from pathlib import Path
-from datetime import date, datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -27,18 +24,31 @@ if str(_ROOT) not in sys.path:
 
 from scripts.medallion_pipeline import (  # noqa: E402
     LocalRawSource,
+    MedallionPipeline,
     _coerce_types,
+    _parse_args,
     _map_canonical,
     _normalise_columns,
+    build_agg_vendas_canal,
+    build_agg_vendas_dia,
+    build_agg_vendas_produto,
+    build_agg_vendas_tempo,
+    build_dim_canal,
     build_dim_produto,
     build_dim_tempo,
     build_fato_vendas,
     enrich_cost_from_catalog,
+    run_data_quality_validation,
+    validate_gold_quality,
+    validate_raw_input_quality,
+    validate_silver_quality,
     transform_to_silver,
     validate_star_schema,
     SILVER_COLUMNS,
     _MONTH_PT,
 )
+from src.domain.sales_analysis_service import _deduplicate_with_audit  # noqa: E402
+from src.infrastructure.data_quality import DataQualityValidator  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -315,7 +325,7 @@ class TestTransformToSilver:
         assert "removed" in audit
 
     def test_cross_file_duplicates_removed(self):
-        """Identical num_venda + produto across two files → one row kept."""
+        """Without reliable transaction key, rows are kept and flagged as suspected."""
         row = {
             "Número da venda":           5000,
             "Nota Fiscal / RPS":         "NF-X",
@@ -339,19 +349,190 @@ class TestTransformToSilver:
         file_b = pd.DataFrame([{**row, "_source_file": "b.csv"}])
         combined = pd.concat([file_a, file_b], ignore_index=True)
         silver, audit = transform_to_silver(combined)
-        assert len(silver) == 1, "Cross-file duplicate must be removed"
-        assert audit["removed"] == 1
+        assert len(silver) == 2
+        assert audit["removed"] == 0
+        assert audit["suspected_duplicates"]["count"] == 2
+
+    def test_same_sale_number_across_months_is_not_deduplicated(self):
+        """Rows from Feb and Mar with same num_venda/produto must both be kept."""
+        feb = pd.DataFrame([{
+            "Número da venda": 7000,
+            "Nota Fiscal / RPS": "NF-7000",
+            "Data da venda": "2/28/2026",
+            "Cliente": "Cliente X",
+            "Nome do produto/serviço": "Brigadeiro",
+            "Unidade de medida": "UN",
+            "Quantidade de itens": 1,
+            "Valor unitário": "R$ 10,00",
+            "Valor Bruto": "R$ 10,00",
+            "Desconto na venda": "R$ 0,00",
+            "Valor Liquido no Financeiro": "R$ 10,00",
+            "Valor Total": "R$ 10,00",
+            "Peso Bruto": "0",
+            "Peso Total": "0",
+            "Cidade do cliente": "SP",
+            "Tipo de item (produto ou serviço)": "Produto",
+            "Tipo de Negociação": "Pix",
+            "_source_file": "sales_2026_02.csv",
+        }])
+        mar = feb.copy()
+        mar["Data da venda"] = "3/01/2026"
+        mar["_source_file"] = "sales_2026_03.csv"
+
+        combined = pd.concat([feb, mar], ignore_index=True)
+        silver, audit = transform_to_silver(combined)
+
+        months = pd.to_datetime(silver["data"], errors="coerce").dt.to_period("M").astype(str)
+        assert len(silver) == 2
+        assert set(months.tolist()) == {"2026-02", "2026-03"}
+        assert audit["removed"] == 0
 
     def test_source_file_column_in_silver(self, minimal_raw_df):
         """Tracking column must be promoted to source_file (no leading _) in silver."""
         silver, _ = transform_to_silver(minimal_raw_df)
         assert "source_file" in silver.columns
+        assert "arquivo_origem" in silver.columns
         assert "_source_file" not in silver.columns
 
     def test_ingested_at_utc_present(self, minimal_raw_df):
         silver, _ = transform_to_silver(minimal_raw_df)
         assert "ingested_at_utc" in silver.columns
+        assert "data_carga" in silver.columns
+        assert "mes_referencia" in silver.columns
         assert silver["ingested_at_utc"].notna().all()
+
+
+class TestTransactionKeyDedupRules:
+    def test_ifood_same_order_line_across_files_is_preserved(self):
+        df = pd.DataFrame([
+            {
+                "_source_file": "ifood_2026_02.csv",
+                "plataforma": "ifood",
+                "codigo_venda": "IFOOD-1001",
+                "identificador_item": "1",
+                "num_venda": "A1001",
+                "produto_key": "coxinha",
+                "data": pd.Timestamp("2026-02-10"),
+            },
+            {
+                "_source_file": "ifood_2026_02_reprocess.csv",
+                "plataforma": "ifood",
+                "codigo_venda": "IFOOD-1001",
+                "identificador_item": "1",
+                "num_venda": "A1001",
+                "produto_key": "coxinha",
+                "data": pd.Timestamp("2026-02-10"),
+            },
+        ])
+
+        deduped, audit = _deduplicate_with_audit(df)
+
+        assert len(deduped) == 2
+        assert audit["removed"] == 0
+        assert audit["transaction_key_dedup"]["applied"] is True
+        assert audit["transaction_key_dedup"]["key_columns"] == [
+            "plataforma", "codigo_venda", "identificador_item"
+        ]
+
+    def test_ifood_same_order_line_repeated_in_same_file_is_deduplicated(self):
+        df = pd.DataFrame([
+            {
+                "_source_file": "ifood_2026_02.csv",
+                "plataforma": "ifood",
+                "codigo_venda": "IFOOD-1001",
+                "identificador_item": "1",
+                "num_venda": "A1001",
+                "produto_key": "coxinha",
+                "data": pd.Timestamp("2026-02-10"),
+            },
+            {
+                "_source_file": "ifood_2026_02.csv",
+                "plataforma": "ifood",
+                "codigo_venda": "IFOOD-1001",
+                "identificador_item": "1",
+                "num_venda": "A1001",
+                "produto_key": "coxinha",
+                "data": pd.Timestamp("2026-02-10"),
+            },
+        ])
+
+        deduped, audit = _deduplicate_with_audit(df)
+        assert len(deduped) == 1
+        assert audit["removed"] == 1
+
+    def test_same_order_multiple_items_without_item_id_are_preserved(self):
+        """One order can have multiple product lines; do not dedup by order key alone."""
+        df = pd.DataFrame([
+            {
+                "_source_file": "ifood_2026_02.csv",
+                "plataforma": "ifood",
+                "codigo_venda": "IFOOD-7412",
+                "num_venda": "7412",
+                "produto_key": "esfiha_frango_reque",
+                "valor_total": 18.0,
+                "data": pd.Timestamp("2026-02-10"),
+            },
+            {
+                "_source_file": "ifood_2026_02.csv",
+                "plataforma": "ifood",
+                "codigo_venda": "IFOOD-7412",
+                "num_venda": "7412",
+                "produto_key": "coxinha_frango",
+                "valor_total": 18.0,
+                "data": pd.Timestamp("2026-02-10"),
+            },
+        ])
+
+        deduped, audit = _deduplicate_with_audit(df)
+
+        assert len(deduped) == 2
+        assert audit["removed"] == 0
+        assert audit["transaction_key_dedup"]["applied"] is False
+
+        df = pd.DataFrame([
+            {
+                "_source_file": "sales_2026_02.csv",
+                "num_venda": "X-1",
+                "produto_key": "brigadeiro",
+                "valor_total": 10.0,
+                "data": pd.Timestamp("2026-02-01"),
+            },
+            {
+                "_source_file": "sales_2026_03.csv",
+                "num_venda": "X-1",
+                "produto_key": "brigadeiro",
+                "valor_total": 10.0,
+                "data": pd.Timestamp("2026-03-01"),
+            },
+        ])
+
+        deduped, audit = _deduplicate_with_audit(df)
+
+        assert len(deduped) == 2
+        assert audit["removed"] == 0
+
+    def test_missing_codigo_venda_marks_suspected_without_removal(self):
+        df = pd.DataFrame([
+            {
+                "_source_file": "sales_a.csv",
+                "num_venda": "LEG-200",
+                "produto_key": "risole",
+                "data": pd.Timestamp("2026-02-03"),
+            },
+            {
+                "_source_file": "sales_b.csv",
+                "num_venda": "LEG-200",
+                "produto_key": "risole",
+                "data": pd.Timestamp("2026-02-03"),
+            },
+        ])
+
+        deduped, audit = _deduplicate_with_audit(df)
+
+        assert len(deduped) == 2
+        assert audit["removed"] == 0
+        assert audit["transaction_key_dedup"]["applied"] is False
+        assert audit["suspected_duplicates"]["count"] == 2
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -645,6 +826,20 @@ class TestLocalRawSource:
         assert list(df.columns) == ["col_a", "col_b"]
         assert len(df) == 2
 
+    def test_read_csv_semicolon_with_decimal_comma(self, tmp_path):
+        csv_path = tmp_path / "sales_jan.csv"
+        csv_path.write_text(
+            "Número da venda;Data da venda;Nome do produto/serviço;Quantidade de itens;Valor Total\n"
+            "1001;02/01/2026;Brigadeiro;2;18,00\n",
+            encoding="utf-8",
+        )
+        src = LocalRawSource(raw_dir=tmp_path)
+        meta = {"id": str(csv_path), "name": "sales_jan.csv", "mimeType": "text/csv"}
+        df = src.read_as_dataframe(meta)
+        assert df is not None
+        assert df.shape[1] == 5
+        assert "Valor Total" in df.columns
+
     def test_missing_file_returns_none(self, tmp_path):
         src = LocalRawSource(raw_dir=tmp_path)
         meta = {
@@ -662,11 +857,83 @@ class TestLocalRawSource:
         files = {f["name"]: f["mimeType"] for f in src.list_tabular_files()}
         assert files["a.csv"] == "text/csv"
         assert "spreadsheetml" in files["b.xlsx"]
-
-
 # ─────────────────────────────────────────────────────────────────────────
 # End-to-end: raw → silver → gold (in-memory, no I/O)
 # ─────────────────────────────────────────────────────────────────────────
+class TestMedallionPipelineFacade:
+    def test_run_materializes_silver_and_gold_and_returns_counts(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        silver_dir = tmp_path / "silver"
+        gold_dir = tmp_path / "gold"
+        raw_dir.mkdir()
+
+        (raw_dir / "sales_2026_01.csv").write_text(
+            "Número da venda;Nota Fiscal / RPS;Data da venda;Cliente;Nome do produto/serviço;"
+            "Unidade de medida;Quantidade de itens;Valor unitário;Valor Bruto;Desconto na venda;"
+            "Valor Liquido no Financeiro;Valor Total;Peso Bruto;Peso Total;Cidade do cliente;"
+            "Tipo de item (produto ou serviço);Tipo de Negociação\n"
+            "1001;NF-001;02/01/2026;João;Brigadeiro;UN;2;5,00;10,00;0,00;10,00;10,00;0;0;São Paulo;Produto;IFOOD\n",
+            encoding="utf-8",
+        )
+
+        result = MedallionPipeline(
+            source=LocalRawSource(raw_dir=raw_dir),
+            silver_dir=silver_dir,
+            gold_dir=gold_dir,
+        ).run()
+
+        assert result["bronze_rows"] == 1
+        assert result["silver_rows"] == 1
+        assert result["quarantine_rows"] == 0
+        assert result["gold_rows"] == 1
+        assert (silver_dir / "sales_silver.parquet").exists()
+        assert (gold_dir / "fato_vendas.parquet").exists()
+
+    def test_run_uses_existing_layers_when_raw_is_empty(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        silver_dir = tmp_path / "silver"
+        gold_dir = tmp_path / "gold"
+        raw_dir.mkdir()
+        silver_dir.mkdir()
+        gold_dir.mkdir()
+
+        pd.DataFrame(
+            {
+                "num_venda": [1001],
+                "data": [pd.Timestamp("2026-01-02")],
+                "produto": ["Brigadeiro"],
+                "quantidade": [2.0],
+                "valor_total": [10.0],
+            }
+        ).to_parquet(silver_dir / "sales_silver.parquet", engine="pyarrow")
+
+        pd.DataFrame(
+            {
+                "venda_id": [1],
+                "produto_id": [1],
+                "data_id": [1],
+                "quantidade": [2.0],
+                "faturamento_bruto": [10.0],
+                "faturamento_liquido": [10.0],
+                "custo": [0.0],
+                "lucro_total": [10.0],
+                "margem": [5.0],
+                "margem_percentual": [100.0],
+                "canal": ["IFOOD"],
+            }
+        ).to_parquet(gold_dir / "fato_vendas.parquet", engine="pyarrow")
+
+        result = MedallionPipeline(
+            source=LocalRawSource(raw_dir=raw_dir),
+            silver_dir=silver_dir,
+            gold_dir=gold_dir,
+        ).run()
+
+        assert result["used_existing_layers"] is True
+        assert result["silver_rows"] == 1
+        assert result["gold_rows"] == 1
+
+
 
 class TestEndToEnd:
     def test_full_pipeline_integrity(self, minimal_raw_df):
@@ -677,6 +944,138 @@ class TestEndToEnd:
         fato  = build_fato_vendas(silver, dim_p, dim_t)
         results = validate_star_schema(fato, dim_p, dim_t)
         assert results["all_ok"] is True
+
+    def test_two_monthly_files_all_transactions_are_preserved(self):
+        jan = pd.DataFrame([
+            {
+                "Número da venda": 101,
+                "Nota Fiscal / RPS": "NF-101",
+                "Data da venda": "02/01/2026",
+                "Cliente": "A",
+                "Nome do produto/serviço": "Brigadeiro",
+                "Unidade de medida": "UN",
+                "Quantidade de itens": 1,
+                "Valor unitário": "R$ 10,00",
+                "Valor Bruto": "R$ 10,00",
+                "Desconto na venda": "R$ 0,00",
+                "Valor Liquido no Financeiro": "R$ 10,00",
+                "Valor Total": "R$ 10,00",
+                "Peso Bruto": "0",
+                "Peso Total": "0",
+                "Cidade do cliente": "SP",
+                "Tipo de item (produto ou serviço)": "Produto",
+                "Tipo de Negociação": "Pix",
+                "_source_file": "sales_2026_01.csv",
+            }
+        ])
+        feb = pd.DataFrame([
+            {
+                "Número da venda": 102,
+                "Nota Fiscal / RPS": "NF-102",
+                "Data da venda": "2/21/2026",
+                "Cliente": "B",
+                "Nome do produto/serviço": "Risole",
+                "Unidade de medida": "UN",
+                "Quantidade de itens": 2,
+                "Valor unitário": "R$ 8,00",
+                "Valor Bruto": "R$ 16,00",
+                "Desconto na venda": "R$ 0,00",
+                "Valor Liquido no Financeiro": "R$ 16,00",
+                "Valor Total": "R$ 16,00",
+                "Peso Bruto": "0",
+                "Peso Total": "0",
+                "Cidade do cliente": "SP",
+                "Tipo de item (produto ou serviço)": "Produto",
+                "Tipo de Negociação": "Pix",
+                "_source_file": "sales_2026_02.csv",
+            }
+        ])
+        combined = pd.concat([jan, feb], ignore_index=True)
+
+        silver, audit = transform_to_silver(combined)
+        dim_p = build_dim_produto(silver)
+        dim_t = build_dim_tempo(silver)
+        fato = build_fato_vendas(silver, dim_p, dim_t)
+
+        assert audit["removed"] == 0
+        assert len(silver) == 2
+        assert len(fato) == 2
+        assert set(fato["mes_referencia"].tolist()) == {"2026-01", "2026-02"}
+        parsed_months = set(pd.to_datetime(silver["data"], errors="coerce").dt.to_period("M").astype(str).tolist())
+        assert parsed_months == {"2026-01", "2026-02"}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Data Quality Validation (gold layer)
+# ─────────────────────────────────────────────────────────────────────────
+
+class TestDataQualityValidator:
+    def _build_gold_tables(self, silver_df):
+        dim_p = build_dim_produto(silver_df)
+        dim_t = build_dim_tempo(silver_df)
+        fato = build_fato_vendas(silver_df, dim_p, dim_t)
+        return dim_p, dim_t, fato
+
+    def test_validate_all_passes_for_clean_gold_tables(self, silver_df):
+        dim_p, dim_t, fato = self._build_gold_tables(silver_df)
+        validator = DataQualityValidator(verbose=False)
+        results = validator.validate_all(dim_p, dim_t, fato)
+        assert results == {
+            "dim_produto": True,
+            "dim_tempo": True,
+            "fato_vendas": True,
+        }
+
+    def test_validate_fato_vendas_fails_for_orphan_fk(self, silver_df):
+        dim_p, dim_t, fato = self._build_gold_tables(silver_df)
+        fato_bad = fato.copy()
+        fato_bad.loc[0, "produto_id"] = 999999
+        validator = DataQualityValidator(verbose=False)
+        assert validator.validate_fato_vendas(fato_bad, dim_p, dim_t) is False
+
+    def test_validation_report_contains_overall_status(self):
+        report = DataQualityValidator.get_validation_report({
+            "dim_produto": True,
+            "dim_tempo": True,
+            "fato_vendas": False,
+        })
+        assert "DATA QUALITY VALIDATION REPORT" in report
+        assert "Overall:" in report
+
+
+class TestRunDataQualityValidation:
+    def test_run_data_quality_validation_returns_true(self, silver_df, monkeypatch):
+        dim_p = build_dim_produto(silver_df)
+        dim_t = build_dim_tempo(silver_df)
+        fato = build_fato_vendas(silver_df, dim_p, dim_t)
+
+        class StubAdapter:
+            def load_gold(self, name):
+                if name == "dim_produto":
+                    return dim_p
+                if name == "dim_tempo":
+                    return dim_t
+                return fato
+
+        monkeypatch.setattr("scripts.medallion_pipeline.GoldParquetAdapter", StubAdapter)
+        assert run_data_quality_validation() is True
+
+    def test_run_data_quality_validation_returns_false_on_load_error(self, monkeypatch):
+        class BrokenAdapter:
+            def load_gold(self, _name):
+                raise RuntimeError("boom")
+
+        monkeypatch.setattr("scripts.medallion_pipeline.GoldParquetAdapter", BrokenAdapter)
+        assert run_data_quality_validation() is False
+
+
+class TestCliArgs:
+    def test_parse_args_validate_flag(self, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["medallion_pipeline.py", "--validate"])
+        args = _parse_args()
+        assert args.validate is True
+        assert args.silver is False
+        assert args.gold is False
 
     def test_full_pipeline_row_count_preserved(self, minimal_raw_df):
         """No rows should be lost in raw → gold (input has no cross-file dups)."""
@@ -690,11 +1089,71 @@ class TestEndToEnd:
         """CSV + XLSX combined must produce a clean star schema."""
         combined = pd.concat([minimal_raw_df, minimal_raw_df_xlsx], ignore_index=True)
         silver, audit = transform_to_silver(combined)
-        # Row 0 of CSV and XLSX are both num_venda=1001 + produto="Brigadeiro" → 1 removed
-        assert audit["removed"] >= 1
+        # Without reliable transaction key, potential duplicates are flagged but kept.
+        assert audit["removed"] == 0
+        assert audit["suspected_duplicates"]["count"] >= 1
         dim_p = build_dim_produto(silver)
         dim_t = build_dim_tempo(silver)
         fato  = build_fato_vendas(silver, dim_p, dim_t)
         results = validate_star_schema(fato, dim_p, dim_t)
         assert results["all_ok"] is True
+
+
+class TestGoldAnalyticalAggregates:
+    def test_build_dim_canal_normalizes_and_deduplicates(self, silver_df):
+        dim_canal = build_dim_canal(silver_df)
+        assert "canal_id" in dim_canal.columns
+        assert "canal" in dim_canal.columns
+        assert dim_canal["canal"].nunique() == len(dim_canal)
+
+    def test_build_gold_aggregates_produce_expected_metrics(self, silver_df):
+        dim_p = build_dim_produto(silver_df)
+        dim_t = build_dim_tempo(silver_df)
+        dim_c = build_dim_canal(silver_df)
+        fato = build_fato_vendas(silver_df, dim_p, dim_t, dim_c)
+
+        agg_dia = build_agg_vendas_dia(fato, dim_t)
+        agg_canal = build_agg_vendas_canal(fato, dim_c)
+        agg_produto = build_agg_vendas_produto(fato, dim_p)
+        agg_tempo = build_agg_vendas_tempo(fato, dim_t)
+
+        assert not agg_dia.empty
+        assert not agg_canal.empty
+        assert not agg_produto.empty
+        assert not agg_tempo.empty
+
+        expected_total = float(fato["faturamento_liquido"].sum())
+        assert float(agg_dia["faturamento_liquido"].sum()) == pytest.approx(expected_total)
+        assert float(agg_canal["faturamento_liquido"].sum()) == pytest.approx(expected_total)
+        assert float(agg_produto["faturamento_liquido"].sum()) == pytest.approx(expected_total)
+        assert float(agg_tempo["faturamento_liquido"].sum()) == pytest.approx(expected_total)
+
+        assert "margem_percentual" in agg_dia.columns
+        assert "margem_percentual" in agg_canal.columns
+        assert "margem_percentual" in agg_produto.columns
+        assert "margem_percentual" in agg_tempo.columns
+
+
+class TestMinimumDataQualityChecks:
+    def test_validate_raw_input_quality_reports_empty_input_error(self):
+        report = validate_raw_input_quality(pd.DataFrame())
+        assert report["errors"]
+        assert "empty" in report["errors"][0].lower()
+
+    def test_validate_silver_quality_flags_invalid_dates_and_unknown_channel(self, silver_df):
+        bad = silver_df.copy()
+        bad.loc[0, "data"] = pd.NaT
+        bad.loc[0, "tipo_negociacao"] = "canal_xpto"
+        report = validate_silver_quality(bad)
+        assert report["stats"]["invalid_dates"] >= 1
+        assert report["stats"]["unrecognized_channels"] >= 1
+
+    def test_validate_gold_quality_detects_missing_required_columns(self, silver_df):
+        dim_p = build_dim_produto(silver_df)
+        dim_t = build_dim_tempo(silver_df)
+        dim_c = build_dim_canal(silver_df)
+        fato = build_fato_vendas(silver_df, dim_p, dim_t, dim_c).drop(columns=["faturamento_liquido"])
+        report = validate_gold_quality(dim_p, dim_t, dim_c, fato)
+        assert report["errors"]
+        assert "missing required columns" in report["errors"][0].lower()
 

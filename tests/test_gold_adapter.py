@@ -51,6 +51,14 @@ class TestGoldParquetAdapter:
             })
             fato_vendas.to_parquet(gold_dir / "fato_vendas.parquet", engine="pyarrow")
 
+            agg_vendas_dia = pd.DataFrame({
+                "data_id": [1, 2],
+                "faturamento_liquido": [26.0, 15.0],
+                "custo_total": [0.0, 0.0],
+                "lucro_total": [26.0, 15.0],
+            })
+            agg_vendas_dia.to_parquet(gold_dir / "agg_vendas_dia.parquet", engine="pyarrow")
+
             yield gold_dir
 
     def test_load_gold_dim_produto(self, temp_gold_dir):
@@ -74,6 +82,12 @@ class TestGoldParquetAdapter:
         assert "venda_id" in df.columns
         assert "produto_id" in df.columns
         assert "data_id" in df.columns
+
+    def test_load_gold_agg_vendas_dia(self, temp_gold_dir):
+        adapter = GoldParquetAdapter(temp_gold_dir)
+        df = adapter.load_gold("agg_vendas_dia")
+        assert len(df) == 2
+        assert "faturamento_liquido" in df.columns
 
     def test_load_gold_caching(self, temp_gold_dir):
         adapter = GoldParquetAdapter(temp_gold_dir)

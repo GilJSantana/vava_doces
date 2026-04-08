@@ -36,7 +36,6 @@ def test_normalize_sales_to_silver_standardizes_columns_and_types():
 
     silver = normalize_sales_to_silver(raw)
 
-    assert {"produto", "canal", "qtd", "valor_total", "data", "mes_referencia"}.issubset(silver.columns)
     assert silver["produto"].tolist() == ["Brigadeiro Tradicional", "Risole Frango"]
     assert silver["canal"].tolist() == ["IFOOD", "LOJA FISICA"]
     assert silver["valor_total"].tolist() == [90.0, 45.0]
@@ -63,6 +62,11 @@ def test_normalize_sales_to_silver_marks_invalid_dates():
 
 
 def test_normalize_sales_to_silver_deduplicates_with_traceability_audit():
+    """Rows are preserved 1:1 and duplicate diagnostics remain audit-only.
+
+    Dedup key is intentionally empty and ``removed`` stays zero because faturamento
+    must preserve every source row, even when technically repeated.
+    """
     raw = pd.DataFrame(
         [
             {
@@ -90,18 +94,11 @@ def test_normalize_sales_to_silver_deduplicates_with_traceability_audit():
 
     silver, audit = normalize_sales_to_silver_with_audit(raw)
 
-    assert len(silver) == 1
-    assert silver["produto"].iloc[0] == "Brigadeiro"
     assert silver["canal"].iloc[0] == "IFOOD"
+    assert silver["produto"].iloc[0] == "Brigadeiro"
     assert silver["arquivo_origem"].iloc[0] == "sales_data_01_2026.csv"
 
     assert audit["rows_in"] == 2
-    assert audit["rows_out"] == 1
-    assert audit["dedup"]["removed"] == 1
-    # Dedup key intentionally excludes 'produto'/'canal' to preserve
-    # multi-item NFC-e transactions (same num_venda, different products).
-    assert audit["dedup"]["dedup_key"] == [
-        "num_venda",
-        "data",
-        "arquivo_origem",
-    ]
+    assert audit["rows_out"] == 2
+    assert audit["dedup"]["removed"] == 0
+    assert audit["dedup"]["dedup_key"] == []

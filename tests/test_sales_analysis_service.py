@@ -47,6 +47,9 @@ class TestNormaliseHeader:
     def test_empty_string(self):
         assert _normalise_header("") == ""
 
+    def test_bom_prefix_is_removed(self):
+        assert _normalise_header("\ufeffNúmero da venda") == "numero_da_venda"
+
 
 class TestNormaliseValue:
     def test_strips_accents(self):
@@ -161,6 +164,14 @@ class TestDateFormatChooser:
         s = pd.Series(["01/13/2026", "02/14/2026", "02/01/2026"])
         assert _choose_date_format_for_source(s) == "%m/%d/%Y"
 
+    def test_choose_br_from_january_filename_hint_when_dates_are_ambiguous(self):
+        s = pd.Series(["02/01/2026", "10/01/2026", "11/01/2026"])
+        assert _choose_date_format_for_source(s, "sales_data_01_2026.csv") == "%d/%m/%Y"
+
+    def test_choose_us_from_february_filename_hint_when_dates_are_ambiguous(self):
+        s = pd.Series(["2/1/2026", "2/11/2026", "2/21/2026"])
+        assert _choose_date_format_for_source(s, "sales_data_02_2026.csv") == "%m/%d/%Y"
+
 
 # ---------------------------------------------------------------------------
 # ProductsTransformer tests
@@ -207,23 +218,23 @@ class TestProductsTransformer:
 # ---------------------------------------------------------------------------
 
 class TestDeduplicate:
-    def test_removes_exact_duplicates_across_files(self):
+    def test_preserves_same_transaction_across_distinct_files(self):
         df = pd.DataFrame([
             {"num_venda": "001", "produto_key": "brigadeiro", "_source_file": "jan.csv"},
             {"num_venda": "001", "produto_key": "brigadeiro", "_source_file": "jan_backup.csv"},
             {"num_venda": "002", "produto_key": "risole",     "_source_file": "jan.csv"},
         ])
         result = _deduplicate(df)
-        assert len(result) == 2
+        assert len(result) == 3
 
-    def test_keeps_duplicates_inside_same_file(self):
+    def test_removes_technical_duplicates_inside_same_file(self):
         df = pd.DataFrame([
             {"num_venda": "001", "produto_key": "brigadeiro", "_source_file": "jan.csv"},
             {"num_venda": "001", "produto_key": "brigadeiro", "_source_file": "jan.csv"},
             {"num_venda": "002", "produto_key": "risole", "_source_file": "jan.csv"},
         ])
         result = _deduplicate(df)
-        assert len(result) == 3
+        assert len(result) == 2
 
     def test_no_duplicates_unchanged(self):
         df = pd.DataFrame([
@@ -245,7 +256,7 @@ class TestDeduplicate:
                 "num_venda": "001",
                 "produto_key": "brigadeiro",
                 "data": pd.Timestamp("2026-01-10"),
-                "_source_file": "jan_backup.csv",
+                "_source_file": "jan.csv",
             },
             {
                 "num_venda": "002",
@@ -259,7 +270,7 @@ class TestDeduplicate:
         assert audit["before"] == 3
         assert audit["after"] == 2
         assert audit["removed"] == 1
-        assert audit["dedup_scope"] == "cross_file_only"
+        assert audit["dedup_scope"] == "same_file_only"
         assert sum(audit["removed_by_source_file"].values()) == 1
 
 

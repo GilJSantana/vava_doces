@@ -61,3 +61,38 @@ def test_apply_filters_supports_cliente_multiselect():
 
     assert len(filtered) == 1
     assert filtered["cliente"].iloc[0] == "IFOOD"
+
+
+def test_apply_filters_supports_mes_referencia_selection():
+    source = pd.DataFrame(
+        [
+            {"data": pd.Timestamp("2026-01-10"), "cliente": "IFOOD", "produto": "A", "mes_referencia": "2026-01"},
+            {"data": pd.Timestamp("2026-02-10"), "cliente": "IFOOD", "produto": "B", "mes_referencia": "2026-02"},
+        ]
+    )
+
+    filtered = _apply_filters(
+        source,
+        date(2026, 1, 1),
+        date(2026, 2, 28),
+        [],
+        ["2026-02"],
+    )
+
+    assert len(filtered) == 1
+    assert filtered["mes_referencia"].iloc[0] == "2026-02"
+
+
+def test_normalize_data_marks_invalid_date_and_uses_sem_mes():
+    source = pd.DataFrame(
+        [
+            {"data": "data_invalida", "cliente": "ifood", "produto": "A"},
+        ]
+    )
+
+    normalized = _normalize_data(source)
+
+    assert bool(normalized["_invalid_date"].iloc[0]) is True
+    assert normalized["mes_referencia"].iloc[0] == "sem_mes"
+
+
