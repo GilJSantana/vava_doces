@@ -212,3 +212,10 @@ __marimo__/
 *.ps
 /os
 /pd
+
+# Data directory (keep local, do not version)
+/data/
+*.csv
+*.xlsx
+!data/README.md
+
