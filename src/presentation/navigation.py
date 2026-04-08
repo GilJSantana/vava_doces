@@ -20,7 +20,25 @@ PAGE_OPTIONS = [
 ]
 
 
-def render_sidebar(get_adapter_fn: Callable[[], object | None]) -> tuple[object | None, str]:
+def _format_medallion_info(medallion_state: dict[str, object] | None) -> str:
+    if not medallion_state:
+        return "Medallion: sem métricas disponíveis"
+
+    bronze_rows = int(medallion_state.get("bronze_rows", 0) or 0)
+    silver_rows = int(medallion_state.get("silver_rows", 0) or 0)
+    quarantine_rows = int(medallion_state.get("quarantine_rows", 0) or 0)
+    return (
+        "Medallion Pipeline\n"
+        f"Bronze (Total): {bronze_rows:,}\n"
+        f"Silver (Deduped): {silver_rows:,}\n"
+        f"Quarantine (NaT): {quarantine_rows:,}"
+    )
+
+
+def render_sidebar(
+    get_adapter_fn: Callable[[], object | None],
+    medallion_state: dict[str, object] | None = None,
+) -> tuple[object | None, str]:
     """Renderiza sidebar, inicializa conexão e retorna adaptador e página selecionada."""
     with st.sidebar:
         st.markdown(
@@ -29,8 +47,12 @@ def render_sidebar(get_adapter_fn: Callable[[], object | None]) -> tuple[object 
         )
 
         if st.button("🔄 Atualizar dados", width="stretch"):
+            # Clear both resource and data caches so updated parquet/raw data is visible.
+            st.cache_data.clear()
             st.cache_resource.clear()
             st.rerun()
+
+        st.info(_format_medallion_info(medallion_state))
 
         adapter = get_adapter_fn()
         if adapter:

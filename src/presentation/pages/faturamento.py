@@ -6,6 +6,7 @@ Sem diagnóstico de parsing - apenas carregamento, filtro e exibição.
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import date
 
@@ -14,16 +15,23 @@ import streamlit as st
 
 from src.presentation.pages.sales_shared import (
     format_brl,
+    log_df_shape,
     load_sales_data_cached,
     to_excel_bytes,
 )
+
+logger = logging.getLogger(__name__)
 
 # --- CONFIGURAÇÃO ---
 ITENS_POR_PAGINA_OPCOES = [10, 20, 50, 100]
 
 
 def _apply_filters(
-    df: pd.DataFrame, data_inicio: date, data_fim: date, clientes: list[str]
+    df: pd.DataFrame,
+    data_inicio: date,
+    data_fim: date,
+    clientes: list[str],
+    meses_referencia: list[str] | None = None,
 ) -> pd.DataFrame:
     """Aplica filtros de data e cliente.
     
@@ -37,19 +45,55 @@ def _apply_filters(
         DataFrame filtrado
     """
     df_filtered = df.copy()
+    log_df_shape("faturamento:filters:start", df_filtered, ["num_venda", "data", "mes_referencia"])
+    nat_before = int(pd.to_datetime(df_filtered.get("data", pd.Series(dtype="object")), errors="coerce").isna().sum())
+    logger.info("[diag] faturamento:filters:start_nat_data=%d", nat_before)
 
     # Filtro de Data
     if data_inicio:
+        before = len(df_filtered)
         df_filtered = df_filtered[df_filtered["data"].dt.date >= data_inicio]
+        logger.info("[diag] faturamento:filter:data_inicio before=%d after=%d", before, len(df_filtered))
 
     if data_fim:
+        before = len(df_filtered)
         df_filtered = df_filtered[df_filtered["data"].dt.date <= data_fim]
+        logger.info("[diag] faturamento:filter:data_fim before=%d after=%d", before, len(df_filtered))
 
     # Filtro de Cliente
     if clientes:
+        before = len(df_filtered)
         df_filtered = df_filtered[df_filtered["cliente"].isin(clientes)]
+        logger.info("[diag] faturamento:filter:clientes before=%d after=%d", before, len(df_filtered))
 
+    # Filtro de mês de referência (YYYY-MM)
+    if meses_referencia:
+        before = len(df_filtered)
+        df_filtered = df_filtered[df_filtered["mes_referencia"].isin(meses_referencia)]
+        logger.info("[diag] faturamento:filter:mes_referencia before=%d after=%d", before, len(df_filtered))
+
+    log_df_shape("faturamento:filters:end", df_filtered, ["num_venda", "data", "mes_referencia"])
     return df_filtered
+
+
+def _normalize_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize loaded sales data for stable filtering and display."""
+    out = df.copy()
+    out["data"] = pd.to_datetime(out.get("data", pd.Series(dtype=object)), errors="coerce")
+    if "cliente" not in out.columns:
+        out["cliente"] = "N/A"
+    out["cliente"] = out["cliente"].fillna("N/A").astype(str).str.strip().str.upper()
+
+    if "mes_referencia" not in out.columns:
+        out["mes_referencia"] = out["data"].dt.to_period("M").astype(str)
+    out["mes_referencia"] = (
+        out["mes_referencia"]
+        .fillna("sem_mes")
+        .astype(str)
+        .replace({"NaT": "sem_mes", "nat": "sem_mes", "": "sem_mes"})
+    )
+    out["_invalid_date"] = out["data"].isna()
+    return out
 
 
 def _paginate_dataframe(df: pd.DataFrame, page: int, page_size: int) -> pd.DataFrame:
@@ -71,15 +115,12 @@ def show_faturamento() -> None:
         return
 
     # Preparar base para filtro
-    df_base = sales_df.copy()
-    
-    # Garantir coluna data em datetime
-    if "data" in df_base.columns:
-        df_base["data"] = pd.to_datetime(df_base["data"], errors="coerce")
-    
-    # Garantir coluna cliente
-    if "cliente" not in df_base.columns:
-        df_base["cliente"] = "N/A"
+    df_base = _normalize_data(sales_df)
+    invalid_date_rows = int(df_base.get("_invalid_date", pd.Series(dtype=bool)).sum())
+    if invalid_date_rows:
+        st.warning(
+            f"{invalid_date_rows} registro(s) com data inválida. Revise parsing/arquivo para evitar perdas em filtros por data."
+        )
 
     # === FILTROS ===
     with st.container():
@@ -117,19 +158,35 @@ def show_faturamento() -> None:
                 "Clientes", options=lista_clientes, placeholder="Todos os clientes"
             )
 
+        meses_disponiveis = sorted(
+            [m for m in df_base["mes_referencia"].dropna().astype(str).unique().tolist() if m and m != "sem_mes"]
+        )
+        meses_selecionados = st.multiselect(
+            "Mês de Referência",
+            options=meses_disponiveis,
+            default=meses_disponiveis,
+            placeholder="Todos os meses",
+        )
+
     # Aplicar filtros
     df_filtered = _apply_filters(
-        df_base, data_inicio, data_fim, clientes_selecionados
+        df_base, data_inicio, data_fim, clientes_selecionados, meses_selecionados
     )
+    if df_filtered.empty and invalid_date_rows:
+        st.info("Filtro retornou vazio e há datas inválidas na base carregada.")
 
     # Métricas agregadas
-    faturamento_total = df_filtered.get("valor_total", pd.Series(dtype=float)).sum()
+    # Prefer faturamento bruto (matches CSV 'Valor Bruto'); fallback keeps compatibility.
+    valor_base = "valor_bruto" if "valor_bruto" in df_filtered.columns else "valor_total"
+    faturamento_total = df_filtered.get(valor_base, pd.Series(dtype=float)).sum()
     total_registros = len(df_filtered)
 
     st.markdown("---")
     st.markdown(
         f"### Total Filtrado: **{format_brl(faturamento_total)}** ({total_registros} registros)"
     )
+    base_label = "Valor Bruto" if valor_base == "valor_bruto" else "Valor Total"
+    st.caption(f"Base do cálculo do total: {base_label}")
 
     # === PAGINAÇÃO ===
     c_page, c_size = st.columns([2, 5])
@@ -155,10 +212,12 @@ def show_faturamento() -> None:
             df_display["Data"] = df_display["data"].dt.strftime("%d/%m/%Y")
         if "valor_total" in df_display.columns:
             df_display["Valor Total"] = df_display["valor_total"].apply(format_brl)
-        if "valor_unitario" in df_display.columns:
-            df_display["Valor Unit"] = df_display["valor_unitario"].apply(format_brl)
-        if "quantidade" in df_display.columns:
-            df_display["Qtd"] = df_display["quantidade"].apply(
+        valor_unit_col = "valor_unit" if "valor_unit" in df_display.columns else "valor_unitario"
+        if valor_unit_col in df_display.columns:
+            df_display["Valor Unit"] = df_display[valor_unit_col].apply(format_brl)
+        qtd_col = "qtd" if "qtd" in df_display.columns else "quantidade"
+        if qtd_col in df_display.columns:
+            df_display["Qtd"] = df_display[qtd_col].apply(
                 lambda x: f"{int(x)}" if float(x) == int(x) else f"{x:.2f}"
             )
     else:

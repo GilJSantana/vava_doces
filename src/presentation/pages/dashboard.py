@@ -75,14 +75,32 @@ def _build_cost_production_figure(dim_produto: pd.DataFrame, fato_vendas: pd.Dat
 
 
 @st.cache_data
-def _prepare_costs_dataframe(fato_vendas: pd.DataFrame, dim_produto: pd.DataFrame) -> pd.DataFrame:
+def _prepare_costs_dataframe(
+    fato_vendas: pd.DataFrame,
+    dim_produto: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Prepare cost summary from gold layer fato_vendas."""
     if fato_vendas is None or fato_vendas.empty:
         return pd.DataFrame(columns=["id", "custo_total"])
 
+    required_cols = {"produto_id", "custo"}
+    if not required_cols.issubset(fato_vendas.columns):
+        return pd.DataFrame(columns=["id", "custo_total"])
+
     # Group by produto_id and sum custo
     cost_by_produto = fato_vendas.groupby("produto_id").agg({"custo": "sum"}).reset_index()
-    cost_by_produto = cost_by_produto.merge(dim_produto[["produto_id"]], on="produto_id", how="inner")
+
+    # Optional guard rail: if a valid dim_produto is provided, keep only known IDs.
+    if (
+        dim_produto is not None
+        and not dim_produto.empty
+        and "produto_id" in dim_produto.columns
+    ):
+        cost_by_produto = cost_by_produto.merge(
+            dim_produto[["produto_id"]].drop_duplicates(),
+            on="produto_id",
+            how="inner",
+        )
     
     df_costs = pd.DataFrame(
         {
@@ -176,7 +194,7 @@ def _render_cost_kpi_grid(fato_vendas: pd.DataFrame) -> None:
         st.warning("⚠️ Não há dados de custo disponíveis.")
         return
 
-    df_custos = _prepare_costs_dataframe(fato_vendas, pd.DataFrame())
+    df_custos = _prepare_costs_dataframe(fato_vendas)
     kpis = _compute_cost_kpis(df_custos)
 
     _inject_cost_kpi_card_styles()
@@ -255,7 +273,7 @@ def _render_visual_section(df: pd.DataFrame, dim_produto: pd.DataFrame, fato_ven
             st.plotly_chart(fig_cost, width="stretch")
 
 
-def show_dashboard(service, product_service):
+def show_dashboard(service, product_service) -> None:
     """Renderiza página inicial de insights com dados do gold layer."""
     del service, product_service  # Dashboard usa gold layer
 
@@ -263,6 +281,10 @@ def show_dashboard(service, product_service):
     st.header("📊 Dashboard")
     st.caption("Página inicial de insights: faturamento, custos e lucratividade.")
     render_separator()
+
+    # ── Add diagnostic controls in sidebar ──
+    from src.presentation.pages.sales_shared import render_cache_control_sidebar
+    render_cache_control_sidebar()
 
     sales_df = load_sales_data_cached()
     if sales_df is None or sales_df.empty:
