@@ -51,6 +51,32 @@ python scripts/convert_to_sheets.py
 
 ---
 
+### 🔎 `bronze_ingestion_diagnostic.py`
+**Descrição:** Diagnóstico da ingestão Bronze para CSVs de faturamento (local/Google Drive)
+
+**Uso (local):**
+```bash
+python scripts/bronze_ingestion_diagnostic.py \
+  --csv-dir data/raw \
+  --bronze-path data/processed/silver/sales_silver.parquet
+```
+
+**Uso (Google Drive):**
+```bash
+python scripts/bronze_ingestion_diagnostic.py \
+  --drive-folder-id "$DRIVE_FOLDER_ID" \
+  --credential-file "$GOOGLE_APPLICATION_CREDENTIALS" \
+  --bronze-path data/processed/silver/sales_silver.parquet
+```
+
+**O que verifica:**
+- Lista CSVs de faturamento
+- Compara linhas físicas x parseadas x linhas na Bronze
+- Detecta suspeitas de encoding/delimitador
+- Compara parsing de datas `DD/MM/YYYY` vs `MM/DD/YYYY`
+
+---
+
 ## ⚙️ Configuração
 
 Certifique-se de que:
@@ -69,4 +95,3 @@ Certifique-se de que:
 ---
 
 _Scripts Utilitários - Vava Doces_
-

@@ -23,11 +23,17 @@ from __future__ import annotations
 import argparse
 import io
 import logging
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
 
 import pandas as pd
+
+# Ensure ``src.*`` imports resolve when running as ``python scripts/...``.
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from src.domain.sales_analysis_service import _choose_date_format_for_source
 from src.infrastructure.google_drive_adapter import GoogleDriveAdapter
