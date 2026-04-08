@@ -28,17 +28,34 @@ class GoldDataSource(ABC):
     """Port for Gold layer (star schema) adapters — reads Parquet dimension/fact tables.
 
     The gold layer is organized as:
-      - dim_produto.parquet  (product dimension)
-      - dim_tempo.parquet    (temporal dimension)
-      - fato_vendas.parquet  (sales fact table)
+      - dim_produto.parquet      (product dimension)
+      - dim_tempo.parquet        (temporal dimension)
+      - dim_canal.parquet        (sales channel dimension)
+      - fato_vendas.parquet      (sales fact table)
+      - agg_vendas_dia.parquet   (daily aggregate)
+      - agg_vendas_canal.parquet (channel aggregate)
+      - agg_vendas_produto.parquet (product aggregate)
+      - agg_vendas_tempo.parquet (monthly aggregate)
     """
 
     @abstractmethod
-    def load_gold(self, layer: Literal["dim_produto", "dim_tempo", "fato_vendas"]) -> pd.DataFrame:
+    def load_gold(
+        self,
+        layer: Literal[
+            "dim_produto",
+            "dim_tempo",
+            "dim_canal",
+            "fato_vendas",
+            "agg_vendas_dia",
+            "agg_vendas_canal",
+            "agg_vendas_produto",
+            "agg_vendas_tempo",
+        ],
+    ) -> pd.DataFrame:
         """Load a gold layer Parquet table by name.
 
         Args:
-            layer: Name of the gold layer to load ('dim_produto', 'dim_tempo', or 'fato_vendas').
+            layer: Name of the gold layer to load.
 
         Returns:
             DataFrame containing the requested gold layer.

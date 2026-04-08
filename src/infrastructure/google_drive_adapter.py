@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import io
 import logging
+import re
+import unicodedata
 from typing import Optional
 
 import pandas as pd
@@ -17,6 +19,16 @@ from google.oauth2 import service_account
 from src.ports.data_source import DriveDataSource
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_header_token(value: object) -> str:
+    """Normalize header token for lightweight CSV-structure scoring."""
+    text = str(value or "").replace("\ufeff", "").strip()
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    return text.strip("_")
 
 # MIME types we know how to read as tabular data
 _TABULAR_MIMES: set[str] = {
@@ -71,8 +83,9 @@ class GoogleDriveAdapter(DriveDataSource):
             f for f in results.get("files", [])
             if f.get("mimeType") in _TABULAR_MIMES
         ]
-        logger.info("GoogleDriveAdapter: found %d tabular file(s) in folder %s",
-                    len(files), self._folder_id)
+        for file in files:
+            logger.info("Arquivo %s localizado no Drive.", file["name"])
+        logger.info("list_tabular_files: found %d file(s) in folder %s", len(files), self._folder_id)
         return files
 
     def download_bytes(self, file_id: str) -> bytes:
@@ -89,13 +102,43 @@ class GoogleDriveAdapter(DriveDataSource):
         try:
             raw = self.download_bytes(file_meta["id"])
             if mime == "text/csv":
-                df = pd.read_csv(io.BytesIO(raw), sep=None, engine="python")
+                expected_cols = {
+                    "numero_da_venda",
+                    "data_da_venda",
+                    "nome_do_produto_servico",
+                    "quantidade_de_itens",
+                    "valor_total",
+                }
+                best_df: Optional[pd.DataFrame] = None
+                best_sep = None
+                best_score = -1
+                last_exc: Optional[Exception] = None
+                for sep in (";", ",", "\t", "|"):
+                    try:
+                        candidate = pd.read_csv(io.BytesIO(raw), sep=sep, engine="python")
+                        norm_cols = {
+                            _normalize_header_token(c)
+                            for c in candidate.columns
+                        }
+                        score = int(candidate.shape[1]) + 5 * len(norm_cols & expected_cols)
+                        if score > best_score:
+                            best_df = candidate
+                            best_sep = sep
+                            best_score = score
+                    except Exception as exc:  # noqa: BLE001
+                        last_exc = exc
+                if best_df is None:
+                    raise last_exc if last_exc is not None else ValueError("Unable to parse CSV")
+                df = best_df
+                logger.info("GoogleDriveAdapter: parsed %s using sep=%r (%d cols)", name, best_sep, df.shape[1])
+                logger.info("Arquivo %s carregado com sucesso.", name)
             else:
                 df = pd.read_excel(io.BytesIO(raw), engine="openpyxl")
             logger.info("GoogleDriveAdapter: loaded %s  →  %d rows", name, len(df))
             return df
         except Exception as exc:  # noqa: BLE001
             logger.warning("GoogleDriveAdapter: skipping %s — %s", name, exc)
+            logger.error("ERRO: Falha ao carregar %s.", name)
             return None
 
 
