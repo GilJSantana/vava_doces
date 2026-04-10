@@ -1,329 +1,452 @@
-"""Página de custos de produção."""
+"""Página de custos de produção — foco em tabelas de auditoria."""
+
+# IDs and names are intentionally separated in UI tables to prevent duplicated/misaligned columns.
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from src.presentation.components import build_product_labels, render_separator, render_wrapped_dataframe
-from src.presentation.formatters import format_currency
+from src.presentation.components import render_separator
+
+logger = logging.getLogger(__name__)
+
+# ── Gold layer paths ──────────────────────────────────────────────────────────
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_GOLD_PRIMARY = _PROJECT_ROOT / "data" / "gold" / "custos_producao_agregado.parquet"
+_GOLD_FALLBACK = _PROJECT_ROOT / "data" / "processed" / "gold" / "custos_producao_agregado.parquet"
+_DETAIL_PRIMARY = _PROJECT_ROOT / "data" / "gold" / "receitas_detalhadas.parquet"
+_DETAIL_FALLBACK = _PROJECT_ROOT / "data" / "processed" / "gold" / "receitas_detalhadas.parquet"
+
+_CUSTOS_COLUMNS = [
+    "nome_produto",
+    "qtd_ingredientes",
+    "custo_producao",
+]
 
 
-def build_no_cost_products_table(custo_resumo: pd.DataFrame) -> pd.DataFrame:
-    """Prepara tabela de produtos com quantidade de ingredientes e custo de produção."""
-    display_sem_custo = custo_resumo[
-        ["ID do Produto", "Produto", "Qtd Ingredientes", "Custo Total (R$)"]
-    ].copy()
-    display_sem_custo = display_sem_custo.rename(
-        columns={"Custo Total (R$)": "Custo de Produção"}
+# ── Data loading ──────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=1800)
+def load_custos_producao_cached() -> pd.DataFrame:
+    """Carrega custos_producao_agregado.parquet da camada Gold (TTL 30 min).
+
+    Tenta o caminho rápido ``data/gold/`` primeiro; recorre a
+    ``data/processed/gold/`` como fallback.
+    """
+    for path in (_GOLD_PRIMARY, _GOLD_FALLBACK):
+        if path.exists():
+            try:
+                df = pd.read_parquet(path)
+                logger.info(
+                    "load_custos_producao_cached: carregado de '%s' (%d linhas)", path, len(df)
+                )
+                if "nome_produto" in df.columns:
+                    df["nome_produto"] = df["nome_produto"].astype(str).str.title()
+                # Ensure numeric types for column_config NumberColumn
+                for col in ("qtd_ingredientes", "custo_producao"):
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
+                return df
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "load_custos_producao_cached: falha ao ler '%s' — %s", path, exc
+                )
+
+    logger.warning(
+        "load_custos_producao_cached: nenhum parquet encontrado em '%s' nem '%s'",
+        _GOLD_PRIMARY,
+        _GOLD_FALLBACK,
     )
-    display_sem_custo["Custo de Produção"] = display_sem_custo["Custo de Produção"].apply(
-        lambda x: format_currency(x) if pd.notna(x) else "⚠️ sem custo"
+    return pd.DataFrame(columns=_CUSTOS_COLUMNS)
+
+
+@st.cache_data(ttl=1800)
+def load_receitas_detalhadas_cached() -> pd.DataFrame:
+    """Carrega receitas_detalhadas.parquet (Gold detalhado) com fallback."""
+    for path in (_DETAIL_PRIMARY, _DETAIL_FALLBACK):
+        if path.exists():
+            try:
+                df = pd.read_parquet(path)
+                if "nome_produto" in df.columns:
+                    df["nome_produto"] = df["nome_produto"].astype(str).str.title()
+                if "custo_unitario_final" in df.columns:
+                    df["custo_unitario_final"] = pd.to_numeric(df["custo_unitario_final"], errors="coerce")
+                return df
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("load_receitas_detalhadas_cached: falha ao ler '%s' — %s", path, exc)
+    return pd.DataFrame(
+        columns=[
+            "id_produto",
+            "nome_produto",
+            "id_ingrediente",
+            "nome_ingrediente",
+            "quantidade_formatada",
+            "custo_unitario_final",
+        ]
     )
-    return display_sem_custo
 
 
-def build_cost_summary_table(custo_resumo: pd.DataFrame) -> pd.DataFrame:
-    """Prepara tabela-resumo com custo de produção por produto."""
-    display_df = custo_resumo.copy()
-    display_df["Produto"] = build_product_labels(display_df, "ID do Produto", "Produto")
-    display_df = display_df.drop(columns=["ID do Produto"])
-    display_df["Custo Total (R$)"] = display_df["Custo Total (R$)"].apply(
-        lambda x: format_currency(x) if pd.notna(x) else "⚠️ sem custo"
-    )
-    return display_df
+# ── Column configs ────────────────────────────────────────────────────────────
 
+def _custos_column_config() -> dict:
+    """Column config da tabela agregada.
 
-def build_cost_summary_column_config() -> dict:
-    """Configura colunas da tabela de custo para melhor legibilidade."""
+    ``NumberColumn`` preserva renderização nativa de moeda e alinhamento à direita.
+    """
     return {
-        "Produto": st.column_config.TextColumn("Produto"),
-        "Qtd Ingredientes": st.column_config.TextColumn("Qtd Ingredientes"),
-        "Custo Total (R$)": st.column_config.TextColumn("Custo Total (R$)"),
+        "nome_produto": st.column_config.TextColumn("Produto"),
+        "qtd_ingredientes": st.column_config.NumberColumn("Quantidade de Ingredientes", format="%d"),
+        "custo_producao": st.column_config.NumberColumn(
+            "Custo de Produção",
+            format="R$ %.2f",
+            help="Soma dos custos de ingredientes por produto (ignora nulos)",
+            width="medium",
+        ),
     }
 
 
-def build_cost_summary_styler(cost_summary_df: pd.DataFrame):
-    """Centraliza colunas numéricas e mantém texto à esquerda na tabela de custos."""
-    styled_df = cost_summary_df.style
+def _recipe_column_config() -> dict:
+    """st.column_config para a tabela de receitas detalhadas."""
+    return {
+        "id_produto": st.column_config.TextColumn("ID Produto", width="small"),
+        "nome_produto": st.column_config.TextColumn("Produto"),
+        "id_ingrediente": st.column_config.TextColumn("ID Ingred.", width="small"),
+        "nome_ingrediente": st.column_config.TextColumn("Ingrediente"),
+        "quantidade_formatada": st.column_config.TextColumn("Quantidade", width="small"),
+        "custo_unitario_final": st.column_config.NumberColumn(
+            "Custo Ingred. (R$)",
+            format="R$ %.2f",
+            help="⚠️ sem custo se 0",
+        ),
+    }
 
-    if "Produto" in cost_summary_df.columns:
-        styled_df = styled_df.set_properties(subset=["Produto"], **{"text-align": "left"})
-    if "Qtd Ingredientes" in cost_summary_df.columns:
-        styled_df = styled_df.set_properties(subset=["Qtd Ingredientes"], **{"text-align": "center"})
-    if "Custo Total (R$)" in cost_summary_df.columns:
-        styled_df = styled_df.set_properties(subset=["Custo Total (R$)"], **{"text-align": "center"})
 
-    return styled_df
+# ── Data preparation helpers ──────────────────────────────────────────────────
+
+def _filter_by_name(df: pd.DataFrame, col: str, term: str) -> pd.DataFrame:
+    """Filtro parcial case-insensitive numa coluna de texto."""
+    term = term.strip().lower()
+    if not term or col not in df.columns:
+        return df
+    return df[df[col].astype(str).str.lower().str.contains(term, na=False)].copy()
 
 
-def build_recipe_detail_table(recipe_df: pd.DataFrame) -> pd.DataFrame:
-    """Padroniza colunas da tabela de componentes da receita, removendo colunas desnecessárias."""
-    detail_df = recipe_df.copy()
+def _format_brl_ptbr(value: float | int | None) -> str:
+    """Format number as Brazilian currency string."""
+    if value is None or pd.isna(value):
+        return "⚠️ sem custo"
+    text = f"R$ {float(value):,.2f}"
+    return text.replace(",", "X").replace(".", ",").replace("X", ".")
 
-    # Remover colunas desnecessárias para o usuário
-    cols_to_drop = ["Custo Unitário MP (R$)", "Custo da Receita (R$)", "Origem do Custo"]
-    for col in cols_to_drop:
-        if col in detail_df.columns:
-            detail_df = detail_df.drop(columns=[col])
 
-    # Concatenar Quantidade Receita com Unidade de Medida
-    if "Quantidade Receita" in detail_df.columns and "Unidade de Medida" in detail_df.columns:
-        # Limpar valores vazios e NA da coluna Unidade de Medida
-        detail_df["Unidade de Medida"] = detail_df["Unidade de Medida"].astype(str).str.strip()
-        detail_df["Unidade de Medida"] = detail_df["Unidade de Medida"].replace(["", "nan", "None"], pd.NA)
-        
-        # Concatenar apenas quando houver unidade válida
-        def concat_qty_unit(row):
-            qty = str(row["Quantidade Receita"]).replace(".0", "") if pd.notna(row["Quantidade Receita"]) else ""
-            unit = str(row["Unidade de Medida"]).strip() if pd.notna(row["Unidade de Medida"]) else ""
-            
-            if qty and unit:
-                return f"{qty} {unit}"
-            elif qty:
-                return qty
-            return ""
-        
-        detail_df["Quantidade"] = detail_df.apply(concat_qty_unit, axis=1)
-        detail_df = detail_df.drop(columns=["Quantidade Receita", "Unidade de Medida"])
-    elif "Quantidade Receita" in detail_df.columns:
-        detail_df = detail_df.rename(columns={"Quantidade Receita": "Quantidade"})
+def _prepare_recipe_df(raw: pd.DataFrame) -> pd.DataFrame:
+    """Padroniza receita detalhada para exibição e auditoria visual."""
+    detail = raw.copy()
 
-    # Formatar custo do ingrediente
-    if "Custo do Ingrediente (R$)" in detail_df.columns:
-        detail_df["Custo do Ingrediente (R$)"] = detail_df["Custo do Ingrediente (R$)"].apply(
-            lambda x: format_currency(x) if pd.notna(x) else "⚠️ sem custo"
+    rename_map = {
+        "ID do Produto": "id_produto",
+        "produto_id": "id_produto",
+        "Produto": "nome_produto",
+        "nome_produto": "nome_produto",
+        "ID do Ingrediente": "id_ingrediente",
+        "ingrediente_id": "id_ingrediente",
+        "Ingrediente": "nome_ingrediente",
+        "nome_ingrediente": "nome_ingrediente",
+        "Quantidade Receita": "qtd",
+        "qtd": "qtd",
+        "Unidade de Medida": "unidade",
+        "unidade": "unidade",
+        "quantidade_formatada": "quantidade_formatada",
+        "Custo do Ingrediente (R$)": "custo_unitario_final",
+        "custo_unitario": "custo_unitario_final",
+        "custo_unitario_final": "custo_unitario_final",
+    }
+    detail = detail.rename(columns={k: v for k, v in rename_map.items() if k in detail.columns})
+
+    for col in ("id_produto", "nome_produto", "id_ingrediente", "nome_ingrediente", "unidade"):
+        if col not in detail.columns:
+            detail[col] = ""
+        detail[col] = detail[col].fillna("").astype(str).str.strip()
+
+    if "qtd" not in detail.columns:
+        detail["qtd"] = 0.0
+    detail["qtd"] = pd.Series(pd.to_numeric(detail["qtd"], errors="coerce"), index=detail.index).fillna(0.0)
+
+    if "quantidade_formatada" not in detail.columns:
+        qty_txt = detail["qtd"].map(lambda x: f"{x:g}" if pd.notna(x) else "")
+        unit_txt = detail["unidade"].fillna("").astype(str).str.strip()
+        detail["quantidade_formatada"] = (qty_txt + " " + unit_txt).str.strip()
+    detail["quantidade_formatada"] = detail["quantidade_formatada"].fillna("").astype(str).str.strip()
+
+    if "custo_unitario_final" not in detail.columns:
+        detail["custo_unitario_final"] = pd.NA
+    detail["custo_unitario_final"] = pd.to_numeric(detail["custo_unitario_final"], errors="coerce")
+
+    sem_custo_mask = detail["custo_unitario_final"].isna() | detail["custo_unitario_final"].eq(0.0)
+    detail["estado_custo"] = sem_custo_mask.map(lambda m: "⚠️ sem custo" if m else "")
+
+    ordered = [
+        "id_produto",
+        "nome_produto",
+        "id_ingrediente",
+        "nome_ingrediente",
+        "quantidade_formatada",
+        "custo_unitario_final",
+        "estado_custo",
+    ]
+    return detail[ordered].reset_index(drop=True)
+
+
+# ── Section renderers ─────────────────────────────────────────────────────────
+
+def _render_custos_table(search_term: str) -> None:
+    """Renderiza tabela agregada de custos Gold filtrada apenas pela busca do cockpit."""
+    with st.container(border=True):
+        st.subheader("💸 Tabela de Custos de Produção")
+        st.caption("Dashboard consolidado da camada Gold por produto.")
+
+        custos_df = load_custos_producao_cached()
+
+        if custos_df.empty:
+            st.warning(
+                "⚠️ Arquivo `custos_producao.parquet` não encontrado. "
+                f"Caminhos verificados:  \n"
+                f"• `{_GOLD_PRIMARY.relative_to(_PROJECT_ROOT)}`  \n"
+                f"• `{_GOLD_FALLBACK.relative_to(_PROJECT_ROOT)}`"
+            )
+            return
+
+        filtered_df = _filter_by_name(custos_df, "nome_produto", search_term)
+        display_cols = [c for c in _CUSTOS_COLUMNS if c in filtered_df.columns]
+
+        st.caption(
+            f"Exibindo **{len(filtered_df)}** de **{len(custos_df)}** produto(s)"
+            + (f" — busca: `{search_term}`" if search_term else "")
         )
 
-    ordered_columns = [
-        "ID do Produto",
-        "Produto",
-        "ID do Ingrediente",
-        "Ingrediente",
-        "Quantidade",
-        "Custo do Ingrediente (R$)",
-    ]
-    existing_ordered_columns = [col for col in ordered_columns if col in detail_df.columns]
-    remaining_columns = [col for col in detail_df.columns if col not in existing_ordered_columns]
-    detail_df = detail_df[existing_ordered_columns + remaining_columns]
+        if filtered_df.empty:
+            st.warning("Nenhum produto encontrado no cockpit de custos com o filtro informado.")
+            return
 
-    return detail_df
+        if len(filtered_df) > 1000:
+            st.warning("Exibindo apenas os primeiros 1000 itens para performance.")
+        preview_df = filtered_df.head(1000).copy()
+        if "custo_producao" in preview_df.columns:
+            preview_df["custo_producao"] = pd.to_numeric(preview_df["custo_producao"], errors="coerce").round(2)
 
-
-def build_recipe_selector_options(products_df: pd.DataFrame) -> list[str]:
-    """Monta opções únicas do seletor de produtos da seção de receita."""
-    if products_df is None or products_df.empty:
-        return []
-
-    selector_df = (
-        products_df[["ID do Produto", "Produto"]]
-        .dropna(subset=["ID do Produto", "Produto"])
-        .drop_duplicates()
-        .sort_values(["Produto", "ID do Produto"])
-    )
-    return build_product_labels(selector_df, "ID do Produto", "Produto").tolist()
-
-
-def extract_product_id(product_label: str | None) -> str | None:
-    """Extrai o ID do produto a partir do label padrão 'ID - Produto'."""
-    if not product_label:
-        return None
-    return product_label.split(" - ", 1)[0]
+        if "custo_producao" in preview_df.columns and preview_df["custo_producao"].isna().any():
+            styled_df = preview_df[display_cols].rename(
+                columns={
+                    "nome_produto": "Produto",
+                    "qtd_ingredientes": "Quantidade de Ingredientes",
+                    "custo_producao": "Custo de Produção",
+                }
+            ).style.format(
+                {
+                    "Custo de Produção": lambda v: _format_brl_ptbr(v),
+                }
+            )
+            st.dataframe(styled_df, width="stretch", hide_index=True)
+        else:
+            st.dataframe(
+                preview_df[display_cols],
+                width="stretch",
+                hide_index=True,
+                column_config=_custos_column_config(),
+            )
 
 
-def filter_products_by_name(products_df: pd.DataFrame, search_term: str) -> pd.DataFrame:
-    """Filtra produtos por nome usando busca parcial, sem diferenciar maiúsculas/minúsculas."""
-    normalized_search = search_term.strip().lower()
-    if not normalized_search:
-        return products_df
+def _render_recipe_table(breakdown_all: pd.DataFrame | None) -> str | None:
+    """Renderiza receitas detalhadas com investigacao controlada apenas por selecao."""
+    with st.container(border=True):
+        st.subheader("🧾 Receitas Detalhadas por Produto")
 
-    return products_df[
-        products_df["Produto"].astype(str).str.strip().str.lower().str.contains(normalized_search, na=False)
-    ].copy()
+        if breakdown_all is None or breakdown_all.empty:
+            st.info(
+                "ℹ️ Nenhum dado de receita disponível. "
+                "Verifique a aba **Receita** na planilha."
+            )
+            return None
 
-
-def filter_issues_by_product(issues_df: pd.DataFrame, selected_product_id: str, search_term: str) -> pd.DataFrame:
-    """Filtra inconsistências por ID do produto e por nome (refino opcional)."""
-    filtered_df = issues_df
-
-    if selected_product_id:
-        filtered_df = filtered_df[filtered_df["ID do Produto"].astype(str).str.strip() == selected_product_id]
-
-    normalized_search = search_term.strip().lower()
-    if normalized_search:
-        filtered_df = filtered_df[
-            filtered_df["Produto"].astype(str).str.strip().str.lower().str.contains(normalized_search, na=False)
+        recipe_df = breakdown_all.copy()
+        expected_cols = [
+            "id_produto",
+            "nome_produto",
+            "id_ingrediente",
+            "nome_ingrediente",
+            "quantidade_formatada",
+            "custo_unitario_final",
         ]
+        for col in expected_cols:
+            if col not in recipe_df.columns:
+                recipe_df[col] = "" if col != "custo_unitario_final" else 0.0
 
-    return filtered_df.copy()
+        for col in ["id_produto", "nome_produto", "id_ingrediente", "nome_ingrediente", "quantidade_formatada"]:
+            recipe_df[col] = recipe_df[col].fillna("").astype(str).str.strip()
+        recipe_df["custo_unitario_final"] = pd.Series(
+            pd.to_numeric(recipe_df["custo_unitario_final"], errors="coerce"),
+            index=recipe_df.index,
+        ).fillna(0.0)
+
+        produto_options = ["Todos"] + sorted(recipe_df["nome_produto"].dropna().astype(str).unique().tolist())
+        selected_produto = st.selectbox(
+            "Selecionar produto para investigar",
+            options=produto_options,
+            index=0,
+            key="custos_produto_select",
+        )
+
+        filtered = recipe_df.copy()
+        if selected_produto != "Todos":
+            filtered = filtered[filtered["nome_produto"].astype(str) == selected_produto].copy()
+
+        pending_mask = filtered["custo_unitario_final"].eq(0.0)
+        pending_ids = filtered.loc[pending_mask, "id_ingrediente"].astype(str).str.strip()
+        pending_ids = pending_ids[pending_ids != ""]
+        itens_pendentes = int(pending_ids.nunique())
+
+        metric_col, _ = st.columns([1, 2])
+        metric_col.metric("Itens Pendentes de Auditoria", itens_pendentes)
+
+        st.caption(
+            f"Exibindo **{len(filtered)}** de **{len(recipe_df)}** linha(s)"
+            + (f" — produto: `{selected_produto}`" if selected_produto != "Todos" else "")
+        )
+
+        if len(filtered) > 1000:
+            st.warning("Exibindo apenas os primeiros 1000 itens para performance.")
+        preview_df = filtered.head(1000)
+
+        st.dataframe(
+            preview_df,
+            width="stretch",
+            hide_index=True,
+            column_order=[
+                "id_produto",
+                "nome_produto",
+                "id_ingrediente",
+                "nome_ingrediente",
+                "quantidade_formatada",
+                "custo_unitario_final",
+            ],
+            column_config=_recipe_column_config(),
+        )
+        return None if selected_produto == "Todos" else selected_produto
 
 
-def show_production_costs(product_service):
-    """Renderiza custos, inconsistências e detalhamento por produto."""
-    st.header("💰 Custo de Produção")
+def _render_audit_expander(
+    issues_df: pd.DataFrame | None,
+    produto_selecionado: str | None,
+    n_breakdown: int,
+    cobertura: str,
+) -> None:
+    """Expander 'Auditoria de Inconsistências': ingredientes sem custo mapeado."""
+    n_issues = len(issues_df) if issues_df is not None and not issues_df.empty else 0
+
+    expander_label = (
+        f"🔴 Auditoria de Inconsistências — {n_issues} ingrediente(s) sem custo"
+        if n_issues > 0
+        else "✅ Auditoria de Inconsistências — todos os custos preenchidos"
+    )
+
+    with st.expander(expander_label, expanded=(n_issues > 0)):
+        # Summary metrics
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Linhas de receita auditadas", n_breakdown)
+        col_b.metric("Ingredientes sem custo", n_issues)
+        col_c.metric("Cobertura de custo", cobertura)
+
+        if n_issues == 0:
+            st.success("✅ Nenhuma inconsistência encontrada. Todos os custos estão preenchidos.")
+            return
+
+        st.warning(
+            "⚠️ Os ingredientes abaixo não possuem custo válido. "
+            "Preencha a coluna **Custo do Ingrediente** na aba **Receita** "
+            "ou o **Custo Unitário** na aba **Matéria Prima**."
+        )
+
+        audit_df = _prepare_recipe_df(issues_df.copy())
+        filtered_audit = audit_df.copy()
+        if produto_selecionado:
+            filtered_audit = filtered_audit[
+                filtered_audit["nome_produto"].astype(str) == str(produto_selecionado)
+            ].copy()
+
+        st.caption(
+            f"Exibindo **{len(filtered_audit)}** de **{n_issues}** inconsistência(s)"
+            + (f" — produto: `{produto_selecionado}`" if produto_selecionado else "")
+        )
+
+        if len(filtered_audit) > 1000:
+            st.warning("Exibindo apenas os primeiros 1000 itens para performance.")
+        preview_audit_df = filtered_audit.head(1000)
+
+        st.dataframe(
+            preview_audit_df,
+            width="stretch",
+            hide_index=True,
+            column_config=_recipe_column_config(),
+        )
+
+        st.download_button(
+            "📥 Exportar inconsistências (CSV)",
+            data=issues_df.to_csv(index=False),
+            file_name="inconsistencias_receita.csv",
+            mime="text/csv",
+            key="download_inconsistencias",
+        )
+
+
+# ── Page entry-point ──────────────────────────────────────────────────────────
+
+def show_production_costs(product_service) -> None:
+    """Renderiza página de custos de produção com foco em tabelas de auditoria."""
+    st.header("💰 Custos de Produção")
     render_separator()
 
-    try:
-        issues_df = product_service.get_recipe_cost_issues()
-        breakdown_all = product_service.get_product_cost_breakdown()
+    search_term = st.text_input(
+        "🔍 Buscar produto no cockpit de custos",
+        placeholder="Buscar produto no cockpit de custos...",
+        key="prod_costs_search_top",
+    )
 
-        n_issues = len(issues_df) if issues_df is not None and not issues_df.empty else 0
-        n_total = len(breakdown_all) if breakdown_all is not None and not breakdown_all.empty else 0
-        cobertura = f"{((n_total - n_issues) / n_total * 100):.0f}%" if n_total > 0 else "—"
+    render_separator()
 
-        label_expander = (
-            f"🔴 {n_issues} Ingrediente(s) sem custo — clique para ver detalhes"
-            if n_issues > 0
-            else "✅ Todos os ingredientes com custo válido"
-        )
+    # ── Section 1: Gold custos_producao audit table ───────────────────────────
+    custos_agg_df = load_custos_producao_cached()
+    unique_produtos = int(custos_agg_df["nome_produto"].nunique()) if "nome_produto" in custos_agg_df.columns else 0
+    st.sidebar.info(f"Produtos únicos na Gold (agregado): {unique_produtos}")
 
-        def render_issues_expander() -> None:
-            if n_issues > 0:
-                st.warning(
-                    "⚠️ Os ingredientes abaixo não possuem custo válido. "
-                    "Preencha a coluna **Custo do Ingrediente** na aba **Receita** "
-                    "ou o **Custo Unitário** na aba **Matéria Prima**."
-                )
+    _render_custos_table(search_term)
 
-            with st.expander(label_expander, expanded=(n_issues > 0)):
-                if n_issues > 0:
-                    issues_display_df = build_recipe_detail_table(issues_df)
+    render_separator()
 
-                    product_options_df = (
-                        issues_display_df[["ID do Produto", "Produto"]]
-                        .drop_duplicates()
-                        .sort_values(["Produto", "ID do Produto"])
-                    )
-                    product_options_df["Label Produto"] = (
-                        product_options_df["ID do Produto"].astype(str).str.strip()
-                        + " - "
-                        + product_options_df["Produto"].astype(str).str.strip()
-                    )
+    # ── Load recipe data once for sections 2 & 3 ─────────────────────────────
+    del product_service
+    breakdown_all = load_receitas_detalhadas_cached()
+    issues_df = pd.DataFrame()
+    if not breakdown_all.empty and "custo_unitario_final" in breakdown_all.columns:
+        issues_df = breakdown_all[
+            breakdown_all["custo_unitario_final"].isna() | breakdown_all["custo_unitario_final"].eq(0.0)
+        ].copy()
 
-                    product_options = ["Todos os produtos"] + product_options_df["Label Produto"].tolist()
-                    selected_product_label = st.selectbox(
-                        "Filtrar por produto (ID - Produto):",
-                        options=product_options,
-                        index=0,
-                        key="issues_filter_product",
-                    )
-                    selected_product_id = (
-                        selected_product_label.split(" - ", 1)[0]
-                        if selected_product_label != "Todos os produtos"
-                        else ""
-                    )
+    n_issues = len(issues_df) if issues_df is not None and not issues_df.empty else 0
+    n_breakdown = len(breakdown_all) if breakdown_all is not None and not breakdown_all.empty else 0
+    cobertura = (
+        f"{((n_breakdown - n_issues) / n_breakdown * 100):.0f}%"
+        if n_breakdown > 0
+        else "—"
+    )
 
-                    filtered_issues_df = filter_issues_by_product(
-                        issues_display_df,
-                        selected_product_id,
-                        "",
-                    )
+    # ── Section 2: Detailed recipe breakdown ─────────────────────────────────
+    produto_selecionado = _render_recipe_table(breakdown_all)
 
-                    col_a, col_b = st.columns(2)
-                    col_a.metric("Ingredientes na receita", len(filtered_issues_df))
-                    col_b.metric("Cobertura de custo", cobertura)
-                    st.caption(
-                        f"Exibindo {len(filtered_issues_df)} de {len(issues_display_df)} inconsistência(s)."
-                    )
+    render_separator()
 
-                    if filtered_issues_df.empty:
-                        st.info("ℹ️ Nenhuma inconsistência encontrada com os filtros atuais.")
-                    else:
-                        render_wrapped_dataframe(filtered_issues_df)
-
-                    csv_issues = issues_df.to_csv(index=False)
-                    st.download_button(
-                        "📥 Baixar lista de inconsistências",
-                        data=csv_issues,
-                        file_name="inconsistencias_receita.csv",
-                        mime="text/csv",
-                    )
-                else:
-                    col_a, col_b = st.columns(2)
-                    col_a.metric("Ingredientes na receita", n_total)
-                    col_b.metric("Cobertura de custo", cobertura)
-                    st.success("Nenhuma inconsistência encontrada. Todos os custos estão preenchidos.")
-
-        custo_resumo = product_service.get_product_cost_summary()
-
-        sem_dados = custo_resumo is None or custo_resumo.empty
-        tem_custos = not sem_dados and custo_resumo["Custo Total (R$)"].notna().any()
-
-        if sem_dados:
-            st.warning("⚠️ Nenhum dado de receita disponível. Verifique a aba **Receita** na planilha.")
-            render_separator()
-            render_issues_expander()
-            return
-
-        cost_summary_df = build_cost_summary_table(custo_resumo)
-        recipe_selector_options = build_recipe_selector_options(custo_resumo)
-
-        if not tem_custos:
-            st.warning(
-                "⚠️ Há produtos na receita, mas nenhum custo válido foi calculado ainda. "
-                "Corrija as inconsistências acima e clique em **🔄 Atualizar dados**."
-            )
-
-        st.subheader("💸 Custo de Produção por Produto")
-        if tem_custos:
-            render_wrapped_dataframe(
-                build_cost_summary_styler(cost_summary_df),
-                column_config=build_cost_summary_column_config(),
-            )
-        else:
-            display_sem_custo = build_no_cost_products_table(custo_resumo)
-            search_term = st.text_input(
-                "Buscar produto pelo nome:",
-                placeholder="Digite parte do nome do produto",
-            )
-            filtered_display_df = filter_products_by_name(display_sem_custo, search_term)
-            st.caption(
-                f"Exibindo {len(filtered_display_df)} de {len(display_sem_custo)} produto(s)."
-            )
-            render_wrapped_dataframe(filtered_display_df)
-
-        render_separator()
-        st.subheader("🧾 Receita")
-
-        selected_label = None
-        if recipe_selector_options:
-            selected_label = st.selectbox(
-                "Selecione um produto para visualizar os componentes da receita:",
-                options=recipe_selector_options,
-                index=0,
-                key="recipe_product_selector",
-            )
-            st.caption(f"Produto selecionado: {selected_label}")
-        else:
-            st.info("ℹ️ Nenhum produto disponível para detalhar a receita.")
-
-        selected_id = extract_product_id(selected_label)
-
-        if selected_id and breakdown_all is not None and not breakdown_all.empty:
-            product_breakdown = breakdown_all[breakdown_all["ID do Produto"] == selected_id].copy()
-
-            if not product_breakdown.empty:
-                recipe_detail_df = build_recipe_detail_table(product_breakdown)
-                render_wrapped_dataframe(recipe_detail_df)
-            else:
-                st.info("ℹ️ Nenhum componente de receita encontrado para o produto selecionado.")
-
-        render_separator()
-        render_issues_expander()
-
-        if not tem_custos:
-            return
-
-        render_separator()
-        st.subheader("📥 Download")
-        csv = custo_resumo.to_csv(index=False)
-        st.download_button(
-            label="📥 Baixar Custos como CSV",
-            data=csv,
-            file_name="custos_producao.csv",
-            mime="text/csv",
-        )
-
-    except Exception as e:
-        st.error(f"❌ Erro ao exibir custos de produção: {e}")
-        raise
-
-
+    # ── Section 3: Audit expander ─────────────────────────────────────────────
+    _render_audit_expander(issues_df, produto_selecionado, n_breakdown, cobertura)
