@@ -212,13 +212,5 @@ __marimo__/
 *.ps
 /os
 /pd
-
-# Data directory (keep local, do not version)
 /data/
-*.csv
-*.xlsx
-!data/README.md
-
-# Development patterns (learning only, not part of project)
-/python-patterns/
 
