@@ -5,10 +5,10 @@ business rules remain unchanged.
 
 Deduplication strategy
 ----------------------
-No rows are removed. Duplicate-like records are retained because the
-faturamento pages must reflect the source files exactly as received.
+Only 100%-identical rows are removed (``drop_duplicates()`` with no subset).
 A single NFC-e sale can contain multiple product lines sharing the same
-``num_venda``; any row removal would risk silent revenue loss.
+``num_venda``; using that field as a dedup key would collapse those lines and
+lose revenue rows.  Exact-row equality is the only safe dedup criterion here.
 """
 
 from __future__ import annotations
@@ -253,27 +253,34 @@ def _normalize_text_fields(out: pd.DataFrame) -> pd.DataFrame:
 def _deduplicate_rows(
     out: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
-    """Preserve every row and expose duplicate diagnostics only.
+    """Preserve all rows and report duplicate diagnostics for audit only.
 
-    IMPORTANT: deduplication is intentionally disabled for faturamento. One NFC-e
-    sale can have multiple product lines and even technically repeated rows must
-    remain visible for auditability. We therefore keep the dataset 1:1 with the
-    source files and report ``removed=0``.
+    IMPORTANT: ``num_venda`` (or any order/sale ID) is intentionally *not* used
+    as a dedup key.  One NFC-e sale can have multiple product lines that share
+    the same ``num_venda``; collapsing by that field would silently drop revenue
+    rows.  Only rows that are identical across **every** column are removed.
     """
     before_dedup = int(len(out))
     if out.empty:
         return out, {"before": 0, "after": 0, "removed": 0, "dedup_key": []}
 
+    duplicate_like = int(out.duplicated(keep="first").sum())
     deduped = out.reset_index(drop=True)
+
     after_dedup = int(len(deduped))
-    removed     = 0
+    removed = 0
     audit: dict[str, object] = {
         "before":    before_dedup,
         "after":     after_dedup,
         "removed":   removed,
-        # empty list signals "no transaction-key subset and no row removal"
+        # empty list signals "full-row equality used; no transaction-key subset"
         "dedup_key": [],
     }
+    if duplicate_like:
+        logger.info(
+            "_deduplicate_rows: detected %d exact-duplicate row(s), but removal is disabled.",
+            duplicate_like,
+        )
     return deduped, audit
 
 
