@@ -36,6 +36,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from src.infrastructure.google_drive_adapter import GoogleDriveAdapter
+from src.infrastructure.google_sheets_adapter import GoogleSheetsAdapter
 from src.ports.data_source import DriveDataSource
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,42 @@ def sync_drive_files_to_raw_from_env(raw_dir: Path | None = None) -> int:
         raw = adapter.download_bytes(meta["id"])
         (target / name).write_bytes(raw)
         copied += 1
+
+    # Also sync manual tabs directly from Google Sheets (Controle de Vendas).
+    sheet_id = os.getenv("GOOGLE_SHEET_ID") or os.getenv("SALES_SHEET_ID")
+    sheets_adapter = GoogleSheetsAdapter(credential_file=cred, sheet_id=sheet_id)
+    manual_exports = [
+        (["Matéria Prima", "Materia Prima", "Insumos", "Ingredientes"], "manual_materia_prima.csv"),
+        (["Receitas", "Receita", "BOM - Receitas", "BOM-Receitas"], "manual_receitas.csv"),
+        (["Produtos", "Produto", "Cadastro de Produtos"], "manual_produtos.csv"),
+    ]
+    for tab_candidates, file_name in manual_exports:
+        manual_df = None
+        chosen_tab = None
+        for tab_name in tab_candidates:
+            try:
+                manual_df = sheets_adapter.get_sheet_as_df(tab_name)
+                chosen_tab = tab_name
+                break
+            except Exception:
+                continue
+        try:
+            if manual_df is None:
+                raise RuntimeError(f"None of the tab aliases exists: {tab_candidates}")
+            if manual_df is None or manual_df.empty:
+                logger.warning("Manual tab '%s' is empty; skipping export.", chosen_tab)
+                continue
+            manual_path = target / file_name
+            manual_df.to_csv(manual_path, index=False, encoding="utf-8-sig")
+            copied += 1
+            logger.info(
+                "Manual tab '%s' exported to %s (%d row(s)).",
+                chosen_tab,
+                manual_path,
+                len(manual_df),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not export manual tab aliases %s: %s", tab_candidates, exc)
 
     logger.info("Drive sync complete: %d file(s) copied to %s", copied, target)
     return copied

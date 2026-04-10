@@ -7,11 +7,15 @@ all faturamento rows end-to-end. Duplicate-like rows are only diagnosed in the
 returned audit metadata; they are never removed.
 """
 
+# IDs and names are intentionally separated in Gold outputs to avoid duplicated/misaligned columns.
+
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -138,6 +142,60 @@ _CHANNEL_MAP: dict[str, str] = {
 
 _UNKNOWN_ID = -1
 
+# Manual cost/recipe sheet mappings (Google Sheets tabs)
+MANUAL_SHEET_COLUMN_MAPS: dict[str, dict[str, str]] = {
+    "materia_prima": {
+        "ingrediente_id": "ingrediente_id",
+        "id do ingrediente": "ingrediente_id",
+        "id ingrediente": "ingrediente_id",
+        "id_do_ingrediente": "ingrediente_id",
+        "item": "item",
+        "nome": "nome_ingrediente",
+        "nome ingrediente": "nome_ingrediente",
+        "nome_do_ingrediente": "nome_ingrediente",
+        "unidade": "unidade",
+        "tipo_de_medida_ex_k_g_l": "unidade",
+        "custo_unitario": "custo_unit",
+        "custo unitario": "custo_unit",
+        "custo": "custo_unit",
+        "custo_fracionado_g_ml": "custo_unit",
+        "preco_por_unidade_caixa_item": "custo_unit",
+        "rendimento embalagem": "rendimento_embalagem",
+        "rendimento_embalagem": "rendimento_embalagem",
+        "conteudo_por_caixa_peso_vol": "rendimento_embalagem",
+    },
+    "receitas": {
+        "produto_id": "produto_id",
+        "id_do_produto": "produto_id",
+        "id do produto": "produto_id",
+        "ingrediente_id": "ingrediente_id",
+        "id_do_ingrediente": "ingrediente_id",
+        "id do ingrediente": "ingrediente_id",
+        "qtd": "qtd",
+        "quantidade": "qtd",
+        "quantidade_por_produto": "qtd",
+        "unidade_de_medida": "unidade",
+    },
+    "produtos": {
+        "": "produto_id",
+        "produto_id": "produto_id",
+        "id do produto": "produto_id",
+        "id produto": "produto_id",
+        "id_do_produto": "produto_id",
+        "unnamed_0": "produto_id",
+        "nome": "nome",
+        "nome do produto": "nome",
+        "nome_do_produto": "nome",
+        "rendimento": "rendimento",
+        "preco de venda": "preco_venda",
+        "preço de venda": "preco_venda",
+        "valor de venda": "preco_venda",
+        "preco": "preco_venda",
+        "preço": "preco_venda",
+        "preco_de_venda_r": "preco_venda",
+    },
+}
+
 
 class LocalRawSource(DriveDataSource):
     """Filesystem-backed source compatible with the pipeline Drive contract."""
@@ -165,6 +223,9 @@ class LocalRawSource(DriveDataSource):
             return None
         try:
             if path.suffix.lower() == ".csv":
+                # Manual exports from Google Sheets have stable comma CSV layout.
+                if path.name.lower().startswith("manual_"):
+                    return pd.read_csv(path, encoding="utf-8-sig")
                 return pd.read_csv(path, sep=None, engine="python")
             return pd.read_excel(path)
         except Exception:
@@ -174,6 +235,258 @@ class LocalRawSource(DriveDataSource):
             except Exception:
                 return None
             return None
+
+
+def _normalize_sheet_name(name: str) -> str:
+    text = unicodedata.normalize("NFKD", str(name)).encode("ascii", "ignore").decode("ascii")
+    text = text.strip().lower().replace("-", "_").replace(" ", "_")
+    return text
+
+
+def clean_cost_sheet(df: pd.DataFrame, column_map: dict[str, str]) -> pd.DataFrame:
+    """
+    Função para normalizar dados financeiros e strings de abas manuais.
+    """
+    out = df.copy()
+
+    # 1. Renomeia colunas para o padrão canônico do projeto
+    norm_map = {_normalise_header(k): v for k, v in column_map.items()}
+    out.columns = [_normalise_header(c) for c in out.columns]
+    out = out.rename(columns=norm_map)
+
+    # Collapse duplicate canonical columns (e.g., multiple headers mapped to same target).
+    if out.columns.duplicated().any():
+        collapsed = pd.DataFrame(index=out.index)
+        for col in pd.Index(out.columns).unique():
+            same_col = out.loc[:, out.columns == col]
+            if isinstance(same_col, pd.Series) or same_col.shape[1] == 1:
+                collapsed[col] = same_col if isinstance(same_col, pd.Series) else same_col.iloc[:, 0]
+            else:
+                collapsed[col] = same_col.bfill(axis=1).iloc[:, 0]
+        out = collapsed
+
+    # 2. Normalização de IDs e Strings (evita falha no merge por espaços extras)
+    string_cols = out.select_dtypes(include=["object"]).columns
+    for col in string_cols:
+        out[col] = out[col].astype(str).str.strip()
+
+    # 3. Conversão Financeira (Trata R$, pontos e vírgulas)
+    finance_keywords = ["custo", "preco", "valor", "margem", "rendimento"]
+    for col in out.columns:
+        if any(key in col.lower() for key in finance_keywords):
+            text = out[col].astype(str).str.strip()
+            text = text.str.replace("R$", "", regex=False).str.replace("%", "", regex=False)
+            text = text.str.replace(" ", "", regex=False)
+            has_comma = text.str.contains(",", na=False)
+            has_dot = text.str.contains(r"\.", na=False)
+            mixed_mask = has_comma & has_dot
+            text.loc[mixed_mask] = text.loc[mixed_mask].str.replace(".", "", regex=False)
+            text = text.str.replace(",", ".", regex=False)
+            out[col] = pd.to_numeric(text, errors="coerce").fillna(0.0)
+
+    return out
+
+
+def _build_manual_cost_map(manual_sheets: dict[str, pd.DataFrame]) -> dict[str, float]:
+    """
+    Builds product cost map from manual tabs (Receitas + Matéria Prima).
+    Key format is normalized product token for use with `_normalise_value`.
+    """
+    receitas = manual_sheets.get("receitas")
+    materia = manual_sheets.get("materia_prima")
+    if receitas is None or receitas.empty or materia is None or materia.empty:
+        return {}
+
+    if not {"produto_id", "ingrediente_id", "qtd"}.issubset(receitas.columns):
+        return {}
+    if not {"item", "custo_unit"}.issubset(materia.columns):
+        return {}
+
+    rec = receitas.copy()
+    mp = materia.copy()
+    rec["ingrediente_id_norm"] = rec["ingrediente_id"].astype(str).str.strip().str.lower()
+    mp["item_norm"] = mp["item"].astype(str).str.strip().str.lower()
+
+    merged = rec.merge(
+        mp[["item_norm", "custo_unit"]],
+        left_on="ingrediente_id_norm",
+        right_on="item_norm",
+        how="left",
+    )
+    merged["qtd"] = pd.to_numeric(merged["qtd"], errors="coerce").fillna(0.0)
+    merged["custo_unit"] = pd.to_numeric(merged["custo_unit"], errors="coerce").fillna(0.0)
+    merged["custo_item"] = merged["qtd"] * merged["custo_unit"]
+
+    agg = merged.groupby("produto_id", as_index=False)["custo_item"].sum()
+    return {
+        _normalise_value(prod): float(cost)
+        for prod, cost in agg[["produto_id", "custo_item"]].itertuples(index=False, name=None)
+        if str(prod).strip() != ""
+    }
+
+
+def build_gold_custos_produtos(
+    manual_sheets: dict[str, pd.DataFrame],
+    cost_map: dict[str, float],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build Gold table for cost cockpit.
+
+    Output columns:
+      produto_id, nome, rendimento, preco_venda, custo_total, margem_contribuicao_real
+    """
+    del cost_map
+    cols = [
+        "id_produto",
+        "nome_produto",
+        "id_ingrediente",
+        "nome_ingrediente",
+        "quantidade_formatada",
+        "custo_unitario_final",
+    ]
+    agg_cols = ["id_produto", "nome_produto", "qtd_ingredientes", "custo_producao"]
+
+    def _prune_first_two(df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+        if out.empty or len(out.columns) < 2:
+            return out
+        first = out.columns[0]
+        second = out.columns[1]
+        out[first] = out[first].astype("string").str.strip().replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+        out[second] = out[second].astype("string").str.strip().replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+        out = out.dropna(subset=[out.columns[0], out.columns[1]], how="all")
+        valid_mask = out[out.columns[0]].notna().to_numpy()
+        if valid_mask.any():
+            last_pos = int(np.flatnonzero(valid_mask)[-1])
+            out = out.iloc[: last_pos + 1]
+        return out.reset_index(drop=True)
+
+    receitas = _prune_first_two(manual_sheets.get("receitas", pd.DataFrame()).copy())
+    materia = _prune_first_two(manual_sheets.get("materia_prima", pd.DataFrame()).copy())
+    produtos = _prune_first_two(manual_sheets.get("produtos", pd.DataFrame()).copy())
+
+    if receitas.empty:
+        return pd.DataFrame(columns=agg_cols), pd.DataFrame(columns=cols)
+
+    if "produto_id" not in receitas.columns:
+        receitas["produto_id"] = ""
+    if "ingrediente_id" not in receitas.columns:
+        receitas["ingrediente_id"] = ""
+    if "qtd" not in receitas.columns:
+        receitas["qtd"] = 0.0
+    if "unidade" not in receitas.columns:
+        receitas["unidade"] = ""
+
+    if "produto_id" not in produtos.columns:
+        produtos["produto_id"] = ""
+    if "nome" not in produtos.columns:
+        produtos["nome"] = produtos["produto_id"]
+
+    if "ingrediente_id" not in materia.columns:
+        materia["ingrediente_id"] = materia.get("item", "")
+    if "nome_ingrediente" not in materia.columns:
+        materia["nome_ingrediente"] = materia.get("item", materia.get("ingrediente_id", ""))
+    if "unidade" not in materia.columns:
+        materia["unidade"] = ""
+    if "custo_unit" not in materia.columns:
+        materia["custo_unit"] = 0.0
+    if "rendimento_embalagem" not in materia.columns:
+        materia["rendimento_embalagem"] = 0.0
+
+    rec = receitas.copy()
+    rec["id_produto"] = rec["produto_id"].astype("string").str.strip().str.upper()
+    rec["id_ingrediente"] = rec["ingrediente_id"].astype("string").str.strip()
+    rec = rec.dropna(subset=["id_produto", "id_ingrediente"]).copy()
+    rec_prod_key = rec["id_produto"].astype(str).str.strip().str.lower()
+    rec = rec[~rec_prod_key.isin({"", "nan", "none", "nat"})].copy()
+    rec_ing_key = rec["id_ingrediente"].astype(str).str.strip().str.lower()
+    rec = rec[~rec_ing_key.isin({"", "nan", "none", "nat"})].copy()
+    rec["qtd_receita"] = pd.to_numeric(rec["qtd"], errors="coerce").fillna(0.0)
+    rec["unidade"] = rec["unidade"].fillna("").astype(str).str.strip()
+    rec["ingrediente_key"] = rec["id_ingrediente"].astype(str).str.strip().str.lower()
+
+    prod = produtos.copy()
+    prod["id_produto"] = prod["produto_id"].astype("string").str.strip().str.upper()
+    prod["nome"] = prod["nome"].fillna("").astype(str).str.strip()
+    prod = prod.dropna(subset=["id_produto"]).copy()
+    prod_key = prod["id_produto"].astype(str).str.strip().str.lower()
+    prod = prod[~prod_key.isin({"", "nan", "none", "nat"})].copy()
+    prod = prod.drop_duplicates(subset=["id_produto"], keep="first")
+
+    mp = materia.copy()
+    mp["id_ingrediente"] = mp["ingrediente_id"].astype("string").str.strip()
+    mp = mp.dropna(subset=["id_ingrediente"]).copy()
+    mp_key = mp["id_ingrediente"].astype(str).str.strip().str.lower()
+    mp = mp[~mp_key.isin({"", "nan", "none", "nat"})].copy()
+    mp["ingrediente_key"] = mp["id_ingrediente"].astype(str).str.strip().str.lower()
+    mp["nome_ingrediente"] = mp["nome_ingrediente"].fillna("").astype(str).str.strip()
+    mp["unidade"] = mp["unidade"].fillna("").astype(str).str.strip()
+    mp["custo_un_mat_prima"] = pd.to_numeric(mp["custo_unit"], errors="coerce")
+    mp["rendimento_embalagem"] = pd.to_numeric(mp["rendimento_embalagem"], errors="coerce").fillna(0.0)
+    mp = mp.drop_duplicates(subset=["id_ingrediente"], keep="first")
+
+    detail = rec.merge(
+        prod[["id_produto", "nome"]],
+        on="id_produto",
+        how="left",
+    )
+    detail = detail.merge(
+        mp[["ingrediente_key", "id_ingrediente", "nome_ingrediente", "unidade", "custo_un_mat_prima", "rendimento_embalagem"]],
+        on="ingrediente_key",
+        how="left",
+        suffixes=("", "_mp"),
+    )
+
+    detail["id_produto"] = detail["id_produto"].fillna("").astype(str).str.strip().str.upper()
+    detail["nome_produto"] = detail["nome"].astype("string").str.strip()
+    detail["nome_produto"] = detail["nome_produto"].replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+    detail["nome_produto"] = detail["nome_produto"].fillna(detail["id_produto"]).astype(str).str.strip()
+    detail["id_ingrediente"] = detail["id_ingrediente_mp"].fillna(detail["id_ingrediente"]).fillna("").astype(str).str.strip()
+    detail["nome_ingrediente"] = detail["nome_ingrediente"].astype("string").str.strip()
+    detail["nome_ingrediente"] = detail["nome_ingrediente"].replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+    detail["nome_ingrediente"] = detail["nome_ingrediente"].fillna(detail["id_ingrediente"]).astype(str).str.strip()
+    if "unidade_mp" not in detail.columns:
+        detail["unidade_mp"] = detail["unidade"]
+
+    qty_num = pd.to_numeric(detail["qtd_receita"], errors="coerce")
+    qty_txt = pd.Series(np.where(qty_num.notna(), qty_num.map(lambda x: f"{x:g}"), ""), index=detail.index).astype(str)
+    unit_txt = detail["unidade"].fillna("").astype(str).str.strip()
+    unit_txt = unit_txt.mask(unit_txt.eq(""), detail["unidade_mp"].fillna("").astype(str).str.strip())
+    detail["quantidade_formatada"] = (qty_txt + " " + unit_txt).str.strip()
+
+    # Keep Gold numeric as float; Streamlit handles visual BRL formatting.
+    # Formula: (Custo_Unitario_Materia_Prima / Rendimento_Embalagem) * Quantidade_Receita
+    denom = detail["rendimento_embalagem"].fillna(1.0)
+    denom = denom.where(denom > 0, 1.0)
+    numer = pd.to_numeric(detail["custo_un_mat_prima"], errors="coerce")
+    qtd = pd.to_numeric(detail["qtd_receita"], errors="coerce")
+
+    recipe_unit = detail["unidade"].fillna("").astype(str).str.strip().str.lower()
+    material_unit = detail["unidade_mp"].fillna("").astype(str).str.strip().str.lower()
+    recipe_small_unit = recipe_unit.isin({"g", "gr", "grama", "gramas", "ml", "mililitro", "mililitros"})
+    material_large_unit = material_unit.isin({"k", "kg", "quilo", "quilos", "l", "lt", "litro", "litros"})
+    qtd_ajustada = pd.Series(
+        np.where(recipe_small_unit & material_large_unit, qtd / 1000.0, qtd),
+        index=detail.index,
+    )
+
+    detail["custo_calculado"] = (numer / denom) * qtd_ajustada
+    detail["custo_unitario_final"] = pd.to_numeric(detail["custo_calculado"], errors="coerce").astype("float64")
+
+    df_detalhado = detail[cols].copy().reset_index(drop=True)
+    df_detalhado.index.name = None
+
+    df_gold_produtos = (
+        df_detalhado.groupby(["id_produto", "nome_produto"], as_index=False)
+        .agg(
+            qtd_ingredientes=("id_ingrediente", "count"),
+            custo_producao=("custo_unitario_final", lambda s: s.sum(min_count=1)),
+        )
+        .reset_index(drop=True)
+    )
+    df_gold_produtos["custo_producao"] = pd.to_numeric(df_gold_produtos["custo_producao"], errors="coerce").astype("float64")
+    df_gold_produtos.index.name = None
+    return df_gold_produtos[agg_cols], df_detalhado
 
 
 def _parse_args() -> argparse.Namespace:
@@ -628,6 +941,8 @@ class MedallionPipeline:
         self.dim_produto: Optional[pd.DataFrame] = None
         self.dim_tempo: Optional[pd.DataFrame] = None
         self.dim_canal: Optional[pd.DataFrame] = None
+        self.gold_custos_produtos: Optional[pd.DataFrame] = None
+        self.receitas_detalhadas: Optional[pd.DataFrame] = None
 
     def _load_existing_counts(self) -> dict[str, object]:
         silver_path = self.silver_dir / "sales_silver.parquet"
@@ -657,10 +972,41 @@ class MedallionPipeline:
             return self._load_existing_counts()
 
         frames: list[pd.DataFrame] = []
+        manual_sheets: dict[str, pd.DataFrame] = {}
         for meta in files:
             df = self.source.read_as_dataframe(meta)
             if df is None or df.empty:
                 continue
+            source_name = str(meta.get("name", ""))
+            normalized_name = _normalize_sheet_name(source_name)
+
+            # Apply manual-sheet cleaning before any merge/calc in Gold.
+            if normalized_name.startswith("manual_materia_prima"):
+                cleaned = clean_cost_sheet(df, MANUAL_SHEET_COLUMN_MAPS["materia_prima"])
+                manual_sheets["materia_prima"] = cleaned
+                continue
+            if normalized_name.startswith("manual_receitas"):
+                cleaned = clean_cost_sheet(df, MANUAL_SHEET_COLUMN_MAPS["receitas"])
+                manual_sheets["receitas"] = cleaned
+                continue
+            if normalized_name.startswith("manual_produtos"):
+                cleaned = clean_cost_sheet(df, MANUAL_SHEET_COLUMN_MAPS["produtos"])
+                manual_sheets["produtos"] = cleaned
+                continue
+
+            if "materia" in normalized_name and "prima" in normalized_name:
+                cleaned = clean_cost_sheet(df, MANUAL_SHEET_COLUMN_MAPS["materia_prima"])
+                manual_sheets["materia_prima"] = cleaned
+                continue
+            if "produtos" in normalized_name or normalized_name == "produto":
+                cleaned = clean_cost_sheet(df, MANUAL_SHEET_COLUMN_MAPS["produtos"])
+                manual_sheets["produtos"] = cleaned
+                continue
+            if "receitas" in normalized_name or normalized_name == "receita":
+                cleaned = clean_cost_sheet(df, MANUAL_SHEET_COLUMN_MAPS["receitas"])
+                manual_sheets["receitas"] = cleaned
+                continue
+
             frame = df.copy()
             if "_source_file" not in frame.columns:
                 frame["_source_file"] = meta.get("name", "")
@@ -672,6 +1018,12 @@ class MedallionPipeline:
         bronze_df = pd.concat(frames, ignore_index=True)
         bronze_rows = int(len(bronze_df))
         self.silver_df, silver_audit = transform_to_silver(bronze_df)
+
+        # Optional enrichment from manual cost sheets (if available).
+        manual_cost_map = _build_manual_cost_map(manual_sheets)
+        if manual_cost_map:
+            self.silver_df = enrich_cost_from_catalog(self.silver_df, manual_cost_map)
+            logger.info("Applied manual cost enrichment from Receitas/Matéria Prima to SILVER (%d keys).", len(manual_cost_map))
 
         _ensure_dir(self.silver_dir)
         _ensure_dir(self.gold_dir)
@@ -686,6 +1038,7 @@ class MedallionPipeline:
         agg_canal = build_agg_vendas_canal(self.fato_vendas, self.dim_canal)
         agg_produto = build_agg_vendas_produto(self.fato_vendas, self.dim_produto)
         agg_tempo = build_agg_vendas_tempo(self.fato_vendas, self.dim_tempo)
+        self.gold_custos_produtos, self.receitas_detalhadas = build_gold_custos_produtos(manual_sheets, manual_cost_map)
 
         self.dim_produto.to_parquet(self.gold_dir / "dim_produto.parquet", engine="pyarrow", index=False)
         self.dim_tempo.to_parquet(self.gold_dir / "dim_tempo.parquet", engine="pyarrow", index=False)
@@ -695,6 +1048,41 @@ class MedallionPipeline:
         agg_canal.to_parquet(self.gold_dir / "agg_vendas_canal.parquet", engine="pyarrow", index=False)
         agg_produto.to_parquet(self.gold_dir / "agg_vendas_produto.parquet", engine="pyarrow", index=False)
         agg_tempo.to_parquet(self.gold_dir / "agg_vendas_tempo.parquet", engine="pyarrow", index=False)
+        os.makedirs(str(self.gold_dir), exist_ok=True)
+        processed_agg_path = self.gold_dir / "custos_producao_agregado.parquet"
+        self.gold_custos_produtos.to_parquet(processed_agg_path, engine="pyarrow", index=False)
+        print(f"Sucesso: Arquivo salvo em {processed_agg_path}")
+        processed_detail_path = self.gold_dir / "receitas_detalhadas.parquet"
+        (self.receitas_detalhadas if self.receitas_detalhadas is not None else pd.DataFrame()).to_parquet(
+            processed_detail_path,
+            engine="pyarrow",
+            index=False,
+        )
+        print(f"Sucesso: Arquivo salvo em {processed_detail_path}")
+
+        # Legacy alias kept for compatibility with existing loaders.
+        legacy_custos_path = self.gold_dir / "custos_producao.parquet"
+        self.gold_custos_produtos.to_parquet(legacy_custos_path, engine="pyarrow", index=False)
+        print(f"Sucesso: Arquivo salvo em {legacy_custos_path}")
+
+        # Fast-read location requested for Streamlit cockpit
+        fast_gold_dir = _ROOT / "data" / "gold"
+        os.makedirs(str(fast_gold_dir), exist_ok=True)
+        fast_agg_path = fast_gold_dir / "custos_producao_agregado.parquet"
+        self.gold_custos_produtos.to_parquet(fast_agg_path, engine="pyarrow", index=False)
+        print(f"Sucesso: Arquivo salvo em {fast_agg_path}")
+        fast_detail_path = fast_gold_dir / "receitas_detalhadas.parquet"
+        (self.receitas_detalhadas if self.receitas_detalhadas is not None else pd.DataFrame()).to_parquet(
+            fast_detail_path,
+            engine="pyarrow",
+            index=False,
+        )
+        print(f"Sucesso: Arquivo salvo em {fast_detail_path}")
+
+        # Legacy alias kept for compatibility with existing loaders.
+        fast_legacy_custos_path = fast_gold_dir / "custos_producao.parquet"
+        self.gold_custos_produtos.to_parquet(fast_legacy_custos_path, engine="pyarrow", index=False)
+        print(f"Sucesso: Arquivo salvo em {fast_legacy_custos_path}")
 
         validation = validate_star_schema(self.fato_vendas, self.dim_produto, self.dim_tempo, len(self.silver_df))
         try:
@@ -710,6 +1098,7 @@ class MedallionPipeline:
             "used_existing_layers": False,
             "dedup_removed": int(silver_audit.get("removed", 0)),
             "validation": validation,
+            "gold_custos_rows": int(len(self.gold_custos_produtos)) if self.gold_custos_produtos is not None else 0,
         }
         logger.info("MedallionPipeline.run() finished: %s", result)
         return result
