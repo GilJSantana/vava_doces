@@ -135,6 +135,44 @@ def _filter_by_name(df: pd.DataFrame, col: str, term: str) -> pd.DataFrame:
     return df[df[col].astype(str).str.lower().str.contains(term, na=False)].copy()
 
 
+# ── Public utility functions (used by tests and external callers) ─────────────
+
+def filter_products_by_name(df: pd.DataFrame, term: str) -> pd.DataFrame:
+    """Filtro case-insensitive na coluna 'Produto'. Retorna tudo se term for vazio."""
+    return _filter_by_name(df, "Produto", term)
+
+
+def filter_issues_by_product(
+    df: pd.DataFrame,
+    product_id: str,
+    name_filter: str,
+) -> pd.DataFrame:
+    """Filtra auditoria por 'ID do Produto' e opcionalmente por nome de produto."""
+    out = df.copy()
+    if "ID do Produto" in out.columns and product_id:
+        out = out[out["ID do Produto"].astype(str) == str(product_id)]
+    if name_filter.strip():
+        out = _filter_by_name(out, "Produto", name_filter)
+    return out
+
+
+def build_no_cost_products_table(source_df: pd.DataFrame) -> pd.DataFrame:
+    """Formata tabela de custos renomeando e formatando a coluna de custo (BRL PT-BR)."""
+    out = source_df.copy()
+    cost_src = "Custo Total (R$)"
+    cost_dst = "Custo de Produção"
+    if cost_src in out.columns:
+        out[cost_dst] = out[cost_src].apply(_format_brl_ptbr)
+        out = out.drop(columns=[cost_src])
+    desired_cols = ["ID do Produto", "Produto", "Qtd Ingredientes", cost_dst]
+    return out[[c for c in desired_cols if c in out.columns]].copy()
+
+
+def build_recipe_detail_table(raw: pd.DataFrame) -> pd.DataFrame:
+    """Alias público de _prepare_recipe_df para uso externo e testes."""
+    return _prepare_recipe_df(raw)
+
+
 def _format_brl_ptbr(value: float | int | None) -> str:
     """Format number as Brazilian currency string."""
     if value is None or pd.isna(value):
@@ -418,9 +456,6 @@ def show_production_costs(product_service) -> None:
     render_separator()
 
     # ── Section 1: Gold custos_producao audit table ───────────────────────────
-    custos_agg_df = load_custos_producao_cached()
-    unique_produtos = int(custos_agg_df["nome_produto"].nunique()) if "nome_produto" in custos_agg_df.columns else 0
-    st.sidebar.info(f"Produtos únicos na Gold (agregado): {unique_produtos}")
 
     _render_custos_table(search_term)
 
