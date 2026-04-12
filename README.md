@@ -2,160 +2,111 @@
   <img src="assets/logo.png" alt="Vava Doces Logo" width="200" height="200" style="border-radius: 20px;">
 </div>
 
-# Vava Doces - Análise de Custos, Margens e Rentabilidade
+# Vavá Doces Data App
 
-## Sobre o Projeto
+Aplicação de Business Intelligence e Engenharia de Dados para transformar planilhas operacionais em decisões de rentabilidade.
 
-Este repositório apresenta um pipeline de dados aplicado a um pequeno negócio real: a loja Vava Doces. O projeto integra planilhas operacionais (produtos, receitas, matéria-prima e vendas), processa os dados com regras de negócio e disponibiliza análises em um cockpit Streamlit.
+## Visão Executiva
 
-O objetivo é transformar dados dispersos em informação acionável para gestão: custo por produto, margem, rentabilidade e impacto no faturamento.
+A Vavá Doces tinha um problema clássico de pequenas operações: havia volume de vendas, mas pouca visibilidade sobre **quanto cada produto realmente contribuía para o lucro**.
 
-Este projeto faz parte da minha transição profissional para área de dados, unindo minha experiência prévia em tecnologia (QA, automação, infraestrutura AWS) com análise orientada a negócio.
+Este projeto resolve essa lacuna com um app de dados que:
+- integra dados de Google Drive e Google Sheets;
+- padroniza e valida os dados em pipeline Medallion;
+- publica análises executivas em Streamlit para decisão rápida.
 
----
+## Problema que o App Resolve
 
-## Problema de Negócio e Contexto
+O app foi desenhado para responder à pergunta central:
 
-A Vava Doces enfrentava um cenário comum em pequenos negócios:
+**"Quais produtos geram lucro de verdade, quais sustentam caixa e quais estão destruindo margem?"**
 
-- Não havia cadastro estruturado e confiável de produtos.
-- A compra de matéria-prima era operacional, sem visão consolidada de custo por item vendido.
-- O sistema contábil registrava vendas com inconsistências de padronização.
-- Embora o dono percebesse o negócio "sem dívidas", o caixa chegava pressionado no fim do ano, reduzindo capacidade de investimento.
+Sem essa visibilidade, ajustes de preço, compra de insumos e priorização comercial tendem a ser feitos por percepção. Com o app, as decisões passam a ser baseadas em fatos auditáveis.
 
-Esse contexto gera uma dor central: vender não significa necessariamente lucrar. Sem modelo de custo e margem por produto, decisões de preço e mix de vendas ficam no escuro.
+## Arquitetura de Dados (Medallion)
 
----
+### Bronze
+- Ingestão dos arquivos brutos (CSV/XLSX) e exportações auxiliares de planilhas.
+- Preservação do dado original para rastreabilidade.
 
-## Principais Perguntas que o Projeto Responde
+### Silver
+- Normalização de colunas, datas, valores monetários e chaves de produto.
+- Deduplicação técnica controlada (sem colapsar itens legítimos de pedidos).
+- Tratamento de inconsistências para reduzir ruído analítico.
 
-1. Quais produtos realmente geram lucro e quais apenas aumentam volume?
-2. Quanto custa produzir (ou adquirir) cada produto, considerando sua composição?
-3. Qual é a margem de contribuição por produto e por categoria?
-4. Quais produtos têm maior impacto no faturamento total?
-5. Onde existem distorções entre preço praticado e custo real?
-6. Quais ajustes de preço podem melhorar caixa sem comprometer competitividade?
-7. Como priorizar compras de matéria-prima e produção com base em rentabilidade?
+### Gold
+- Tabelas analíticas para consumo da aplicação:
+  - fato e dimensões (`fato_vendas`, `dim_produto`, `dim_tempo`);
+  - agregados de vendas;
+  - custos de produção (`custos_producao_agregado`, `receitas_detalhadas`);
+  - rentabilidade (`gold_rentabilidade`).
+- Preservação de linhagem de `NaN` para evitar falsos positivos de margem.
 
----
+## Integração com Google Sheets
 
-## Como Funciona (Arquitetura)
+A integração com Google Sheets é parte do fluxo oficial:
+- leitura de abas operacionais para atualização de custos e receitas;
+- exportação/consumo de dados para alimentar o pipeline;
+- atualização rápida via sidebar no Streamlit.
 
-A arquitetura segue separação clara entre regra de negócio e infraestrutura:
+Isso permite manter o processo aderente à operação real do negócio, sem exigir mudança abrupta de ferramenta da equipe.
 
-- `Ports` (`src/ports/data_source.py`): define o contrato `DataSource` para leitura de dados.
-- `Adapters` (`src/infrastructure/google_sheets_adapter.py`): implementa acesso a Google Sheets via `gspread`.
-- `Domain Services`:
-  - `src/domain/cost_analysis_service.py`: calcula custo por produto e validações de schema.
-  - `src/domain/product_analysis_service.py`: consolida métricas de produtos, margem e impacto de faturamento.
-- `App` (`app.py`): interface Streamlit para visualização e apoio à decisão.
+## App Streamlit (MVP em Produção)
 
-Esse desenho facilita testes, manutenção e troca de fonte de dados sem quebrar regras de negócio.
+O cockpit executivo possui três páginas:
+1. `📊 Dashboard` — rentabilidade, matriz estratégica e Pareto de receita.
+2. `💰 Custos de Produção` — auditoria de custos e pendências por ingrediente.
+3. `💹 Faturamento (Auditoria)` — exploração detalhada das vendas com filtros e exportação.
 
----
+## Guia de Uso de Negócio (Resumo)
 
-## Resultados Esperados para o Dono do Negócio
+### Matriz de Rentabilidade
+A matriz cruza:
+- eixo X: volume vendido;
+- eixo Y: margem percentual.
 
-- Visibilidade clara de custo, margem e rentabilidade por produto.
-- Base objetiva para ajustar precificação e mix de vendas.
-- Redução de decisões por intuição e maior confiança na gestão do caixa.
-- Identificação de produtos que drenam margem ou imobilizam capital.
-- Prioridade de investimento em produtos mais rentáveis.
-- Permitir ao dono entender por que, mesmo sem dívidas aparentes, o caixa termina o ano pressionado, identificando exatamente onde a margem é perdida.
+Quadrantes e plano de ação:
+- **Estrelas**: alto volume e alta margem. Proteger disponibilidade e manter destaque comercial.
+- **Vacas Leiteiras**: alto volume e baixa margem. Otimizar custos e revisar preço/tamanho.
+- **Dilemas**: baixo volume e alta margem. Testar campanhas e canais para ganhar escala.
+- **Problemas**: baixo volume e baixa margem. Reprecificar, reformular ou descontinuar.
 
----
+### Tabela de Decisão e Alertas
+- **Vermelho**: margem negativa (produto em perda).
+- **Oliva**: custo/margem ausente (`NaN`), item precisa de auditoria antes de decisão.
 
-## Estrutura Relevante do Projeto
+Leitura recomendada:
+1. tratar primeiro linhas vermelhas;
+2. resolver pendências oliva (dados faltantes);
+3. priorizar ganhos por quadrante.
 
-- `app.py` - aplicação Streamlit (cockpit de análise).
-- `src/ports/data_source.py` - contrato de acesso a dados (`DataSource`) e erro de integração.
-- `src/infrastructure/google_sheets_adapter.py` - adaptador de leitura da planilha Google Sheets.
-- `src/domain/cost_analysis_service.py` - regras de custo por produto.
-- `src/domain/product_analysis_service.py` - regras para análise de produtos, margem e faturamento.
-- `tests/` - suite com testes de domínio, infraestrutura e aplicação:
-  - `tests/test_cost_analysis_service.py`
-  - `tests/test_google_sheets_adapter.py`
-  - `tests/test_streamlit_app.py`
-  - `tests/test_integration.py`
-- `scripts/run_app.sh` - script auxiliar para iniciar o Streamlit.
+## Stack Técnica
 
----
+- **Python**: orquestração e regras de negócio.
+- **Streamlit**: interface executiva.
+- **Pandas**: transformação e modelagem tabular.
+- **Plotly**: visualizações analíticas interativas.
 
-## Como Rodar Localmente (com `uv`)
+## Regras de Limpeza e Qualidade de Dados
 
-Os comandos abaixo assumem uso de `uv` no Linux (bash).
+Princípios aplicados para evitar diagnósticos errados:
+- conversão robusta de moeda e datas com fallback controlado;
+- padronização de chaves textuais para reduzir mismatches;
+- tratamento explícito de `None`/`NaN` em custos;
+- invalidação de margem/markup quando custo está ausente ou zero;
+- diferenciação entre dado ausente e valor real zero.
 
-### 1) Instalar dependências
+Essas regras evitam **falsos positivos de lucratividade** e preservam confiabilidade analítica.
+
+## Execução Local
 
 ```bash
 uv sync
-```
-
-Se preferir executar sem sincronizar lock completo:
-
-```bash
-uv pip install -e .
-```
-
-### 2) Configurar credenciais do Google Sheets
-
-Crie um arquivo `.env` na raiz com:
-
-```bash
-GOOGLE_APPLICATION_CREDENTIALS="/caminho/absoluto/para/service-account.json"
-GOOGLE_SHEET_ID="SEU_SHEET_ID"
-```
-
-### 3) Rodar testes
-
-```bash
 uv run pytest -q
-```
-
-### 4) Executar o Streamlit
-
-```bash
 uv run streamlit run app.py
 ```
 
-Ou via script auxiliar:
+## Documentação Complementar
 
-```bash
-bash scripts/run_app.sh
-```
-
-Aplicação disponível em `http://localhost:8501`.
-
----
-
-## Boas Práticas Aplicadas
-
-- Arquitetura em camadas com `ports/adapters` (baixo acoplamento).
-- Inversão de dependência: domínio depende de contratos, não de bibliotecas externas.
-- Princípios SOLID (com foco em SRP, DIP e OCP).
-- TDD e testes unitários para regras de negócio críticas.
-- Tratamento de erros de integração com exceções específicas.
-- Organização voltada para evolução incremental e onboarding técnico.
-
----
-
-## Próximos Passos e Melhorias
-
-- Evoluir validação de schema das abas com relatório de inconsistências.
-- Adicionar monitoramento de qualidade dos dados (campos obrigatórios, duplicidades, nulos).
-- Criar indicadores de tendência (margem ao longo do tempo, sazonalidade e ruptura).
-- Publicar documentação técnica no MkDocs + GitHub Pages.
-- Configurar CI/CD com execução de testes e checks de qualidade a cada PR.
-
----
-
-## Contato
-
-Projeto desenvolvido por **Gsantana**.
-
-- Email: `gilmar.jesus@gmail.com`
-- Sugestões e melhorias: abra uma issue ou pull request neste repositório.
-
----
-
-> Este projeto representa uma transição prática para a área de dados: conecta modelagem de negócio, engenharia de software e análise para gerar impacto real em pequenas empresas.
+- `docs/GUIA_USUARIO_NEGOCIO.md`
+- `docs/ARQUITETURA_TECNICA.md`
