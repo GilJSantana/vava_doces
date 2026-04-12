@@ -442,7 +442,7 @@ def _render_audit_expander(
 
 # ── Page entry-point ──────────────────────────────────────────────────────────
 
-def show_production_costs(product_service) -> None:
+def show_production_costs() -> None:
     """Renderiza página de custos de produção com foco em tabelas de auditoria."""
     st.header("💰 Custos de Produção")
     render_separator()
@@ -462,7 +462,6 @@ def show_production_costs(product_service) -> None:
     render_separator()
 
     # ── Load recipe data once for sections 2 & 3 ─────────────────────────────
-    del product_service
     breakdown_all = load_receitas_detalhadas_cached()
     issues_df = pd.DataFrame()
     if not breakdown_all.empty and "custo_unitario_final" in breakdown_all.columns:

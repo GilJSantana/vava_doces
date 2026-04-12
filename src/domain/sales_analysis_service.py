@@ -321,6 +321,11 @@ def _parse_sales_dates_with_source(df: pd.DataFrame) -> pd.DataFrame:
                 parsed.loc[still_missing] = pd.to_datetime(
                     raw[still_missing], format="%Y-%m-%d", errors="coerce"
                 )
+            still_missing = parsed.isna()
+            if still_missing.any():
+                parsed.loc[still_missing] = pd.to_datetime(
+                    raw[still_missing], errors="coerce"
+                )
 
             out.loc[idx, "data"]           = parsed
             label_source                   = str(source_name) if source_name is not None else "unknown"
@@ -457,6 +462,9 @@ class ProductsTransformer:
 
         df = df[list(available.keys())].rename(columns=available).copy()
 
+        if "categoria" not in df.columns:
+            df["categoria"] = None
+
         if "custo_unit" in df.columns:
             df["custo_unit"] = _to_numeric(df["custo_unit"])
 
@@ -512,13 +520,12 @@ def _non_empty_mask(df: pd.DataFrame, columns: list[str]) -> pd.Series:
 
 
 def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
-    """Preserve all rows and compute duplicate diagnostics for audit only.
+    """Remove exact same-file duplicates while preserving cross-file auditability.
 
     Strategy
     --------
-    1. No rows are ever removed from faturamento.
-    2. Exact duplicates and transaction-key collisions are reported as audit
-       signals only.
+    1. Exact same-file duplicates are removed.
+    2. Cross-file duplicates are preserved and can be flagged for audit.
     3. Rows with no reliable key may also be flagged as suspected duplicates.
 
     Important: ``num_venda`` / order-level keys are never used as the sole
@@ -592,10 +599,10 @@ def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         working.loc[suspect_mask.index, "_is_suspected_duplicate"] = suspect_mask.to_numpy()
 
     duplicate_rows = working[working["_is_duplicate"]].copy()
-    deduped = working.drop(
+    deduped = working.loc[~working["_is_duplicate"]].drop(
         columns=[c for c in ("_is_duplicate", "_source_file_norm") if c in working.columns]
     ).reset_index(drop=True)
-    removed = 0
+    removed = int(len(duplicate_rows))
 
     removed_by_source: dict = {}
     if not duplicate_rows.empty and "_source_file" in duplicate_rows.columns:
@@ -617,16 +624,16 @@ def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             .fillna("unknown").astype(str).value_counts().to_dict()
         )
 
-    if int(duplicate_rows.shape[0]) > 0:
+    if removed > 0:
         logger.info(
-            "_deduplicate_with_audit: detected %d duplicate-like row(s), but removal is disabled.",
-            int(duplicate_rows.shape[0]),
+            "_deduplicate_with_audit: removed %d exact/transaction-key duplicate row(s).",
+            removed,
         )
 
     audit = {
         "before":   before,
         "after":    int(len(deduped)),
-        "removed":  0,
+        "removed":  removed,
         "key_columns":            tx_key_columns if tx_key_columns else [],
         "dedup_scope":            "same_file_only" if "_source_file" in df.columns else "global",
         "removed_by_source_file": removed_by_source,
@@ -635,7 +642,7 @@ def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             "applied":       bool(tx_key_columns and reliable_mask.any()),
             "key_columns":   tx_key_columns,
             "reliable_rows": int(reliable_mask.sum()),
-            "removed_rows":  0,
+            "removed_rows":  removed,
         },
         "suspected_duplicates": {
             "count":          suspected_rows,

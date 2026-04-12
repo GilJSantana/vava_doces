@@ -2,9 +2,8 @@
 
 Medallion Architecture — Vava Doces.
 
-This module keeps the RAW → SILVER → GOLD flow but intentionally preserves
-all faturamento rows end-to-end. Duplicate-like rows are only diagnosed in the
-returned audit metadata; they are never removed.
+This module keeps the RAW → SILVER → GOLD flow while only removing exact
+same-file duplicates. Cross-file duplicate-like rows remain available for audit.
 """
 
 # IDs and names are intentionally separated in Gold outputs to avoid duplicated/misaligned columns.
@@ -689,6 +688,8 @@ def build_fato_vendas(
     df["produto_id"] = pd.to_numeric(df.get("produto_id"), errors="coerce").fillna(_UNKNOWN_ID).astype("int64")
     df["data_id"] = pd.to_numeric(df.get("data_id"), errors="coerce").fillna(_UNKNOWN_ID).astype("int64")
     df["canal_id"] = pd.to_numeric(df.get("canal_id"), errors="coerce").fillna(_UNKNOWN_ID).astype("int64")
+    df["_orphan_produto"] = df["produto_id"].eq(_UNKNOWN_ID)
+    df["_orphan_data"] = df["data_id"].eq(_UNKNOWN_ID)
 
     for col in ("quantidade", "valor_unitario", "valor_bruto", "desconto", "valor_liquido", "valor_total", "custo"):
         if col not in df.columns:
@@ -709,6 +710,8 @@ def build_fato_vendas(
         "produto_id",
         "data_id",
         "canal_id",
+        "_orphan_produto",
+        "_orphan_data",
         "num_venda",
         "cliente",
         "canal",
@@ -824,10 +827,33 @@ def validate_gold_quality(
     }
 
 
-def run_data_quality_validation(raw_df: pd.DataFrame, silver_df: pd.DataFrame, gold_dict: dict) -> dict:
+def run_data_quality_validation(
+    raw_df: pd.DataFrame | None = None,
+    silver_df: pd.DataFrame | None = None,
+    gold_dict: dict | None = None,
+) -> dict | bool:
+    """Run quality validation in detailed or compatibility mode.
+
+    - When ``raw_df``, ``silver_df`` and ``gold_dict`` are provided, returns the
+      structured validation payload used by pipeline callers.
+    - When called with no arguments, loads the Gold layer from disk and returns a
+      single boolean for backwards-compatible smoke tests.
+    """
+    if raw_df is None and silver_df is None and gold_dict is None:
+        try:
+            adapter = GoldParquetAdapter()
+            dim_produto = adapter.load_gold("dim_produto")
+            dim_tempo = adapter.load_gold("dim_tempo")
+            fato_vendas = adapter.load_gold("fato_vendas")
+            results = DataQualityValidator(verbose=False).validate_all(dim_produto, dim_tempo, fato_vendas)
+            return bool(all(results.values()))
+        except Exception:
+            return False
+
+    gold_dict = gold_dict or {}
     return {
-        "raw": validate_raw_input_quality(raw_df),
-        "silver": validate_silver_quality(silver_df),
+        "raw": validate_raw_input_quality(raw_df if raw_df is not None else pd.DataFrame()),
+        "silver": validate_silver_quality(silver_df if silver_df is not None else pd.DataFrame()),
         "gold": validate_gold_quality(
             gold_dict.get("dim_produto", pd.DataFrame()),
             gold_dict.get("dim_tempo", pd.DataFrame()),
@@ -921,21 +947,24 @@ def build_gold_rentabilidade(
     faturamento_agregado: pd.DataFrame,
     custo_producao_agregado: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Build product-level profitability table joining revenue and production costs."""
+    """Build product-level profitability table for the executive dashboard.
+
+    The Gold layer intentionally preserves NaN cost lineage via
+    ``custo_producao_unitario_audit`` so the UI can invalidate margin/markup
+    instead of silently showing misleading profitability.
+    """
     if faturamento_agregado is None or faturamento_agregado.empty:
         return pd.DataFrame(
             columns=[
                 "id_produto",
                 "nome_produto",
                 "faturamento_item",
-                "faturamento_total_empresa",
                 "preco_venda_unitario",
                 "custo_producao_unitario",
                 "custo_producao_unitario_audit",
                 "margem_valor",
                 "margem_perc",
                 "markup",
-                "impacto_faturamento",
             ]
         )
 
@@ -978,22 +1007,16 @@ def build_gold_rentabilidade(
     gold["margem_perc"] = _safe_divide(gold["margem_valor"], gold["preco_venda_unitario"]) * 100.0
     gold["markup"] = _safe_divide(gold["preco_venda_unitario"], custo_para_calculo)
 
-    faturamento_total = float(pd.to_numeric(gold["faturamento_item"], errors="coerce").fillna(0.0).sum())
-    gold["faturamento_total_empresa"] = faturamento_total
-    gold["impacto_faturamento"] = _safe_divide(gold["faturamento_item"], gold["faturamento_total_empresa"])
-
     keep_cols = [
         "id_produto",
         "nome_produto",
         "faturamento_item",
-        "faturamento_total_empresa",
         "preco_venda_unitario",
         "custo_producao_unitario",
         "custo_producao_unitario_audit",
         "margem_valor",
         "margem_perc",
         "markup",
-        "impacto_faturamento",
     ]
     return gold[keep_cols].reset_index(drop=True)
 

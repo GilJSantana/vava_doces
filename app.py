@@ -1,11 +1,9 @@
-"""
-Aplicação Streamlit para análise de produtos e vendas da Vava Doces.
+"""Aplicação Streamlit da Vavá Doces com três páginas executivas.
 
-Esta aplicação oferece interface interativa para:
-- Visualizar dados do cadastro de produtos (aba Produtos)
-- Visualizar dados de vendas diárias
-- Calcular custo total por produto
-- Análises de margens e rentabilidade
+O MVP em produção é composto por:
+- Dashboard de rentabilidade
+- Custos de produção
+- Faturamento (auditoria)
 """
 
 import os
@@ -16,10 +14,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from scripts.medallion_pipeline import MedallionPipeline
 
-from src.domain.product_analysis_service import ProductAnalysisService
 from src.domain.sales_analysis_service import sync_drive_files_to_raw_from_env
-from src.application import build_analysis_services
-from src.infrastructure.gold_adapter import GoldParquetAdapter
 from src.infrastructure.google_sheets_adapter import GoogleSheetsAdapter
 from src.presentation.components import render_app_header
 from src.presentation.controller import run_app_controller
@@ -54,9 +49,9 @@ st.set_page_config(
 apply_global_styles()
 
 PAGE_HANDLERS: dict[str, Callable] = {
-    PAGE_DASHBOARD: lambda _service, _product_service: show_dashboard(_service, _product_service),
-    PAGE_PRODUCTION_COSTS: lambda _service, _product_service: show_production_costs(_product_service),
-    PAGE_FATURAMENTO: lambda _service, _product_service: show_faturamento(),
+    PAGE_DASHBOARD: show_dashboard,
+    PAGE_PRODUCTION_COSTS: show_production_costs,
+    PAGE_FATURAMENTO: show_faturamento,
 }
 
 
@@ -127,46 +122,21 @@ def get_adapter():
         return None
 
 
-@st.cache_resource
-def get_product_service(_adapter):
-    """Cria instância do serviço de análise de produtos."""
-    if _adapter is None:
-        return None
-    return ProductAnalysisService(
-        data_source=_adapter,
-        gold_source=GoldParquetAdapter(),
-    )
-
-
-def get_services(adapter: object) -> tuple[object | None, object | None]:
-    """Inicializa serviços de domínio."""
-    return build_analysis_services(
-        adapter=adapter,
-        product_service_factory=get_product_service,
-    )
-
-
-def init_services(adapter: object) -> tuple[object | None, object | None]:
-    """Wrapper tipado para o controlador principal."""
-    return get_services(adapter)
-
-
-def render_selected_page(page: str, service, product_service):
+def render_selected_page(page: str) -> None:
     """Despacha renderização da página selecionada."""
     handler = PAGE_HANDLERS.get(page)
     if handler is None:
         st.error("❌ Página inválida selecionada")
         return
-    handler(service, product_service)
+    handler()
 
 
 def main():
     """Executa a aplicação Streamlit."""
-    medallion_state = initialize_data_pipeline()
+    initialize_data_pipeline()
     run_app_controller(
         render_header_fn=render_app_header,
-        render_sidebar_fn=lambda: render_navigation_sidebar(get_adapter, medallion_state),
-        init_services_fn=init_services,
+        render_sidebar_fn=lambda: render_navigation_sidebar(get_adapter),
         render_page_fn=render_selected_page,
     )
 

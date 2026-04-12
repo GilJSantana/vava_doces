@@ -651,18 +651,13 @@ def _render_decision_table(df: pd.DataFrame) -> None:
         # Fallback to style-only render when column_config has compatibility issues.
         st.dataframe(styled.hide(axis="columns", subset=["Margem (%) Numérica"]), use_container_width=True)
 
-def show_dashboard(service, product_service) -> None:
+def show_dashboard() -> None:
     """Render dashboard with profitability, concentration and pricing priorities."""
-    del service, product_service
-
     inject_roboto_font()
     st.header("📊 Dashboard")
     st.caption("Cockpit executivo de receita, margem e auditoria de custos.")
     render_separator()
 
-    from src.presentation.pages.sales_shared import render_cache_control_sidebar
-
-    render_cache_control_sidebar()
 
     sales_df = load_sales_data_cached()
     available_months: list[str] = []
