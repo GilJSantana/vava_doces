@@ -917,6 +917,87 @@ def build_agg_vendas_tempo(fato_vendas: pd.DataFrame, dim_tempo: pd.DataFrame) -
     return grouped.sort_values(["ano", "trimestre"]).reset_index(drop=True)
 
 
+def build_gold_rentabilidade(
+    faturamento_agregado: pd.DataFrame,
+    custo_producao_agregado: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build product-level profitability table joining revenue and production costs."""
+    if faturamento_agregado is None or faturamento_agregado.empty:
+        return pd.DataFrame(
+            columns=[
+                "id_produto",
+                "nome_produto",
+                "faturamento_item",
+                "faturamento_total_empresa",
+                "preco_venda_unitario",
+                "custo_producao_unitario",
+                "custo_producao_unitario_audit",
+                "margem_valor",
+                "margem_perc",
+                "markup",
+                "impacto_faturamento",
+            ]
+        )
+
+    fat = faturamento_agregado.copy()
+    if "id_produto" not in fat.columns:
+        fat["id_produto"] = ""
+    if "nome_produto" not in fat.columns:
+        fat["nome_produto"] = fat["id_produto"]
+    if "faturamento_liquido" not in fat.columns:
+        fat["faturamento_liquido"] = 0.0
+    if "qtd_vendida" not in fat.columns:
+        fat["qtd_vendida"] = 0.0
+
+    fat["id_produto"] = fat["id_produto"].astype("string").str.strip().str.upper()
+    fat["faturamento_item"] = pd.to_numeric(fat["faturamento_liquido"], errors="coerce").fillna(0.0)
+    fat["preco_venda_unitario"] = _safe_divide(
+        fat["faturamento_item"],
+        pd.to_numeric(fat["qtd_vendida"], errors="coerce"),
+    )
+
+    custos = custo_producao_agregado.copy() if custo_producao_agregado is not None else pd.DataFrame()
+    if custos.empty:
+        custos = pd.DataFrame(columns=["id_produto", "custo_producao"])
+    if "id_produto" not in custos.columns:
+        custos["id_produto"] = ""
+    if "custo_producao" not in custos.columns:
+        custos["custo_producao"] = np.nan
+
+    custos["id_produto"] = custos["id_produto"].astype("string").str.strip().str.upper()
+    custos["custo_producao"] = pd.to_numeric(custos["custo_producao"], errors="coerce")
+    custos = custos[["id_produto", "custo_producao"]].drop_duplicates(subset=["id_produto"], keep="first")
+
+    gold = fat.merge(custos, on="id_produto", how="left")
+    gold["custo_producao_unitario"] = pd.to_numeric(gold["custo_producao"], errors="coerce")
+    # Keep original NaN lineage for audit; only fill for arithmetic safety.
+    gold["custo_producao_unitario_audit"] = gold["custo_producao_unitario"]
+    custo_para_calculo = gold["custo_producao_unitario"].fillna(0.0)
+
+    gold["margem_valor"] = pd.to_numeric(gold["preco_venda_unitario"], errors="coerce") - custo_para_calculo
+    gold["margem_perc"] = _safe_divide(gold["margem_valor"], gold["preco_venda_unitario"]) * 100.0
+    gold["markup"] = _safe_divide(gold["preco_venda_unitario"], custo_para_calculo)
+
+    faturamento_total = float(pd.to_numeric(gold["faturamento_item"], errors="coerce").fillna(0.0).sum())
+    gold["faturamento_total_empresa"] = faturamento_total
+    gold["impacto_faturamento"] = _safe_divide(gold["faturamento_item"], gold["faturamento_total_empresa"])
+
+    keep_cols = [
+        "id_produto",
+        "nome_produto",
+        "faturamento_item",
+        "faturamento_total_empresa",
+        "preco_venda_unitario",
+        "custo_producao_unitario",
+        "custo_producao_unitario_audit",
+        "margem_valor",
+        "margem_perc",
+        "markup",
+        "impacto_faturamento",
+    ]
+    return gold[keep_cols].reset_index(drop=True)
+
+
 def _ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -943,6 +1024,7 @@ class MedallionPipeline:
         self.dim_canal: Optional[pd.DataFrame] = None
         self.gold_custos_produtos: Optional[pd.DataFrame] = None
         self.receitas_detalhadas: Optional[pd.DataFrame] = None
+        self.gold_rentabilidade: Optional[pd.DataFrame] = None
 
     def _load_existing_counts(self) -> dict[str, object]:
         silver_path = self.silver_dir / "sales_silver.parquet"
@@ -1039,6 +1121,7 @@ class MedallionPipeline:
         agg_produto = build_agg_vendas_produto(self.fato_vendas, self.dim_produto)
         agg_tempo = build_agg_vendas_tempo(self.fato_vendas, self.dim_tempo)
         self.gold_custos_produtos, self.receitas_detalhadas = build_gold_custos_produtos(manual_sheets, manual_cost_map)
+        self.gold_rentabilidade = build_gold_rentabilidade(agg_produto, self.gold_custos_produtos)
 
         self.dim_produto.to_parquet(self.gold_dir / "dim_produto.parquet", engine="pyarrow", index=False)
         self.dim_tempo.to_parquet(self.gold_dir / "dim_tempo.parquet", engine="pyarrow", index=False)
@@ -1059,6 +1142,13 @@ class MedallionPipeline:
             index=False,
         )
         print(f"Sucesso: Arquivo salvo em {processed_detail_path}")
+        processed_rent_path = self.gold_dir / "gold_rentabilidade.parquet"
+        (self.gold_rentabilidade if self.gold_rentabilidade is not None else pd.DataFrame()).to_parquet(
+            processed_rent_path,
+            engine="pyarrow",
+            index=False,
+        )
+        print(f"Sucesso: Arquivo salvo em {processed_rent_path}")
 
         # Legacy alias kept for compatibility with existing loaders.
         legacy_custos_path = self.gold_dir / "custos_producao.parquet"
