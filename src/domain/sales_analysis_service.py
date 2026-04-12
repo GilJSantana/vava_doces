@@ -82,6 +82,11 @@ _PRODUTOS_COL_MAP: dict[str, str] = {
 }
 
 _PRODUTOS_TAB = "Produtos"
+_MANUAL_TAB_RANGES: dict[str, str] = {
+    "manual_materia_prima.csv": "A1:H5000",
+    "manual_receitas.csv": "A1:F12000",
+    "manual_produtos.csv": "A1:H5000",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +134,11 @@ def sync_drive_files_to_raw_from_env(raw_dir: Path | None = None) -> int:
         chosen_tab = None
         for tab_name in tab_candidates:
             try:
-                manual_df = sheets_adapter.get_sheet_as_df(tab_name)
+                manual_df = sheets_adapter.get_sheet_as_df(
+                    tab_name,
+                    cell_range=_MANUAL_TAB_RANGES.get(file_name),
+                    ttl_seconds=int(os.getenv("VAVA_SHEETS_CACHE_TTL", "300")),
+                )
                 chosen_tab = tab_name
                 break
             except Exception:
@@ -445,7 +454,7 @@ class SalesTransformer:
                 df[col] = _to_numeric(df[col])
 
         if "produto_raw" in df.columns:
-            df["produto_key"] = df["produto_raw"].apply(_normalise_value)
+            df["produto_key"] = df["produto_raw"].map(_normalise_value)
 
         return df
 
@@ -469,8 +478,8 @@ class ProductsTransformer:
             df["custo_unit"] = _to_numeric(df["custo_unit"])
 
         if "produto" in df.columns:
-            df["produto"]     = df["produto"].astype(str).str.strip()
-            df["produto_key"] = df["produto"].apply(_normalise_value)
+            df["produto"] = df["produto"].astype(str).str.strip()
+            df["produto_key"] = df["produto"].map(_normalise_value)
         else:
             df["produto_key"] = pd.Series(dtype=str)
 

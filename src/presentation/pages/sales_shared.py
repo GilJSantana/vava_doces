@@ -14,6 +14,7 @@ from src.ports.data_source import DataSourceError
 
 logger = logging.getLogger(__name__)
 
+
 def log_df_shape(stage: str, df: Optional[pd.DataFrame], key_cols: list[str] | None = None) -> None:
     """Small reusable logger for dataframe shape and key-column diagnostics."""
     if df is None:
@@ -60,23 +61,42 @@ def _normalize_sales_for_presentation(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_sales_data_cached() -> Optional[pd.DataFrame]:
     """Load sales data from gold layer (fato_vendas + dim_produto + dim_tempo).
 
     Returns None when no data is available.
     """
     try:
-        # Try gold layer first (deduplicated, typed, pre-aggregated)
+        # Read only columns used by dashboard/faturamento to reduce parquet I/O.
         adapter = GoldParquetAdapter()
-        fato_vendas = adapter.load_gold("fato_vendas")
+        fato_cols = [
+            "venda_id",
+            "data_id",
+            "produto_id",
+            "num_venda",
+            "cliente",
+            "canal",
+            "quantidade",
+            "valor_unitario",
+            "valor_total",
+            "custo",
+            "margem",
+            "source_file",
+            "arquivo_origem",
+            "mes_referencia",
+            "ingested_at_utc",
+            "data_carga",
+            "faturamento_liquido",
+        ]
+        fato_vendas = adapter.load_gold("fato_vendas", columns=fato_cols)
         log_df_shape("load_sales_data_cached:fato_vendas_raw", fato_vendas, ["venda_id", "data_id", "produto_id"])
-        dim_produto = adapter.load_gold("dim_produto")
-        dim_tempo = adapter.load_gold("dim_tempo")
+        dim_produto = adapter.load_gold("dim_produto", columns=["produto_id", "nome_produto"])
+        dim_tempo = adapter.load_gold("dim_tempo", columns=["data_id", "data"])
 
         # Join to get product names and dates
         df = fato_vendas.merge(dim_produto, on="produto_id", how="left")
-        df = df.merge(dim_tempo[["data_id", "data"]], on="data_id", how="left")
+        df = df.merge(dim_tempo, on="data_id", how="left")
 
         # Rename columns to match expected schema
         df = df.rename(columns={
@@ -126,13 +146,12 @@ def inject_roboto_font() -> None:
         unsafe_allow_html=True,
     )
 
+
 def format_brl(value: float) -> str:
     """Format float as BRL (pt-BR separators)."""
     text = f"{float(value):,.2f}"
     text = text.replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {text}"
-
-
 
 
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
@@ -141,6 +160,4 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="faturamento")
     return buffer.getvalue()
-
-
 

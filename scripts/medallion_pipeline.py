@@ -17,6 +17,7 @@ import sys
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Optional
 
 import numpy as np
@@ -1072,6 +1073,7 @@ class MedallionPipeline:
 
     def run(self) -> dict[str, object]:
         logger.info("MedallionPipeline.run() starting...")
+        stage_ms: dict[str, float] = {}
         files = self.source.list_tabular_files()
         if not files:
             return self._load_existing_counts()
@@ -1120,9 +1122,14 @@ class MedallionPipeline:
         if not frames:
             return self._load_existing_counts()
 
+        stage_start = perf_counter()
         bronze_df = pd.concat(frames, ignore_index=True)
         bronze_rows = int(len(bronze_df))
         self.silver_df, silver_audit = transform_to_silver(bronze_df)
+        missing_silver_cols = [c for c in ("data", "produto", "quantidade", "valor_total", "custo") if c not in self.silver_df.columns]
+        if missing_silver_cols:
+            raise ValueError(f"Silver schema inválido; colunas ausentes: {missing_silver_cols}")
+        stage_ms["silver_transform"] = (perf_counter() - stage_start) * 1000
 
         # Optional enrichment from manual cost sheets (if available).
         manual_cost_map = _build_manual_cost_map(manual_sheets)
@@ -1134,18 +1141,23 @@ class MedallionPipeline:
         _ensure_dir(self.gold_dir)
         self.silver_df.to_parquet(self.silver_dir / "sales_silver.parquet", engine="pyarrow", index=False)
 
+        stage_start = perf_counter()
         self.dim_produto = build_dim_produto(self.silver_df)
         self.dim_tempo = build_dim_tempo(self.silver_df)
         self.dim_canal = build_dim_canal(self.silver_df)
         self.fato_vendas = build_fato_vendas(self.silver_df, self.dim_produto, self.dim_tempo, self.dim_canal)
+        stage_ms["gold_dimensions_fato"] = (perf_counter() - stage_start) * 1000
 
+        stage_start = perf_counter()
         agg_dia = build_agg_vendas_dia(self.fato_vendas, self.dim_tempo)
         agg_canal = build_agg_vendas_canal(self.fato_vendas, self.dim_canal)
         agg_produto = build_agg_vendas_produto(self.fato_vendas, self.dim_produto)
         agg_tempo = build_agg_vendas_tempo(self.fato_vendas, self.dim_tempo)
         self.gold_custos_produtos, self.receitas_detalhadas = build_gold_custos_produtos(manual_sheets, manual_cost_map)
         self.gold_rentabilidade = build_gold_rentabilidade(agg_produto, self.gold_custos_produtos)
+        stage_ms["gold_aggregations"] = (perf_counter() - stage_start) * 1000
 
+        stage_start = perf_counter()
         self.dim_produto.to_parquet(self.gold_dir / "dim_produto.parquet", engine="pyarrow", index=False)
         self.dim_tempo.to_parquet(self.gold_dir / "dim_tempo.parquet", engine="pyarrow", index=False)
         self.dim_canal.to_parquet(self.gold_dir / "dim_canal.parquet", engine="pyarrow", index=False)
@@ -1196,6 +1208,7 @@ class MedallionPipeline:
         fast_legacy_custos_path = fast_gold_dir / "custos_producao.parquet"
         self.gold_custos_produtos.to_parquet(fast_legacy_custos_path, engine="pyarrow", index=False)
         print(f"Sucesso: Arquivo salvo em {fast_legacy_custos_path}")
+        stage_ms["persist_parquet"] = (perf_counter() - stage_start) * 1000
 
         validation = validate_star_schema(self.fato_vendas, self.dim_produto, self.dim_tempo, len(self.silver_df))
         try:
@@ -1212,6 +1225,7 @@ class MedallionPipeline:
             "dedup_removed": int(silver_audit.get("removed", 0)),
             "validation": validation,
             "gold_custos_rows": int(len(self.gold_custos_produtos)) if self.gold_custos_produtos is not None else 0,
+            "timings_ms": {k: round(v, 2) for k, v in stage_ms.items()},
         }
         logger.info("MedallionPipeline.run() finished: %s", result)
         return result

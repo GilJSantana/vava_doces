@@ -49,11 +49,13 @@ class GoldParquetAdapter(GoldDataSource):
             "agg_vendas_produto",
             "agg_vendas_tempo",
         ],
+        columns: list[str] | None = None,
     ) -> pd.DataFrame:
         """Load a gold layer Parquet table.
 
         Args:
-            layer: Name of the table ('dim_produto', 'dim_tempo', or 'fato_vendas').
+            layer: Name of the table ('dim_produto', 'dim_tempo' or 'fato_vendas').
+            columns: Optional column projection to reduce I/O.
 
         Returns:
             DataFrame containing the requested table.
@@ -61,9 +63,9 @@ class GoldParquetAdapter(GoldDataSource):
         Raises:
             DataSourceError: If the file is missing or cannot be read.
         """
-        # Return cached copy if available
-        if layer in self._cache:
-            return self._cache[layer].copy()
+        cache_key = layer if not columns else f"{layer}|{','.join(sorted(columns))}"
+        if cache_key in self._cache:
+            return self._cache[cache_key].copy()
 
         parquet_path = self.gold_dir / f"{layer}.parquet"
 
@@ -74,8 +76,19 @@ class GoldParquetAdapter(GoldDataSource):
             )
 
         try:
-            df = pd.read_parquet(parquet_path, engine="pyarrow")
-            self._cache[layer] = df
+            read_kwargs = {"engine": "pyarrow"}
+            if columns:
+                read_kwargs["columns"] = columns
+            try:
+                df = pd.read_parquet(parquet_path, **read_kwargs)
+            except Exception:
+                # Fallback for schema drifts: read full table and keep requested columns present.
+                if not columns:
+                    raise
+                full_df = pd.read_parquet(parquet_path, engine="pyarrow")
+                keep = [c for c in columns if c in full_df.columns]
+                df = full_df[keep].copy()
+            self._cache[cache_key] = df
             return df.copy()
         except Exception as exc:
             raise DataSourceError(
