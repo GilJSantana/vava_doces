@@ -30,7 +30,6 @@ def test_render_sidebar_when_adapter_missing(monkeypatch):
 
     adapter, page = navigation.render_sidebar(
         lambda: None,
-        {"bronze_rows": 10, "silver_rows": 8, "quarantine_rows": 2},
     )
 
     assert adapter is None
@@ -53,7 +52,6 @@ def test_render_sidebar_when_adapter_connected(monkeypatch):
 
     adapter, page = navigation.render_sidebar(
         lambda: "adapter_obj",
-        {"bronze_rows": 100, "silver_rows": 90, "quarantine_rows": 10},
     )
 
     assert adapter == "adapter_obj"
@@ -64,12 +62,12 @@ def test_render_sidebar_when_adapter_connected(monkeypatch):
 
 def test_page_revenue_impact_not_in_menu():
     """Impacto no Faturamento page is removed from the navigation menu."""
-    assert navigation.PAGE_REVENUE_IMPACT not in navigation.PAGE_OPTIONS
+    assert "💹 Impacto no Faturamento" not in navigation.PAGE_OPTIONS
 
 
 def test_page_detailed_analysis_not_in_menu():
     """Análise Detalhada page is removed from the navigation menu (simplified to 3 pages)."""
-    assert navigation.PAGE_DETAILED_ANALYSIS not in navigation.PAGE_OPTIONS
+    assert "🔍 Análise Detalhada" not in navigation.PAGE_OPTIONS
 
 
 def test_page_options_contains_expected_pages():

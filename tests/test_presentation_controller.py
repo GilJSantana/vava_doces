@@ -1,10 +1,4 @@
-import pytest
-
 from src.presentation import controller
-
-
-class _StopExecution(Exception):
-    """Exceção auxiliar para simular st.stop em testes."""
 
 
 def test_run_app_controller_happy_path():
@@ -17,59 +11,41 @@ def test_run_app_controller_happy_path():
         calls.append("sidebar")
         return "adapter", "📊 Dashboard"
 
-    def init_services_fn(adapter):
-        calls.append(("services", adapter))
-        return "service", "product_service"
-
-    def render_page_fn(page, service, product_service):
-        calls.append(("page", page, service, product_service))
+    def render_page_fn(page):
+        calls.append(("page", page))
 
     controller.run_app_controller(
         render_header_fn=render_header_fn,
         render_sidebar_fn=render_sidebar_fn,
-        init_services_fn=init_services_fn,
         render_page_fn=render_page_fn,
     )
 
     assert calls == [
         "header",
         "sidebar",
-        ("services", "adapter"),
-        ("page", "📊 Dashboard", "service", "product_service"),
+        ("page", "📊 Dashboard"),
     ]
 
 
-def test_run_app_controller_stops_when_adapter_missing(monkeypatch):
-    def fake_stop():
-        raise _StopExecution()
-
-    monkeypatch.setattr(controller.st, "stop", fake_stop)
-
-    called = {"page": False, "services": False}
+def test_run_app_controller_still_renders_page_when_adapter_missing():
+    called = {"page": False}
 
     def render_header_fn():
         return None
 
     def render_sidebar_fn():
-        return None, ""
+        return None, "💰 Custos de Produção"
 
-    def init_services_fn(adapter):
-        called["services"] = True
-        return "service", "product_service"
+    def render_page_fn(page):
+        called["page"] = page == "💰 Custos de Produção"
 
-    def render_page_fn(page, service, product_service):
-        called["page"] = True
+    controller.run_app_controller(
+        render_header_fn=render_header_fn,
+        render_sidebar_fn=render_sidebar_fn,
+        render_page_fn=render_page_fn,
+    )
 
-    with pytest.raises(_StopExecution):
-        controller.run_app_controller(
-            render_header_fn=render_header_fn,
-            render_sidebar_fn=render_sidebar_fn,
-            init_services_fn=init_services_fn,
-            render_page_fn=render_page_fn,
-        )
-
-    assert called["services"] is False
-    assert called["page"] is False
+    assert called["page"] is True
 
 
 def test_perf_logging_flag_is_enabled_from_environment(monkeypatch):
