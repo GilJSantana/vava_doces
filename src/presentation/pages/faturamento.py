@@ -10,6 +10,7 @@ import logging
 import math
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -211,15 +212,16 @@ def show_faturamento() -> None:
         if "data" in df_display.columns:
             df_display["Data"] = df_display["data"].dt.strftime("%d/%m/%Y")
         if "valor_total" in df_display.columns:
-            df_display["Valor Total"] = df_display["valor_total"].apply(format_brl)
+            df_display["Valor Total"] = [format_brl(v) for v in df_display["valor_total"].tolist()]
         valor_unit_col = "valor_unit" if "valor_unit" in df_display.columns else "valor_unitario"
         if valor_unit_col in df_display.columns:
-            df_display["Valor Unit"] = df_display[valor_unit_col].apply(format_brl)
+            df_display["Valor Unit"] = [format_brl(v) for v in df_display[valor_unit_col].tolist()]
         qtd_col = "qtd" if "qtd" in df_display.columns else "quantidade"
         if qtd_col in df_display.columns:
-            df_display["Qtd"] = df_display[qtd_col].apply(
-                lambda x: f"{int(x)}" if float(x) == int(x) else f"{x:.2f}"
-            )
+            qtd_num = pd.to_numeric(df_display[qtd_col], errors="coerce")
+            is_int = qtd_num.notna() & np.isclose(qtd_num, np.floor(qtd_num))
+            qtd_fmt = np.where(is_int, qtd_num.fillna(0).astype("int64").astype(str), qtd_num.map(lambda x: f"{x:.2f}" if pd.notna(x) else ""))
+            df_display["Qtd"] = pd.Series(qtd_fmt, index=df_display.index)
     else:
         df_display["Data"] = []
         df_display["Valor Total"] = []

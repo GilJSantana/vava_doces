@@ -28,6 +28,7 @@ _BRAND_MARGIN_COLORSCALE = [
     (0.5, "#F9A8D4"),
     (1.0, "#14B8A6"),
 ]
+_MAX_SCATTER_POINTS = 800
 
 
 def _safe_num(series: pd.Series | None, fill: float | None = 0.0) -> pd.Series:
@@ -127,28 +128,9 @@ def _apply_month_filter(
     if not selected_months:
         return profitability_df.iloc[0:0].copy()
 
-    filtered_sales = sales_df[sales_df["mes_referencia"].astype(str).isin(selected_months)].copy()
-    if filtered_sales.empty:
+    month_agg = _build_month_sales_agg(sales_df, tuple(selected_months))
+    if month_agg.empty:
         return profitability_df.iloc[0:0].copy()
-
-    qty_col = "qtd" if "qtd" in filtered_sales.columns else ("quantidade" if "quantidade" in filtered_sales.columns else None)
-    revenue_col = (
-        "faturamento_liquido"
-        if "faturamento_liquido" in filtered_sales.columns
-        else ("valor_total" if "valor_total" in filtered_sales.columns else ("valor_venda" if "valor_venda" in filtered_sales.columns else None))
-    )
-    if qty_col is None or revenue_col is None or "produto_id" not in filtered_sales.columns:
-        return profitability_df
-
-    month_agg = (
-        filtered_sales.groupby(["produto_id", "produto"], as_index=False)
-        .agg(
-            qtd_vendida=(qty_col, "sum"),
-            faturamento_item=(revenue_col, "sum"),
-        )
-        .rename(columns={"produto_id": "id_produto", "produto": "nome_produto"})
-    )
-    month_agg["id_produto"] = month_agg["id_produto"].astype("string").str.strip().str.upper()
 
     out = profitability_df.merge(
         month_agg[["id_produto", "qtd_vendida", "faturamento_item"]],
@@ -171,6 +153,30 @@ def _apply_month_filter(
     drop_cols = [c for c in ["qtd_vendida_mes", "faturamento_item_mes"] if c in out.columns]
     out = out.drop(columns=drop_cols)
     return _invalidate_metrics_without_cost(out)
+
+
+@st.cache_data(ttl=300)
+def _build_month_sales_agg(sales_df: pd.DataFrame, selected_months: tuple[str, ...]) -> pd.DataFrame:
+    if sales_df is None or sales_df.empty or not selected_months:
+        return pd.DataFrame()
+    filtered_sales = sales_df[sales_df["mes_referencia"].astype(str).isin(selected_months)].copy()
+    if filtered_sales.empty:
+        return pd.DataFrame()
+    qty_col = "qtd" if "qtd" in filtered_sales.columns else ("quantidade" if "quantidade" in filtered_sales.columns else None)
+    revenue_col = (
+        "faturamento_liquido"
+        if "faturamento_liquido" in filtered_sales.columns
+        else ("valor_total" if "valor_total" in filtered_sales.columns else ("valor_venda" if "valor_venda" in filtered_sales.columns else None))
+    )
+    if qty_col is None or revenue_col is None or "produto_id" not in filtered_sales.columns:
+        return pd.DataFrame()
+    month_agg = (
+        filtered_sales.groupby(["produto_id", "produto"], as_index=False)
+        .agg(qtd_vendida=(qty_col, "sum"), faturamento_item=(revenue_col, "sum"))
+        .rename(columns={"produto_id": "id_produto", "produto": "nome_produto"})
+    )
+    month_agg["id_produto"] = month_agg["id_produto"].astype("string").str.strip().str.upper()
+    return month_agg
 
 
 @st.cache_data(ttl=1800)
@@ -328,24 +334,24 @@ def _render_scatter(df: pd.DataFrame, selected_months: list[str], available_mont
     # Keep items without calculated margin visible in chart at y=0, in gray.
     plot_df["margem_plot"] = plot_df["margem_perc"].fillna(0.0)
 
-    def _quadrante_nome(row: pd.Series) -> str:
-        x_high = float(row.get("qtd_vendida", 0.0)) >= mediana_volume
-        y_high = float(row.get("margem_plot", 0.0)) >= margem_alvo
-        if x_high and y_high:
-            return "ESTRELAS"
-        if x_high and not y_high:
-            return "VACAS LEITEIRAS"
-        if (not x_high) and y_high:
-            return "DILEMAS"
-        return "PROBLEMAS"
-
-    plot_df["quadrante"] = plot_df.apply(_quadrante_nome, axis=1)
+    x_high = plot_df["qtd_vendida"].ge(mediana_volume)
+    y_high = plot_df["margem_plot"].ge(margem_alvo)
+    plot_df["quadrante"] = np.select(
+        [x_high & y_high, x_high & ~y_high, ~x_high & y_high],
+        ["ESTRELAS", "VACAS LEITEIRAS", "DILEMAS"],
+        default="PROBLEMAS",
+    )
     plot_df["margem_perc_label"] = plot_df["margem_perc"].map(_fmt_percent)
     plot_df.loc[plot_df["margem_perc"].isna(), "margem_perc_label"] = "⚠️ Auditoria Necessária"
-    plot_df["custo_vs_preco"] = plot_df.apply(
-        lambda row: f"{_fmt_currency(row['custo_producao_unitario'])} vs {_fmt_currency(row['preco_venda_unitario'])}",
-        axis=1,
+    plot_df["custo_vs_preco"] = (
+        plot_df["custo_producao_unitario"].map(_fmt_currency)
+        + " vs "
+        + plot_df["preco_venda_unitario"].map(_fmt_currency)
     )
+
+    if len(plot_df) > _MAX_SCATTER_POINTS:
+        plot_df = plot_df.sort_values("faturamento_item", ascending=False).head(_MAX_SCATTER_POINTS).copy()
+        st.caption(f"Exibindo {_MAX_SCATTER_POINTS} produtos com maior faturamento para preservar responsividade do gráfico.")
 
     missing_mask = plot_df["margem_perc"].isna()
     missing_margin_count = int(missing_mask.sum())
@@ -437,8 +443,9 @@ def _render_scatter(df: pd.DataFrame, selected_months: list[str], available_mont
     )
 
     if not valid_df.empty:
+        scatter_cls = go.Scattergl if len(valid_df) > 500 else go.Scatter
         fig.add_trace(
-            go.Scatter(
+            scatter_cls(
                 x=valid_df["qtd_vendida"],
                 y=valid_df["margem_plot"],
                 mode="markers",
@@ -464,8 +471,9 @@ def _render_scatter(df: pd.DataFrame, selected_months: list[str], available_mont
         )
 
     if not missing_df.empty:
+        scatter_cls = go.Scattergl if len(missing_df) > 500 else go.Scatter
         fig.add_trace(
-            go.Scatter(
+            scatter_cls(
                 x=missing_df["qtd_vendida"],
                 y=missing_df["margem_plot"],
                 mode="markers",
