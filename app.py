@@ -27,7 +27,6 @@ from src.presentation.navigation import (
     PAGE_DASHBOARD,
     PAGE_DETAILED_ANALYSIS,
     PAGE_PRODUCTION_COSTS,
-    PAGE_REVENUE_IMPACT,
     PAGE_FATURAMENTO,
     render_sidebar as render_navigation_sidebar,
 )
@@ -35,7 +34,6 @@ from src.presentation.pages import (
     show_analise_detalhada,
     show_dashboard,
     show_production_costs,
-    show_revenue_impact,
     show_faturamento,
 )
 from src.presentation.theme import apply_global_styles
@@ -60,7 +58,6 @@ apply_global_styles()
 PAGE_HANDLERS: dict[str, Callable] = {
     PAGE_DASHBOARD: lambda _service, _product_service: show_dashboard(_service, _product_service),
     PAGE_PRODUCTION_COSTS: lambda _service, _product_service: show_production_costs(_product_service),
-    PAGE_REVENUE_IMPACT: lambda _service, _product_service: show_revenue_impact(_product_service),
     PAGE_FATURAMENTO: lambda _service, _product_service: show_faturamento(),
     PAGE_DETAILED_ANALYSIS: lambda _service, _product_service: show_analise_detalhada(_service, _product_service),
 }

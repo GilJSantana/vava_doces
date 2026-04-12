@@ -7,61 +7,45 @@ import streamlit as st
 
 PAGE_DASHBOARD = "📊 Dashboard"
 PAGE_PRODUCTION_COSTS = "💰 Custos de Produção"
-PAGE_REVENUE_IMPACT = "💹 Impacto no Faturamento"
+PAGE_REVENUE_IMPACT = "💹 Impacto no Faturamento"  # kept for backward-compat; not in menu
 PAGE_DETAILED_ANALYSIS = "🔍 Análise Detalhada"
 PAGE_FATURAMENTO = "💹 Faturamento (Auditoria)"
 
 PAGE_OPTIONS = [
     PAGE_DASHBOARD,
     PAGE_PRODUCTION_COSTS,
-    PAGE_REVENUE_IMPACT,
     PAGE_FATURAMENTO,
     PAGE_DETAILED_ANALYSIS,
 ]
 
 
-def _format_medallion_info(medallion_state: dict[str, object] | None) -> str:
-    if not medallion_state:
-        return "Medallion: sem métricas disponíveis"
-
-    bronze_rows = int(medallion_state.get("bronze_rows", 0) or 0)
-    silver_rows = int(medallion_state.get("silver_rows", 0) or 0)
-    quarantine_rows = int(medallion_state.get("quarantine_rows", 0) or 0)
-    return (
-        "Medallion Pipeline\n"
-        f"Bronze (Total): {bronze_rows:,}\n"
-        f"Silver (Deduped): {silver_rows:,}\n"
-        f"Quarantine (NaT): {quarantine_rows:,}"
-    )
-
-
 def render_sidebar(
     get_adapter_fn: Callable[[], object | None],
-    medallion_state: dict[str, object] | None = None,
+    medallion_state: dict[str, object] | None = None,  # accepted but no longer displayed
 ) -> tuple[object | None, str]:
     """Renderiza sidebar, inicializa conexão e retorna adaptador e página selecionada."""
     with st.sidebar:
         st.markdown(
-            "<div style='padding:0.5rem 0; color:#F6F1E6'><h3>⚙️ Configuração</h3></div>",
+            "<div style='padding:1rem 0 0.25rem; color:#F6F1E6'><h3>🍰 Vavá Doces</h3></div>",
             unsafe_allow_html=True,
         )
 
-        if st.button("🔄 Atualizar dados", width="stretch"):
+        if st.button("🔄 Atualizar dados", use_container_width=True):
             # Clear both resource and data caches so updated parquet/raw data is visible.
             st.cache_data.clear()
             st.cache_resource.clear()
             st.rerun()
 
-        st.info(_format_medallion_info(medallion_state))
+        st.markdown("<div style='margin-top:0.5rem'></div>", unsafe_allow_html=True)
 
         adapter = get_adapter_fn()
         if adapter:
             st.success("✅ Conectado ao Google Sheets")
         else:
-            st.error("❌ Desconectado - Configure as credenciais")
-            return None, ""
+            st.warning("⚠️ Google Sheets desconectado")
 
-        page = st.radio("Selecione uma página:", options=PAGE_OPTIONS)
+        st.markdown("<div style='margin-top:0.75rem'></div>", unsafe_allow_html=True)
+        page = st.radio("Navegação", options=PAGE_OPTIONS, label_visibility="collapsed")
 
     return adapter, page
 

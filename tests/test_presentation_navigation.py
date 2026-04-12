@@ -1,5 +1,3 @@
-    adapter, page = navigation.render_sidebar(lambda: "adapter_obj")
-    adapter, page = navigation.render_sidebar(lambda: None)
 from src.presentation import navigation
 
 
@@ -19,45 +17,64 @@ def _patch_sidebar_base(monkeypatch):
 
 
 def test_render_sidebar_when_adapter_missing(monkeypatch):
+    """Sidebar no longer exits early when adapter is missing; it still renders navigation."""
     _patch_sidebar_base(monkeypatch)
 
-    infos = []
-    errors = []
-    monkeypatch.setattr(navigation.st, "info", lambda msg: infos.append(msg))
+    warnings = []
+    monkeypatch.setattr(navigation.st, "info", lambda *args, **kwargs: None)
     monkeypatch.setattr(navigation.st, "button", lambda *args, **kwargs: False)
     monkeypatch.setattr(navigation.st, "success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(navigation.st, "error", lambda msg: errors.append(msg))
+    monkeypatch.setattr(navigation.st, "warning", lambda msg: warnings.append(msg))
+    monkeypatch.setattr(navigation.st, "error", lambda *args, **kwargs: None)
     monkeypatch.setattr(navigation.st, "radio", lambda *args, **kwargs: navigation.PAGE_DASHBOARD)
+
     adapter, page = navigation.render_sidebar(
         lambda: None,
         {"bronze_rows": 10, "silver_rows": 8, "quarantine_rows": 2},
     )
-    adapter, page = navigation.render_sidebar(lambda: None)
 
     assert adapter is None
-    assert page == ""
-    assert "Bronze (Total): 10" in infos[0]
-    assert errors == ["❌ Desconectado - Configure as credenciais"]
+    assert page == navigation.PAGE_DASHBOARD
+    # Pipeline metrics are no longer shown in the sidebar.
+    assert any("desconectado" in str(w).lower() for w in warnings)
 
 
 def test_render_sidebar_when_adapter_connected(monkeypatch):
+    """Sidebar returns the adapter and selected page when connected."""
     _patch_sidebar_base(monkeypatch)
 
-    infos = []
     successes = []
-    monkeypatch.setattr(navigation.st, "info", lambda msg: infos.append(msg))
+    monkeypatch.setattr(navigation.st, "info", lambda *args, **kwargs: None)
     monkeypatch.setattr(navigation.st, "button", lambda *args, **kwargs: False)
     monkeypatch.setattr(navigation.st, "success", lambda msg: successes.append(msg))
+    monkeypatch.setattr(navigation.st, "warning", lambda *args, **kwargs: None)
     monkeypatch.setattr(navigation.st, "error", lambda *args, **kwargs: None)
-    monkeypatch.setattr(navigation.st, "radio", lambda *args, **kwargs: navigation.PAGE_REVENUE_IMPACT)
+    monkeypatch.setattr(navigation.st, "radio", lambda *args, **kwargs: navigation.PAGE_PRODUCTION_COSTS)
+
     adapter, page = navigation.render_sidebar(
         lambda: "adapter_obj",
         {"bronze_rows": 100, "silver_rows": 90, "quarantine_rows": 10},
     )
-    adapter, page = navigation.render_sidebar(lambda: "adapter_obj")
 
     assert adapter == "adapter_obj"
-    assert page == navigation.PAGE_REVENUE_IMPACT
-    assert "Silver (Deduped): 90" in infos[0]
+    assert page == navigation.PAGE_PRODUCTION_COSTS
+    # Pipeline metrics are no longer shown; connection status still visible.
     assert successes == ["✅ Conectado ao Google Sheets"]
+
+
+def test_page_revenue_impact_not_in_menu():
+    """Impacto no Faturamento page is removed from the navigation menu."""
+    assert navigation.PAGE_REVENUE_IMPACT not in navigation.PAGE_OPTIONS
+
+
+def test_page_options_contains_expected_pages():
+    """Remaining pages are all present in the navigation menu."""
+    expected = {
+        navigation.PAGE_DASHBOARD,
+        navigation.PAGE_PRODUCTION_COSTS,
+        navigation.PAGE_FATURAMENTO,
+        navigation.PAGE_DETAILED_ANALYSIS,
+    }
+    assert expected == set(navigation.PAGE_OPTIONS)
+
 
