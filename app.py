@@ -25,13 +25,11 @@ from src.presentation.components import render_app_header
 from src.presentation.controller import run_app_controller
 from src.presentation.navigation import (
     PAGE_DASHBOARD,
-    PAGE_DETAILED_ANALYSIS,
     PAGE_PRODUCTION_COSTS,
     PAGE_FATURAMENTO,
     render_sidebar as render_navigation_sidebar,
 )
 from src.presentation.pages import (
-    show_analise_detalhada,
     show_dashboard,
     show_production_costs,
     show_faturamento,
@@ -59,7 +57,6 @@ PAGE_HANDLERS: dict[str, Callable] = {
     PAGE_DASHBOARD: lambda _service, _product_service: show_dashboard(_service, _product_service),
     PAGE_PRODUCTION_COSTS: lambda _service, _product_service: show_production_costs(_product_service),
     PAGE_FATURAMENTO: lambda _service, _product_service: show_faturamento(),
-    PAGE_DETAILED_ANALYSIS: lambda _service, _product_service: show_analise_detalhada(_service, _product_service),
 }
 
 

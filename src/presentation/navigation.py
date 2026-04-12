@@ -7,15 +7,15 @@ import streamlit as st
 
 PAGE_DASHBOARD = "📊 Dashboard"
 PAGE_PRODUCTION_COSTS = "💰 Custos de Produção"
-PAGE_REVENUE_IMPACT = "💹 Impacto no Faturamento"  # kept for backward-compat; not in menu
-PAGE_DETAILED_ANALYSIS = "🔍 Análise Detalhada"
+PAGE_REVENUE_IMPACT = "💹 Impacto no Faturamento"   # kept as constant for backward-compat; not in menu
+PAGE_DETAILED_ANALYSIS = "🔍 Análise Detalhada"      # kept as constant for backward-compat; not in menu
 PAGE_FATURAMENTO = "💹 Faturamento (Auditoria)"
 
+# Core navigation: three executive-facing pages only.
 PAGE_OPTIONS = [
     PAGE_DASHBOARD,
     PAGE_PRODUCTION_COSTS,
     PAGE_FATURAMENTO,
-    PAGE_DETAILED_ANALYSIS,
 ]
 
 
