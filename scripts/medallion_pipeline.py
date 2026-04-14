@@ -23,13 +23,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from src.infrastructure.data_quality import DataQualityValidator
-
 # ── Project root on sys.path so src.* imports work ────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from src.infrastructure.data_quality import DataQualityValidator  # noqa: E402
 from src.domain.sales_analysis_service import (  # noqa: E402
     _deduplicate_with_audit,
     _normalise_header,
@@ -565,6 +564,77 @@ def _extract_month_reference(source_file: pd.Series, dates: pd.Series) -> pd.Ser
     return by_name.fillna(by_date).fillna("sem_mes")
 
 
+def _month_label_from_reference(values: pd.Series, fallback_dates: pd.Series | None = None) -> pd.Series:
+    """Convert month references like ``2026-01`` to ``Month 01``."""
+    series = values.astype("string")
+    month_num = series.str.extract(r"(?:^|[-_/])(0[1-9]|1[0-2])(?:$|[-_/])", expand=False)
+    if fallback_dates is not None:
+        month_num = month_num.fillna(pd.to_datetime(fallback_dates, errors="coerce").dt.strftime("%m"))
+    return month_num.map(lambda mm: f"Month {mm}" if pd.notna(mm) and str(mm).strip() != "" else "Month Unknown")
+
+
+def _prepare_bronze_for_integrity(raw_df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize Bronze rows to the canonical sales schema for row-count checks."""
+    bronze = _normalise_columns(raw_df)
+    if bronze.columns.duplicated().any():
+        bronze = bronze.loc[:, ~bronze.columns.duplicated(keep="first")].copy()
+    bronze = _map_canonical(bronze)
+    if bronze.columns.duplicated().any():
+        bronze = bronze.loc[:, ~bronze.columns.duplicated(keep="first")].copy()
+    bronze = _coerce_types(bronze)
+    if bronze.columns.duplicated().any():
+        bronze = bronze.loc[:, ~bronze.columns.duplicated(keep="first")].copy()
+    if "_source_file" not in bronze.columns:
+        if "source_file" in bronze.columns:
+            bronze["_source_file"] = bronze["source_file"]
+        else:
+            bronze["_source_file"] = ""
+    bronze["mes_referencia"] = _extract_month_reference(
+        bronze["_source_file"],
+        bronze.get("data", pd.Series(index=bronze.index, dtype="object")),
+    )
+    bronze["month_label"] = _month_label_from_reference(bronze["mes_referencia"], bronze.get("data", pd.Series(index=bronze.index, dtype="object")))
+    return bronze
+
+
+def validate_pipeline_integrity(df_bronze: pd.DataFrame, df_silver: pd.DataFrame) -> dict[str, str]:
+    """Return month-by-month Bronze→Silver row preservation status.
+
+    Expected shape:
+      {"Month 01": "Fixed", "Month 02": "Error: Lost 3"}
+    """
+    bronze = _prepare_bronze_for_integrity(df_bronze)
+    silver = df_silver.copy()
+    if "mes_referencia" not in silver.columns:
+        source = silver.get("source_file", silver.get("_source_file", pd.Series(index=silver.index, dtype="object")))
+        silver["mes_referencia"] = _extract_month_reference(
+            source,
+            silver.get("data", pd.Series(index=silver.index, dtype="object")),
+        )
+    silver["month_label"] = _month_label_from_reference(
+        silver["mes_referencia"],
+        silver.get("data", pd.Series(index=silver.index, dtype="object")),
+    )
+
+    bronze_counts = bronze["month_label"].value_counts().to_dict()
+    silver_counts = silver["month_label"].value_counts().to_dict()
+    all_months = {f"Month {month:02d}" for month in range(1, 13)} | set(bronze_counts) | set(silver_counts)
+
+    report: dict[str, str] = {}
+    for month in sorted(all_months):
+        bronze_rows = int(bronze_counts.get(month, 0))
+        silver_rows = int(silver_counts.get(month, 0))
+        diff = bronze_rows - silver_rows
+        report[month] = "Fixed" if diff == 0 else f"Error: Lost {diff}"
+    return report
+
+
+def _enforce_zero_loss_months(integrity_report: dict[str, str], months: tuple[str, ...] = ("Month 01", "Month 02", "Month 03")) -> None:
+    failing = {month: integrity_report.get(month, "Error: Lost unknown") for month in months if integrity_report.get(month) != "Fixed"}
+    if failing:
+        raise ValueError(f"Silver integrity validation failed for required months: {failing}")
+
+
 def transform_to_silver(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, object]]:
     """Normalize RAW sales into SILVER while preserving item-grain multi-product sales.
 
@@ -633,10 +703,12 @@ def transform_to_silver(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, o
             out[col] = pd.NA
 
     silver = out[SILVER_COLUMNS].copy().reset_index(drop=True)
+    integrity_report = validate_pipeline_integrity(raw_df, silver)
     audit = {
         "rows_in": int(len(raw_df)),
         "rows_out": int(len(silver)),
         "rows_lost_during_dedup": rows_lost_total,
+        "integrity_report": integrity_report,
         **dedup_audit,
     }
     return silver, audit
@@ -1189,6 +1261,13 @@ class MedallionPipeline:
         if missing_silver_cols:
             raise ValueError(f"Silver schema inválido; colunas ausentes: {missing_silver_cols}")
         stage_ms["silver_transform"] = (perf_counter() - stage_start) * 1000
+        integrity_report = dict(silver_audit.get("integrity_report", {}))
+        logger.info("=" * 80)
+        logger.info("[PIPELINE INTEGRITY REPORT: BRONZE → SILVER]")
+        logger.info("=" * 80)
+        for month in ("Month 01", "Month 02", "Month 03"):
+            logger.info("  %s: %s", month, integrity_report.get(month, "Fixed"))
+        logger.info("=" * 80)
 
         # Optional enrichment from manual cost sheets (if available).
         manual_cost_map = _build_manual_cost_map(manual_sheets)
@@ -1215,6 +1294,8 @@ class MedallionPipeline:
         self.gold_custos_produtos, self.receitas_detalhadas = build_gold_custos_produtos(manual_sheets, manual_cost_map)
         self.gold_rentabilidade = build_gold_rentabilidade(agg_produto, self.gold_custos_produtos)
         stage_ms["gold_aggregations"] = (perf_counter() - stage_start) * 1000
+
+        _enforce_zero_loss_months(integrity_report)
 
         stage_start = perf_counter()
         self.dim_produto.to_parquet(self.gold_dir / "dim_produto.parquet", engine="pyarrow", index=False)
@@ -1303,6 +1384,7 @@ class MedallionPipeline:
             "gold_rows": int(len(self.fato_vendas)),
             "used_existing_layers": False,
             "dedup_removed": int(silver_audit.get("removed", 0)),
+            "integrity_report": integrity_report,
             "validation": validation,
             "gold_custos_rows": int(len(self.gold_custos_produtos)) if self.gold_custos_produtos is not None else 0,
             "timings_ms": {k: round(v, 2) for k, v in stage_ms.items()},
