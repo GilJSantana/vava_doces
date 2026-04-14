@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _GOLD_PRIMARY = _PROJECT_ROOT / "data" / "gold" / "custos_producao_agregado.parquet"
 _GOLD_FALLBACK = _PROJECT_ROOT / "data" / "processed" / "gold" / "custos_producao_agregado.parquet"
+_GOLD_LEGACY_PRIMARY = _PROJECT_ROOT / "data" / "gold" / "custos_producao.parquet"
+_GOLD_LEGACY_FALLBACK = _PROJECT_ROOT / "data" / "processed" / "gold" / "custos_producao.parquet"
 _DETAIL_PRIMARY = _PROJECT_ROOT / "data" / "gold" / "receitas_detalhadas.parquet"
 _DETAIL_FALLBACK = _PROJECT_ROOT / "data" / "processed" / "gold" / "receitas_detalhadas.parquet"
 
@@ -26,6 +28,20 @@ _CUSTOS_COLUMNS = [
     "qtd_ingredientes",
     "custo_producao",
 ]
+
+
+def _read_first_existing_parquet(paths: tuple[Path, ...]) -> pd.DataFrame:
+    """Read first existing parquet path from ordered candidates."""
+    for path in paths:
+        if not path.exists():
+            continue
+        try:
+            df = pd.read_parquet(path)
+            logger.info("_read_first_existing_parquet: loaded '%s' (%d row(s))", path, len(df))
+            return df
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("_read_first_existing_parquet: failed '%s' — %s", path, exc)
+    return pd.DataFrame()
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
@@ -37,29 +53,29 @@ def load_custos_producao_cached() -> pd.DataFrame:
     Tenta o caminho rápido ``data/gold/`` primeiro; recorre a
     ``data/processed/gold/`` como fallback.
     """
-    for path in (_GOLD_PRIMARY, _GOLD_FALLBACK):
-        if path.exists():
-            try:
-                df = pd.read_parquet(path)
-                logger.info(
-                    "load_custos_producao_cached: carregado de '%s' (%d linhas)", path, len(df)
-                )
-                if "nome_produto" in df.columns:
-                    df["nome_produto"] = df["nome_produto"].astype(str).str.title()
-                # Ensure numeric types for column_config NumberColumn
-                for col in ("qtd_ingredientes", "custo_producao"):
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors="coerce")
-                return df
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "load_custos_producao_cached: falha ao ler '%s' — %s", path, exc
-                )
+    df = _read_first_existing_parquet(
+        (
+            _GOLD_PRIMARY,
+            _GOLD_FALLBACK,
+            _GOLD_LEGACY_PRIMARY,
+            _GOLD_LEGACY_FALLBACK,
+        )
+    )
+    if not df.empty:
+        if "nome_produto" in df.columns:
+            df["nome_produto"] = df["nome_produto"].astype(str).str.title()
+        # Ensure numeric types for column_config NumberColumn
+        for col in ("qtd_ingredientes", "custo_producao"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df
 
     logger.warning(
-        "load_custos_producao_cached: nenhum parquet encontrado em '%s' nem '%s'",
+        "load_custos_producao_cached: nenhum parquet encontrado em '%s', '%s', '%s' nem '%s'",
         _GOLD_PRIMARY,
         _GOLD_FALLBACK,
+        _GOLD_LEGACY_PRIMARY,
+        _GOLD_LEGACY_FALLBACK,
     )
     return pd.DataFrame(columns=_CUSTOS_COLUMNS)
 
@@ -67,17 +83,13 @@ def load_custos_producao_cached() -> pd.DataFrame:
 @st.cache_data(ttl=1800)
 def load_receitas_detalhadas_cached() -> pd.DataFrame:
     """Carrega receitas_detalhadas.parquet (Gold detalhado) com fallback."""
-    for path in (_DETAIL_PRIMARY, _DETAIL_FALLBACK):
-        if path.exists():
-            try:
-                df = pd.read_parquet(path)
-                if "nome_produto" in df.columns:
-                    df["nome_produto"] = df["nome_produto"].astype(str).str.title()
-                if "custo_unitario_final" in df.columns:
-                    df["custo_unitario_final"] = pd.to_numeric(df["custo_unitario_final"], errors="coerce")
-                return df
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("load_receitas_detalhadas_cached: falha ao ler '%s' — %s", path, exc)
+    df = _read_first_existing_parquet((_DETAIL_PRIMARY, _DETAIL_FALLBACK))
+    if not df.empty:
+        if "nome_produto" in df.columns:
+            df["nome_produto"] = df["nome_produto"].astype(str).str.title()
+        if "custo_unitario_final" in df.columns:
+            df["custo_unitario_final"] = pd.to_numeric(df["custo_unitario_final"], errors="coerce")
+        return df
     return pd.DataFrame(
         columns=[
             "id_produto",
