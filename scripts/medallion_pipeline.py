@@ -280,6 +280,10 @@ def clean_cost_sheet(df: pd.DataFrame, column_map: dict[str, str]) -> pd.DataFra
             has_dot = text.str.contains(r"\.", na=False)
             mixed_mask = has_comma & has_dot
             text.loc[mixed_mask] = text.loc[mixed_mask].str.replace(".", "", regex=False)
+            # Values like "1.045" in sheets are often thousand-separated (1045),
+            # not decimal numbers. Keep decimal values (e.g., 11.16) untouched.
+            thousand_mask = (~has_comma) & has_dot & text.str.match(r"^-?\d{1,3}(\.\d{3})+$", na=False)
+            text.loc[thousand_mask] = text.loc[thousand_mask].str.replace(".", "", regex=False)
             text = text.str.replace(",", ".", regex=False)
             out[col] = pd.to_numeric(text, errors="coerce").fillna(0.0)
 
