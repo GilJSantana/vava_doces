@@ -31,10 +31,17 @@ class GoldParquetAdapter(GoldDataSource):
             gold_dir: Path to the gold layer directory. Defaults to
                       data/processed/gold/ relative to project root.
         """
+        project_root = Path(__file__).resolve().parent.parent.parent
         if gold_dir is None:
-            # Default: data/processed/gold/ relative to project root
-            gold_dir = Path(__file__).resolve().parent.parent.parent / "data" / "processed" / "gold"
-        self.gold_dir = Path(gold_dir)
+            # Canonical write path is processed/gold; keep data/gold as read fallback.
+            self._candidate_dirs = (
+                project_root / "data" / "processed" / "gold",
+                project_root / "data" / "gold",
+            )
+            self.gold_dir = self._candidate_dirs[0]
+        else:
+            self.gold_dir = Path(gold_dir)
+            self._candidate_dirs = (self.gold_dir,)
         self._cache: dict[str, pd.DataFrame] = {}
 
     def load_gold(
@@ -54,8 +61,7 @@ class GoldParquetAdapter(GoldDataSource):
         """Load a gold layer Parquet table.
 
         Args:
-            layer: Name of the table ('dim_produto', 'dim_tempo' or 'fato_vendas').
-            columns: Optional column projection to reduce I/O.
+            layer: Name of the table ('dim_produto', 'dim_tempo', or 'fato_vendas').
 
         Returns:
             DataFrame containing the requested table.
@@ -63,26 +69,32 @@ class GoldParquetAdapter(GoldDataSource):
         Raises:
             DataSourceError: If the file is missing or cannot be read.
         """
-        cache_key = layer if not columns else f"{layer}|{','.join(sorted(columns))}"
+        cache_key = f"{layer}|{','.join(sorted(columns))}" if columns else layer
         if cache_key in self._cache:
             return self._cache[cache_key].copy()
 
-        parquet_path = self.gold_dir / f"{layer}.parquet"
+        parquet_path: Path | None = None
+        for directory in self._candidate_dirs:
+            candidate = directory / f"{layer}.parquet"
+            if candidate.exists():
+                parquet_path = candidate
+                break
 
-        if not parquet_path.exists():
+        if parquet_path is None:
+            searched = "\n".join([str(d / f"{layer}.parquet") for d in self._candidate_dirs])
             raise DataSourceError(
-                f"Gold layer file not found: {parquet_path}\n"
+                "Gold layer file not found. Checked:\n"
+                f"{searched}\n"
                 "Run 'python scripts/medallion_pipeline.py' first to generate gold tables."
             )
 
         try:
-            read_kwargs = {"engine": "pyarrow"}
+            read_kwargs: dict[str, object] = {"engine": "pyarrow"}
             if columns:
                 read_kwargs["columns"] = columns
             try:
                 df = pd.read_parquet(parquet_path, **read_kwargs)
             except Exception:
-                # Fallback for schema drifts: read full table and keep requested columns present.
                 if not columns:
                     raise
                 full_df = pd.read_parquet(parquet_path, engine="pyarrow")
