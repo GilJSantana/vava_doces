@@ -139,6 +139,39 @@ def test_build_gold_custos_produtos_scales_grams_against_kg_material_base():
     assert gold_agregado.loc[0, "custo_producao"] == pytest.approx(0.1434)
 
 
+def test_build_gold_custos_produtos_links_receitas_by_product_name_when_id_missing():
+    manual_sheets = {
+        "materia_prima": pd.DataFrame(
+            [
+                {
+                    "ingrediente_id": "ING-001",
+                    "nome_ingrediente": "Chocolate",
+                    "unidade": "g",
+                    "custo_unit": "20",
+                    "rendimento_embalagem": "1000",
+                },
+            ]
+        ),
+        "receitas": pd.DataFrame(
+            [
+                {"produto_id": "", "nome_produto": "Brigadeiro", "ingrediente_id": "ING-001", "qtd": "100", "unidade": "g"},
+            ]
+        ),
+        "produtos": pd.DataFrame(
+            [
+                {"produto_id": "PROD-001", "nome": "Brigadeiro"},
+            ]
+        ),
+    }
+
+    gold_agregado, gold_detalhado = build_gold_custos_produtos(manual_sheets, {})
+
+    assert len(gold_detalhado) == 1
+    assert gold_detalhado.loc[0, "id_produto"] == "PROD-001"
+    assert gold_agregado.loc[0, "id_produto"] == "PROD-001"
+    assert gold_agregado.loc[0, "qtd_ingredientes"] == 1
+
+
 
 
 
