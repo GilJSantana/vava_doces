@@ -566,7 +566,13 @@ def _extract_month_reference(source_file: pd.Series, dates: pd.Series) -> pd.Ser
 
 
 def transform_to_silver(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, object]]:
-    """Normalize RAW sales into SILVER without removing any rows."""
+    """Normalize RAW sales into SILVER while preserving item-grain multi-product sales.
+
+    Row Loss Tracking:
+    - Logs any deduplication at item-grain (item with all identifying columns identical)
+    - Reports lost rows by month for audit trail
+    - Preserves all rows with same num_venda but different product (multi-item orders)
+    """
     out = _normalise_columns(raw_df)
     if out.columns.duplicated().any():
         out = out.loc[:, ~out.columns.duplicated(keep="first")].copy()
@@ -583,7 +589,11 @@ def transform_to_silver(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, o
         else:
             out["_source_file"] = ""
 
+    # Track row count before dedup for month-based reporting
+    rows_before_dedup = len(out)
     out, dedup_audit = _deduplicate_with_audit(out)
+    rows_after_dedup = len(out)
+    rows_lost_total = rows_before_dedup - rows_after_dedup
 
     source_file = out["_source_file"].fillna("").astype(str)
     out["source_file"] = source_file
@@ -593,6 +603,31 @@ def transform_to_silver(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, o
     out["data_carga"] = load_ts
     out["mes_referencia"] = _extract_month_reference(source_file, out.get("data", pd.Series(index=out.index, dtype="object")))
 
+    # Detailed month-by-month loss reporting
+    if rows_lost_total > 0 and "mes_referencia" in out.columns:
+        logger.warning("[DEDUP LOSS ANALYSIS BY MONTH]")
+        # Get original data for comparison
+        out_orig = _normalise_columns(raw_df)
+        out_orig.columns = [_normalise_header(c) for c in out_orig.columns]
+        available = {k: v for k, v in _RAW_TO_SILVER.items() if k in out_orig.columns}
+        out_orig = out_orig[list(available.keys())].rename(columns=available).copy()
+        out_orig = _coerce_types(out_orig)
+        if "_source_file" not in out_orig.columns:
+            out_orig["_source_file"] = ""
+        out_orig["mes_referencia"] = _extract_month_reference(
+            out_orig["_source_file"],
+            out_orig.get("data", pd.Series(index=out_orig.index, dtype="object"))
+        )
+
+        for month in sorted(out_orig["mes_referencia"].unique()):
+            if month is None or str(month).strip() == "":
+                continue
+            month_before = len(out_orig[out_orig["mes_referencia"] == month])
+            month_after = len(out[out["mes_referencia"] == month])
+            month_loss = month_before - month_after
+            if month_loss > 0:
+                logger.warning("  %s: %d → %d (lost %d rows)", month, month_before, month_after, month_loss)
+
     for col in SILVER_COLUMNS:
         if col not in out.columns:
             out[col] = pd.NA
@@ -601,6 +636,7 @@ def transform_to_silver(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, o
     audit = {
         "rows_in": int(len(raw_df)),
         "rows_out": int(len(silver)),
+        "rows_lost_during_dedup": rows_lost_total,
         **dedup_audit,
     }
     return silver, audit
@@ -746,6 +782,17 @@ def validate_star_schema(
     dim_tempo: pd.DataFrame,
     silver_rows: Optional[int] = None,
 ) -> dict[str, object]:
+    """Validate the Star Schema Integrity.
+
+    Key Validation:
+    - Foreign key referential integrity (all produto_id and data_id exist in dimensions)
+    - Primary key uniqueness (no null venda_id)
+    - Total row count consistency between Silver (source) and Gold (fato_vendas)
+    - No infinite margin values
+
+    Note: The grain is ITEM (one row = one line item from an order),
+    so multiple rows with same num_venda but different products are expected and correct.
+    """
     results: dict[str, object] = {}
     valid_pids = set(dim_produto.get("produto_id", pd.Series(dtype="int64")).dropna())
     valid_dids = set(dim_tempo.get("data_id", pd.Series(dtype="int64")).dropna())
@@ -765,10 +812,22 @@ def validate_star_schema(
     results["fato_rows"] = len(fato)
     results["dim_produto_rows"] = len(dim_produto)
     results["dim_tempo_rows"] = len(dim_tempo)
+
     if silver_rows is not None:
+        # Critical validation: Total rows in SILVER must equal total rows in GOLD (fato_vendas)
+        # Each Silver row should map to exactly one fato row (item-grain preservation)
         row_diff = int(len(fato) - int(silver_rows))
         results["silver_gold_rowcount_ok"] = row_diff == 0
         results["silver_gold_rowcount_diff"] = row_diff
+
+        if row_diff != 0:
+            logger.warning(
+                "[STAR SCHEMA VALIDATION] Row count mismatch: Silver %d → Gold fato_vendas %d (diff: %d)",
+                silver_rows,
+                len(fato),
+                row_diff,
+            )
+
     results["all_ok"] = all(v for v in results.values() if isinstance(v, bool))
     return results
 
@@ -1211,6 +1270,27 @@ class MedallionPipeline:
         stage_ms["persist_parquet"] = (perf_counter() - stage_start) * 1000
 
         validation = validate_star_schema(self.fato_vendas, self.dim_produto, self.dim_tempo, len(self.silver_df))
+
+        # Log detailed validation results
+        logger.info("="*80)
+        logger.info("[STAR SCHEMA VALIDATION RESULTS]")
+        logger.info("="*80)
+        logger.info("Foreign Key Integrity:")
+        logger.info("  produto_id: %s (%d orphans)", "✅ OK" if validation["fk_produto_id_ok"] else "❌ FAIL", validation["fk_produto_id_orphans"])
+        logger.info("  data_id: %s (%d orphans)", "✅ OK" if validation["fk_data_id_ok"] else "❌ FAIL", validation["fk_data_id_orphans"])
+        logger.info("Primary Key Integrity:")
+        logger.info("  venda_id: %s (%d nulls)", "✅ OK" if validation["pk_venda_id_ok"] else "❌ FAIL", validation["pk_venda_id_nulls"])
+        logger.info("Row Count Consistency:")
+        logger.info("  Silver → Gold: %d → %d (diff: %d) %s",
+                   len(self.silver_df),
+                   len(self.fato_vendas),
+                   validation["silver_gold_rowcount_diff"],
+                   "✅ OK" if validation["silver_gold_rowcount_ok"] else "❌ MISMATCH")
+        logger.info("Other Checks:")
+        logger.info("  Infinite margins: %s", "✅ None" if validation["margem_no_inf_ok"] else f"❌ {validation['margem_inf_count']} found")
+        logger.info("Overall Status: %s", "✅ PASSED" if validation["all_ok"] else "❌ FAILED")
+        logger.info("="*80)
+
         try:
             DataQualityValidator(verbose=False).validate_all(self.dim_produto, self.dim_tempo, self.fato_vendas)
         except Exception:
