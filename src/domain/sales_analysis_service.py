@@ -528,15 +528,60 @@ def _non_empty_mask(df: pd.DataFrame, columns: list[str]) -> pd.Series:
     return mask
 
 
+def _build_exact_duplicate_subset(df: pd.DataFrame) -> list[str]:
+    """Return stable columns for exact same-file duplicate detection.
+
+    The subset prioritizes business identity columns requested for Silver dedup
+    (date, product, quantity, unit price) and then appends any remaining raw
+    business columns so that only absolute duplicates are removed.
+    """
+    preferred = [
+        "data",
+        "produto",
+        "quantidade",
+        "valor_unitario",
+        "num_venda",
+        "cliente",
+        "valor_bruto",
+        "valor_liquido",
+        "valor_total",
+        "desconto",
+        "tipo_item",
+        "tipo_negociacao",
+        "nota_fiscal",
+        "unidade_medida",
+        "cidade_cliente",
+        "peso_bruto",
+        "peso_total",
+        "produto_key",
+        "custo",
+    ]
+    excluded = {
+        "_is_duplicate",
+        "_is_suspected_duplicate",
+        "_duplicate_signature",
+        "_source_file",
+        "source_file",
+        "arquivo_origem",
+        "mes_referencia",
+        "ingested_at_utc",
+        "data_carga",
+    }
+    subset: list[str] = [col for col in preferred if col in df.columns and col not in excluded]
+    remaining = [col for col in df.columns if col not in excluded and col not in subset]
+    return subset + remaining
+
+
 def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
-    """Remove EXACT same-file duplicates only while preserving legitimate multi-item sales.
+    """Audit exact duplicate-like rows without removing Silver-layer sales.
 
     Strategy
     --------
-    1. Detect and REMOVE only true identical rows (all business columns match).
+    1. Detect exact same-file duplicate-like rows using stable business columns.
     2. Preserve rows with same num_venda but different produto/quantidade/valor (multi-item sales).
-    3. Use an expanded subset including date, product, amount, and quantity to identify true duplicates.
-    4. Never use only order-level keys because one sale can have multiple product lines.
+    3. Preserve even exact duplicate-looking source rows in Silver, because this source
+       has no reliable immutable line-item ID and business-valid rows may repeat exactly.
+    4. Keep the duplicate audit trail for operator review.
 
     Critical Change: This function now preserves the 6, 8, 27 lost rows per month.
     """
@@ -546,9 +591,11 @@ def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         "after":    0,
         "removed":  0,
         "key_columns":            [],
-        "dedup_scope":            "expanded_item_grain",
+        "dedup_scope":            "audit_only",
         "removed_by_source_file": {},
         "removed_by_month":       {},
+        "detected_exact_by_source_file": {},
+        "detected_exact_by_month": {},
         "transaction_key_dedup":  {
             "applied":       False,
             "key_columns":   [],
@@ -567,85 +614,70 @@ def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
     working = df.copy()
     working["_is_duplicate"] = False
+    working["_is_suspected_duplicate"] = False
+    tx_key_columns = _resolve_dedup_key_columns(working)
+    reliable_mask = _non_empty_mask(working, tx_key_columns)
+    duplicate_mask = pd.Series(False, index=working.index)
 
-    # Expand the dedup key to include ALL identifying columns for the item grain.
-    # This ensures we only remove rows that are 100% identical across:
-    #   - Date (when the sale occurred)
-    #   - Product (what was sold)
-    #   - Amount/Quantity (how much)
-    #   - Unit price / Total value (financial identity)
-    #   - Client (who bought)
-    dedup_key_columns = []
-    for col in [
-        "data",              # Date of sale
-        "num_venda",         # Order ID
-        "cliente",           # Client name
-        "produto",           # Product name
-        "produto_key",       # Normalized product key
-        "quantidade",        # Quantity
-        "valor_unitario",    # Unit price
-        "valor_bruto",       # Gross value
-        "valor_liquido",     # Net value
-        "valor_total",       # Total value
-        "desconto",          # Discount applied
-        "tipo_item",         # Item type
-    ]:
-        if col in working.columns:
-            dedup_key_columns.append(col)
+    dedup_key_columns = _build_exact_duplicate_subset(working)
+    if dedup_key_columns:
+        signature_frame = working[dedup_key_columns].copy()
+        for col in signature_frame.columns:
+            if pd.api.types.is_datetime64_any_dtype(signature_frame[col]):
+                signature_frame[col] = pd.to_datetime(signature_frame[col], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S")
+            signature_frame[col] = signature_frame[col].astype("string").fillna("<NA>").str.strip()
+        working["_duplicate_signature"] = pd.util.hash_pandas_object(signature_frame, index=False).astype("uint64")
 
-    # Only remove rows that are 100% identical across the expanded item-grain key.
-    if dedup_key_columns and "_source_file" in working.columns:
-        # Within same source file, detect exact duplicates
-        subset_exact = ["_source_file"] + dedup_key_columns
-        duplicate_mask = working.duplicated(subset=subset_exact, keep="first")
-        working.loc[duplicate_mask, "_is_duplicate"] = True
+        if "_source_file" in working.columns:
+            subset_exact = ["_source_file", "_duplicate_signature"]
+            duplicate_mask = working.duplicated(subset=subset_exact, keep="first")
+            scope_label = "same-file"
+        else:
+            duplicate_mask = working.duplicated(subset=["_duplicate_signature"], keep="first")
+            scope_label = "global"
 
         if duplicate_mask.any():
             logger.info(
-                "_deduplicate_with_audit: Detected %d exact duplicates within same file(s) "
-                "(expanded item-grain key: %s)",
+                "_deduplicate_with_audit: detected %d exact duplicate-like row(s) in %s scope "
+                "(stable columns: %s), but Silver removal is disabled.",
                 int(duplicate_mask.sum()),
-                dedup_key_columns,
-            )
-    elif dedup_key_columns:
-        # No source file info; use global dedup across all columns
-        duplicate_mask = working.duplicated(subset=dedup_key_columns, keep="first")
-        working.loc[duplicate_mask, "_is_duplicate"] = True
-
-        if duplicate_mask.any():
-            logger.info(
-                "_deduplicate_with_audit: Detected %d exact duplicates globally "
-                "(expanded item-grain key: %s)",
-                int(duplicate_mask.sum()),
+                scope_label,
                 dedup_key_columns,
             )
 
-    # Remove the marked exact duplicates.
-    duplicate_rows = working[working["_is_duplicate"]].copy()
-    deduped = working.loc[~working["_is_duplicate"]].drop(
-        columns=[c for c in ("_is_duplicate",) if c in working.columns]
-    ).reset_index(drop=True)
-    removed = int(len(duplicate_rows))
+    detected_rows = working.loc[duplicate_mask.index[duplicate_mask]] if dedup_key_columns else pd.DataFrame(columns=working.columns)
+    deduped = working.drop(columns=[c for c in ("_is_duplicate", "_duplicate_signature") if c in working.columns]).reset_index(drop=True)
+    removed = 0
 
-    removed_by_source: dict = {}
-    if not duplicate_rows.empty and "_source_file" in duplicate_rows.columns:
-        removed_by_source = (
-            duplicate_rows["_source_file"].fillna("unknown").astype(str)
+    detected_by_source: dict = {}
+    if not detected_rows.empty and "_source_file" in detected_rows.columns:
+        detected_by_source = (
+            detected_rows["_source_file"].fillna("unknown").astype(str)
             .value_counts().to_dict()
         )
 
-    removed_by_month: dict = {}
-    if not duplicate_rows.empty and "data" in duplicate_rows.columns:
-        months = pd.to_datetime(duplicate_rows["data"], errors="coerce").dt.to_period("M")
-        removed_by_month = months.dropna().astype(str).value_counts().sort_index().to_dict()
+    detected_by_month: dict = {}
+    if not detected_rows.empty and "data" in detected_rows.columns:
+        months = pd.to_datetime(detected_rows["data"], errors="coerce").dt.to_period("M")
+        detected_by_month = months.dropna().astype(str).value_counts().sort_index().to_dict()
 
-    if removed > 0:
-        logger.warning(
-            "_deduplicate_with_audit: REMOVED %d exact duplicate row(s) "
-            "(by source file: %s, by month: %s)",
-            removed,
-            removed_by_source,
-            removed_by_month,
+    suspect_subset = [c for c in ("num_venda", "produto_key") if c in working.columns]
+    suspect_pool = ~reliable_mask if tx_key_columns else pd.Series(True, index=working.index)
+    if suspect_subset and suspect_pool.any() and "_source_file" in working.columns:
+        suspect_block = working.loc[suspect_pool, suspect_subset + ["_source_file"]].copy()
+        suspect_block["_source_file_norm"] = suspect_block["_source_file"].fillna("unknown").astype(str)
+        multi_source_mask = suspect_block.groupby(suspect_subset)["_source_file_norm"].transform("nunique") > 1
+        working.loc[suspect_block.index, "_is_suspected_duplicate"] = multi_source_mask.to_numpy()
+    elif suspect_subset and suspect_pool.any():
+        suspect_mask = working.loc[suspect_pool].duplicated(subset=suspect_subset, keep=False)
+        working.loc[suspect_mask.index, "_is_suspected_duplicate"] = suspect_mask.to_numpy()
+
+    suspected_rows = int(working["_is_suspected_duplicate"].sum())
+    suspected_by_source: dict = {}
+    if suspected_rows and "_source_file" in working.columns:
+        suspected_by_source = (
+            working.loc[working["_is_suspected_duplicate"], "_source_file"]
+            .fillna("unknown").astype(str).value_counts().to_dict()
         )
 
     audit = {
@@ -653,20 +685,22 @@ def _deduplicate_with_audit(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         "after":    int(len(deduped)),
         "removed":  removed,
         "key_columns":            dedup_key_columns,
-        "dedup_scope":            "exact_item_grain_same_file",
-        "removed_by_source_file": removed_by_source,
-        "removed_by_month":       removed_by_month,
+        "dedup_scope":            "audit_only_exact_item_grain_same_file",
+        "removed_by_source_file": {},
+        "removed_by_month":       {},
+        "detected_exact_by_source_file": detected_by_source,
+        "detected_exact_by_month": detected_by_month,
         "transaction_key_dedup":  {
-            "applied":       False,
-            "key_columns":   dedup_key_columns,
-            "reliable_rows": before,
+            "applied":       bool(tx_key_columns and reliable_mask.any()),
+            "key_columns":   tx_key_columns,
+            "reliable_rows": int(reliable_mask.sum()),
             "removed_rows":  removed,
         },
         "suspected_duplicates": {
-            "count":          0,
-            "key_columns":    [],
-            "rows_kept":      0,
-            "by_source_file": {},
+            "count":          suspected_rows,
+            "key_columns":    suspect_subset,
+            "rows_kept":      suspected_rows,
+            "by_source_file": suspected_by_source,
         },
     }
     return deduped, audit
