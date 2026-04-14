@@ -369,6 +369,11 @@ def build_gold_custos_produtos(
 
     if "produto_id" not in receitas.columns:
         receitas["produto_id"] = ""
+    if "nome_produto" not in receitas.columns:
+        if "produto" in receitas.columns:
+            receitas["nome_produto"] = receitas["produto"]
+        else:
+            receitas["nome_produto"] = ""
     if "ingrediente_id" not in receitas.columns:
         receitas["ingrediente_id"] = ""
     if "qtd" not in receitas.columns:
@@ -395,14 +400,6 @@ def build_gold_custos_produtos(
     rec = receitas.copy()
     rec["id_produto"] = rec["produto_id"].astype("string").str.strip().str.upper()
     rec["id_ingrediente"] = rec["ingrediente_id"].astype("string").str.strip()
-    rec = rec.dropna(subset=["id_produto", "id_ingrediente"]).copy()
-    rec_prod_key = rec["id_produto"].astype(str).str.strip().str.lower()
-    rec = rec[~rec_prod_key.isin({"", "nan", "none", "nat"})].copy()
-    rec_ing_key = rec["id_ingrediente"].astype(str).str.strip().str.lower()
-    rec = rec[~rec_ing_key.isin({"", "nan", "none", "nat"})].copy()
-    rec["qtd_receita"] = pd.to_numeric(rec["qtd"], errors="coerce").fillna(0.0)
-    rec["unidade"] = rec["unidade"].fillna("").astype(str).str.strip()
-    rec["ingrediente_key"] = rec["id_ingrediente"].astype(str).str.strip().str.lower()
 
     prod = produtos.copy()
     prod["id_produto"] = prod["produto_id"].astype("string").str.strip().str.upper()
@@ -411,6 +408,29 @@ def build_gold_custos_produtos(
     prod_key = prod["id_produto"].astype(str).str.strip().str.lower()
     prod = prod[~prod_key.isin({"", "nan", "none", "nat"})].copy()
     prod = prod.drop_duplicates(subset=["id_produto"], keep="first")
+
+    # Costs/recipes domain isolation: resolve missing product IDs using product-name mapping
+    # only within manual_sheets tabs; sales dedup/hash logic is not used here.
+    rec_name_key = rec.get("nome_produto", pd.Series(index=rec.index, dtype="object")).astype(str).map(_normalise_value)
+    prod_name_key = prod.get("nome", pd.Series(index=prod.index, dtype="object")).astype(str).map(_normalise_value)
+    name_to_id = {
+        str(name_key): str(pid)
+        for name_key, pid in zip(prod_name_key, prod["id_produto"], strict=False)
+        if str(name_key).strip() not in {"", "nan", "none"}
+    }
+    missing_id_mask = rec["id_produto"].astype("string").fillna("").str.strip().str.upper().isin({"", "NAN", "NONE", "NAT"})
+    if missing_id_mask.any():
+        rec.loc[missing_id_mask, "id_produto"] = rec_name_key.loc[missing_id_mask].map(name_to_id).fillna("")
+        rec["id_produto"] = rec["id_produto"].astype("string").str.strip().str.upper()
+
+    rec = rec.dropna(subset=["id_produto", "id_ingrediente"]).copy()
+    rec_prod_key = rec["id_produto"].astype(str).str.strip().str.lower()
+    rec = rec[~rec_prod_key.isin({"", "nan", "none", "nat"})].copy()
+    rec_ing_key = rec["id_ingrediente"].astype(str).str.strip().str.lower()
+    rec = rec[~rec_ing_key.isin({"", "nan", "none", "nat"})].copy()
+    rec["qtd_receita"] = pd.to_numeric(rec["qtd"], errors="coerce").fillna(0.0)
+    rec["unidade"] = rec["unidade"].fillna("").astype(str).str.strip()
+    rec["ingrediente_key"] = rec["id_ingrediente"].astype(str).str.strip().str.lower()
 
     mp = materia.copy()
     mp["id_ingrediente"] = mp["ingrediente_id"].astype("string").str.strip()
