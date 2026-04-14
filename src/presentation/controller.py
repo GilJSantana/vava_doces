@@ -5,6 +5,7 @@ import logging
 import os
 from time import perf_counter
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,16 +24,36 @@ def _log_perf_step(step_name: str, start_time: float) -> None:
 def run_app_controller(
     render_header_fn: Callable[[], None],
     render_sidebar_fn: Callable[[], tuple[object | None, str]],
-    render_page_fn: Callable[[str], None],
+    render_page_fn: Callable[..., None],
+    init_services_fn: Callable[[object], tuple[object | None, object | None]] | None = None,
 ) -> None:
-    """Executa o fluxo principal do app com navegação desacoplada de serviços."""
+    """Executa fluxo principal da aplicação com compatibilidade retroativa.
+
+    Compat modes:
+    - legado: ``render_page_fn(page)`` sem injeção de serviços.
+    - novo: ``render_page_fn(page, service, product_service)`` com ``init_services_fn``.
+    """
     render_header_fn()
 
     start_time = perf_counter()
-    _adapter, page = render_sidebar_fn()
+    adapter, page = render_sidebar_fn()
     _log_perf_step("render_sidebar", start_time)
 
+    # Legacy flow: render selected page directly, even if adapter is missing.
+    if init_services_fn is None:
+        start_time = perf_counter()
+        render_page_fn(page)
+        _log_perf_step(f"render_page:{page}", start_time)
+        return
+
+    service = None
+    product_service = None
+    if adapter is not None:
+        start_time = perf_counter()
+        service, product_service = init_services_fn(adapter)
+        _log_perf_step("init_services", start_time)
+
     start_time = perf_counter()
-    render_page_fn(page)
+    render_page_fn(page, service, product_service)
     _log_perf_step(f"render_page:{page}", start_time)
 

@@ -129,13 +129,23 @@ def get_adapter():
         return None
 
 
-def render_selected_page(page: str) -> None:
-    """Despacha renderização da página selecionada."""
+def render_selected_page(
+    page: str,
+    service: object | None = None,
+    product_service: object | None = None,
+) -> None:
+    """Despacha renderização da página selecionada.
+
+    Compatível com handlers legado (sem args) e novo (service, product_service).
+    """
     handler = PAGE_HANDLERS.get(page)
     if handler is None:
         st.error("❌ Página inválida selecionada")
         return
-    handler()
+    try:
+        handler(service, product_service)
+    except TypeError:
+        handler()
 
 
 def main():
