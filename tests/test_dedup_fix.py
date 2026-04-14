@@ -45,8 +45,8 @@ def test_preserve_multiproduct_same_order():
     assert deduped.iloc[1]["produto"] == "Brigadeiro"
 
 
-def test_remove_exact_duplicates_same_order():
-    """Verify that truly identical rows ARE removed."""
+def test_audit_exact_duplicates_same_order_without_removal():
+    """Verify that truly identical rows are audited but preserved in Silver."""
     # Create sample data: one order with one product, duplicated row
     data = {
         "data": ["2024-01-15", "2024-01-15"],
@@ -62,9 +62,10 @@ def test_remove_exact_duplicates_same_order():
 
     deduped, audit = _deduplicate_with_audit(df)
 
-    # One duplicate should be removed, keeping the first
-    assert len(deduped) == 1, f"Expected 1 row, got {len(deduped)}"
-    assert audit["removed"] == 1, f"Expected 1 removed, got {audit['removed']}"
+    # Both rows are preserved because Silver must match Bronze exactly.
+    assert len(deduped) == 2, f"Expected 2 rows, got {len(deduped)}"
+    assert audit["removed"] == 0, f"Expected 0 removed, got {audit['removed']}"
+    assert audit["detected_exact_by_source_file"] == {"sales_01_2024.csv": 1}
 
 
 def test_preserve_same_product_different_dates():
@@ -115,8 +116,8 @@ if __name__ == "__main__":
     test_preserve_multiproduct_same_order()
     print("✅ test_preserve_multiproduct_same_order PASSED")
 
-    test_remove_exact_duplicates_same_order()
-    print("✅ test_remove_exact_duplicates_same_order PASSED")
+    test_audit_exact_duplicates_same_order_without_removal()
+    print("✅ test_audit_exact_duplicates_same_order_without_removal PASSED")
 
     test_preserve_same_product_different_dates()
     print("✅ test_preserve_same_product_different_dates PASSED")
@@ -125,4 +126,5 @@ if __name__ == "__main__":
     print("✅ test_preserve_same_product_different_quantities PASSED")
 
     print("\n✅ All tests passed!")
+
 

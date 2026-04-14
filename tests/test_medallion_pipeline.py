@@ -434,7 +434,7 @@ class TestTransactionKeyDedupRules:
             "plataforma", "codigo_venda", "identificador_item"
         ]
 
-    def test_ifood_same_order_line_repeated_in_same_file_is_deduplicated(self):
+    def test_ifood_same_order_line_repeated_in_same_file_is_audited_without_removal(self):
         df = pd.DataFrame([
             {
                 "_source_file": "ifood_2026_02.csv",
@@ -457,8 +457,9 @@ class TestTransactionKeyDedupRules:
         ])
 
         deduped, audit = _deduplicate_with_audit(df)
-        assert len(deduped) == 1
-        assert audit["removed"] == 1
+        assert len(deduped) == 2
+        assert audit["removed"] == 0
+        assert audit["detected_exact_by_source_file"] == {"ifood_2026_02.csv": 1}
 
     def test_same_order_multiple_items_without_item_id_are_preserved(self):
         """One order can have multiple product lines; do not dedup by order key alone."""

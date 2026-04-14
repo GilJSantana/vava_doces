@@ -227,14 +227,14 @@ class TestDeduplicate:
         result = _deduplicate(df)
         assert len(result) == 3
 
-    def test_removes_technical_duplicates_inside_same_file(self):
+    def test_preserves_technical_duplicates_inside_same_file_for_audit(self):
         df = pd.DataFrame([
             {"num_venda": "001", "produto_key": "brigadeiro", "_source_file": "jan.csv"},
             {"num_venda": "001", "produto_key": "brigadeiro", "_source_file": "jan.csv"},
             {"num_venda": "002", "produto_key": "risole", "_source_file": "jan.csv"},
         ])
         result = _deduplicate(df)
-        assert len(result) == 2
+        assert len(result) == 3
 
     def test_no_duplicates_unchanged(self):
         df = pd.DataFrame([
@@ -244,7 +244,7 @@ class TestDeduplicate:
         result = _deduplicate(df)
         assert len(result) == 2
 
-    def test_deduplicate_with_audit_reports_removed_count(self):
+    def test_deduplicate_with_audit_reports_detected_count_without_row_loss(self):
         df = pd.DataFrame([
             {
                 "num_venda": "001",
@@ -266,12 +266,12 @@ class TestDeduplicate:
             },
         ])
         deduped, audit = _deduplicate_with_audit(df)
-        assert len(deduped) == 2
+        assert len(deduped) == 3
         assert audit["before"] == 3
-        assert audit["after"] == 2
-        assert audit["removed"] == 1
-        assert audit["dedup_scope"] == "same_file_only"
-        assert sum(audit["removed_by_source_file"].values()) == 1
+        assert audit["after"] == 3
+        assert audit["removed"] == 0
+        assert audit["dedup_scope"] == "audit_only_exact_item_grain_same_file"
+        assert sum(audit["detected_exact_by_source_file"].values()) == 1
 
 
 # ---------------------------------------------------------------------------
