@@ -131,7 +131,7 @@ f5fc0b4 - ⭐ UI: Faturamento exibe TODOS os itens
   DOCUMENTAÇÃO
 ================================================================================
 
-📄 COMMITS_IMPLEMENTADOS.txt
+📄 commits_implementados.md
    └─ Resumo completo de cada commit
 
 📄 RESUMO_COMMITS_FINAIS.md

@@ -27,12 +27,19 @@ Este espaco foi consolidado para refletir o MVP em producao: foco executivo em r
 
 - `docs/operacional/GUIA_INICIALIZACAO.md`
 - `docs/operacional/COMANDOS_PUSH.md`
-- `docs/operacional/COMMITS_IMPLEMENTADOS.txt`
+- `docs/operacional/commits_implementados.md`
 
 ## Arquivo Historico
 
 - `docs/archive/releases/PROJETO_CONCLUIDO_FINAL.md`
 - `docs/archive/releases/PROJETO_FINALIZADO.md`
-- `docs/archive/legacy_root/QUICK_START.txt`
-- `docs/archive/legacy_root/REFERENCIA_RAPIDA.txt`
-- `docs/archive/legacy_root/RESUMO_PROJETO_ASCII.txt`
+- `docs/archive/dedup_fix/2026-04/legacy_exports/quick_start.md`
+- `docs/archive/dedup_fix/2026-04/legacy_exports/referencia_rapida.md`
+- `docs/archive/dedup_fix/2026-04/legacy_exports/resumo_projeto_ascii.md`
+- `docs/archive/dedup_fix/COMMITS_DEDUP_FIX.md`
+- `docs/archive/dedup_fix/DEDUP_FIX_IMPLEMENTATION.md`
+- `docs/archive/dedup_fix/TASK_COMPLETION_SUMMARY.md`
+- `docs/archive/streamlit_width_refactor_2026_04/FINAL_EXECUTION_SUMMARY.md`
+- `docs/archive/streamlit_width_refactor_2026_04/REFACTORING_SUMMARY.md`
+- `docs/archive/streamlit_width_refactor_2026_04/TECHNICAL_REFACTORING_REPORT.md`
+- `docs/archive/streamlit_width_refactor_2026_04/refactoring_verification.md`

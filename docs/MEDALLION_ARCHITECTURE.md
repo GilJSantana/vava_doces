@@ -474,7 +474,7 @@ LIMIT 10;
 - [Quick Start: Faturamento Page](QUICK_START_FATURAMENTO.md)
 - [Gold Layer Integration Guide](GOLD_LAYER_INTEGRATION.md)
 - [Parsing Dates: Developer Guide](GUIA_TESTE_STREAMLIT.md)
-- [Refactoring Summary](REFACTORING_SUMMARY.md)
+- [Refactoring Summary](archive/streamlit_width_refactor_2026_04/REFACTORING_SUMMARY.md)
 
 ---
 

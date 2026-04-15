@@ -154,10 +154,10 @@
                       DOCUMENTAÇÃO GERADA
 ================================================================================
 
-  📄 REFERENCIA_RAPIDA.txt
+  📄 referencia_rapida.md
      └─ Guia rápido para desenvolvedores
 
-  📄 COMMITS_IMPLEMENTADOS.txt
+  📄 commits_implementados.md
      └─ Detalhes completos de cada commit
 
   📄 CONCLUSAO_FINAL.md
@@ -277,17 +277,17 @@
     $ git status
 
   Ver próximos passos:
-    $ cat REFERENCIA_RAPIDA.txt
+    $ cat referencia_rapida.md
 
 ================================================================================
                       CONTATO / SUPORTE
 ================================================================================
 
   Problemas técnicos:
-    → Consultar REFERENCIA_RAPIDA.txt
+    → Consultar referencia_rapida.md
 
   Dúvidas sobre commits:
-    → Ver COMMITS_IMPLEMENTADOS.txt
+    → Ver commits_implementados.md
 
   Entender a arquitetura:
     → Ler docs/MEDALION_ARCHITECTURE.md

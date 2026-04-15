@@ -60,7 +60,7 @@ Vava_doces/
 ├── app.py                          ✅ Aplicação Streamlit (refatorada)
 ├── README.md                       ✅ Documentação principal
 ├── PROJETO_FINALIZADO.md           ✅ Resumo do projeto
-├── QUICK_START.txt                 ✅ Guia rápido
+├── quick_start.md                  ✅ Guia rapido
 │
 ├── scripts/                        📂 Scripts utilitários
 │   ├── convert_to_sheets.py
