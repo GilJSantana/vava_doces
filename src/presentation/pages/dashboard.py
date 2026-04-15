@@ -645,7 +645,7 @@ def _render_decision_table(df: pd.DataFrame) -> None:
     try:
         st.dataframe(
             styled.hide(axis="columns", subset=["Margem (%) Numérica"]),
-            use_container_width=True,
+            width="stretch",
             column_config={
                 "Quantidade Vendida": st.column_config.NumberColumn("Quantidade Vendida", format="%.0f"),
                 # Keep numeric source columns for sorting; style handles final text formatting.
@@ -657,7 +657,7 @@ def _render_decision_table(df: pd.DataFrame) -> None:
         )
     except Exception:
         # Fallback to style-only render when column_config has compatibility issues.
-        st.dataframe(styled.hide(axis="columns", subset=["Margem (%) Numérica"]), use_container_width=True)
+        st.dataframe(styled.hide(axis="columns", subset=["Margem (%) Numérica"]), width="stretch")
 
 def show_dashboard() -> None:
     """Render dashboard with profitability, concentration and pricing priorities."""

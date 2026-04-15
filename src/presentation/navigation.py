@@ -27,7 +27,7 @@ def render_sidebar(
             unsafe_allow_html=True,
         )
 
-        if st.button("🔄 Atualizar dados", use_container_width=True):
+        if st.button("🔄 Atualizar dados", width="stretch"):
             # Clear both resource and data caches so updated parquet/raw data is visible.
             st.cache_data.clear()
             st.cache_resource.clear()

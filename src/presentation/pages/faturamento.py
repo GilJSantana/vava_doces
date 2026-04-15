@@ -271,7 +271,7 @@ def show_faturamento() -> None:
                 data=csv_data,
                 file_name="faturamento_filtrado.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
 
         xlsx_data = to_excel_bytes(df_filtered)
@@ -281,6 +281,6 @@ def show_faturamento() -> None:
                 data=xlsx_data,
                 file_name="faturamento_filtrado.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
+                width="stretch",
             )
 
