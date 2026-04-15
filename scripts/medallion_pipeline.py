@@ -389,6 +389,8 @@ def build_gold_custos_produtos(
         produtos["produto_id"] = ""
     if "nome" not in produtos.columns:
         produtos["nome"] = produtos["produto_id"]
+    if "rendimento" not in produtos.columns:
+        produtos["rendimento"] = 1.0
 
     if "ingrediente_id" not in materia.columns:
         materia["ingrediente_id"] = materia.get("item", "")
@@ -408,6 +410,7 @@ def build_gold_custos_produtos(
     prod = produtos.copy()
     prod["id_produto"] = prod["produto_id"].astype("string").str.strip().str.upper()
     prod["nome"] = prod["nome"].fillna("").astype(str).str.strip()
+    prod["rendimento"] = pd.to_numeric(prod["rendimento"], errors="coerce")
     prod = prod.dropna(subset=["id_produto"]).copy()
     prod_key = prod["id_produto"].astype(str).str.strip().str.lower()
     prod = prod[~prod_key.isin({"", "nan", "none", "nat"})].copy()
@@ -449,7 +452,7 @@ def build_gold_custos_produtos(
     mp = mp.drop_duplicates(subset=["id_ingrediente"], keep="first")
 
     detail = rec.merge(
-        prod[["id_produto", "nome"]],
+        prod[["id_produto", "nome", "rendimento"]],
         on="id_produto",
         how="left",
     )
@@ -478,7 +481,7 @@ def build_gold_custos_produtos(
     detail["quantidade_formatada"] = (qty_txt + " " + unit_txt).str.strip()
 
     # Keep Gold numeric as float; Streamlit handles visual BRL formatting.
-    # Formula: (Custo_Unitario_Materia_Prima / Rendimento_Embalagem) * Quantidade_Receita
+    # Ingredient cost formula: (custo_unitario_materia_prima / rendimento_embalagem) * qtd_receita_ajustada
     denom = detail["rendimento_embalagem"].fillna(1.0)
     denom = denom.where(denom > 0, 1.0)
     numer = pd.to_numeric(detail["custo_un_mat_prima"], errors="coerce")
@@ -503,11 +506,41 @@ def build_gold_custos_produtos(
         df_detalhado.groupby(["id_produto", "nome_produto"], as_index=False)
         .agg(
             qtd_ingredientes=("id_ingrediente", "count"),
-            custo_producao=("custo_unitario_final", lambda s: s.sum(min_count=1)),
+            custo_receita_total=("custo_unitario_final", lambda s: s.sum(min_count=1)),
         )
         .reset_index(drop=True)
     )
-    df_gold_produtos["custo_producao"] = pd.to_numeric(df_gold_produtos["custo_producao"], errors="coerce").astype("float64")
+
+    rendimento_produto = prod[["id_produto", "rendimento"]].drop_duplicates(subset=["id_produto"], keep="first")
+    df_gold_produtos = df_gold_produtos.merge(rendimento_produto, on="id_produto", how="left")
+    df_gold_produtos["rendimento"] = pd.to_numeric(df_gold_produtos["rendimento"], errors="coerce")
+    df_gold_produtos["rendimento_usado"] = df_gold_produtos["rendimento"].where(df_gold_produtos["rendimento"] > 0, 1.0).fillna(1.0)
+
+    # Final unit production cost by product yield: total recipe cost / rendimento do produto.
+    df_gold_produtos["custo_producao"] = (
+        pd.to_numeric(df_gold_produtos["custo_receita_total"], errors="coerce")
+        / df_gold_produtos["rendimento_usado"]
+    ).astype("float64")
+
+    # Audit trail for yield-based unit-cost derivation.
+    for _, row in df_gold_produtos[["id_produto", "custo_receita_total", "rendimento_usado", "custo_producao"]].head(5).iterrows():
+        logger.info(
+            "[custos_yield] %s: Total Recipe Cost %.6f / Yield %.6f = Unit Cost %.6f",
+            row["id_produto"],
+            float(row["custo_receita_total"]) if pd.notna(row["custo_receita_total"]) else float("nan"),
+            float(row["rendimento_usado"]) if pd.notna(row["rendimento_usado"]) else 1.0,
+            float(row["custo_producao"]) if pd.notna(row["custo_producao"]) else float("nan"),
+        )
+    prod_001 = df_gold_produtos[df_gold_produtos["id_produto"].astype(str).str.upper() == "PROD-001"]
+    if not prod_001.empty:
+        row = prod_001.iloc[0]
+        logger.info(
+            "[custos_yield_audit] PROD-001: Total Recipe Cost %.6f / Yield %.6f = Unit Cost %.6f",
+            float(row["custo_receita_total"]) if pd.notna(row["custo_receita_total"]) else float("nan"),
+            float(row["rendimento_usado"]) if pd.notna(row["rendimento_usado"]) else 1.0,
+            float(row["custo_producao"]) if pd.notna(row["custo_producao"]) else float("nan"),
+        )
+
     df_gold_produtos.index.name = None
     return df_gold_produtos[agg_cols], df_detalhado
 
