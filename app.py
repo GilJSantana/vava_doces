@@ -4,8 +4,14 @@ O MVP em produção é composto por:
 - Dashboard de rentabilidade
 - Custos de produção
 - Faturamento (auditoria)
+
+Camada de Segurança:
+- OAuth2 via Google (autenticação de identidade)
+- Google Drive API (verificação de permissões via Service Account)
+- Session state com gates de acesso antes de carregar dados
 """
 
+import logging
 import os
 from pathlib import Path
 from time import perf_counter
@@ -16,8 +22,21 @@ from dotenv import load_dotenv
 from scripts.medallion_pipeline import MedallionPipeline
 
 from src.domain.sales_analysis_service import sync_drive_files_to_raw_from_env
+from src.infrastructure.google_oauth2_adapter import (
+    init_session_state_auth,
+    is_user_authenticated,
+    is_user_authorized,
+    set_user_authorized,
+)
 from src.infrastructure.google_sheets_adapter import GoogleSheetsAdapter
+from src.presentation.auth_page import (
+    check_permissions_and_authorize,
+    render_access_denied_page,
+    render_login_page,
+)
 from src.presentation.components import render_app_header
+
+logger = logging.getLogger(__name__)
 from src.presentation.controller import run_app_controller
 from src.presentation.navigation import (
     PAGE_DASHBOARD,
@@ -149,9 +168,111 @@ def render_selected_page(
 
 
 def main():
-    """Executa a aplicação Streamlit."""
+    """Executa a aplicação Streamlit com autenticação e autorização obrigatórias."""
+
+    # STEP 1: Inicializar estado de autenticação
+    init_session_state_auth()
+    logger.info("Iniciando aplicação Vavá Doces com camada de segurança")
+
+    # STEP 2: Verificar autenticação OAuth2
+    if not is_user_authenticated():
+        try:
+            oauth2_client_id = st.secrets.get("OAUTH2_CLIENT_ID", "").strip()
+            oauth2_client_secret = st.secrets.get("OAUTH2_CLIENT_SECRET", "").strip()
+            oauth2_redirect_uri = st.secrets.get("OAUTH2_REDIRECT_URI", "http://localhost:8501").strip()
+
+            if not oauth2_client_id or not oauth2_client_secret:
+                st.error(
+                    "❌ **Erro de Configuração - OAuth2**\n\n"
+                    "`OAUTH2_CLIENT_ID` e `OAUTH2_CLIENT_SECRET` não foram configurados.\n\n"
+                    "Por favor, adicione em `.streamlit/secrets.toml`"
+                )
+                logger.error("OAuth2 credentials missing in st.secrets")
+                return
+
+            if not oauth2_redirect_uri:
+                oauth2_redirect_uri = "http://localhost:8501"
+                logger.debug("Using default redirect_uri: http://localhost:8501")
+
+            logger.info("OAuth2 credentials loaded from secrets")
+            render_login_page(
+                client_id=oauth2_client_id,
+                client_secret=oauth2_client_secret,
+                redirect_uri=oauth2_redirect_uri,
+            )
+        except Exception as e:
+            st.error(f"❌ Erro ao carregar configuração de autenticação: {e}")
+            logger.exception("Error loading OAuth2 configuration")
+        return
+
+    # STEP 3: Verificar autorização via Drive se autenticado mas não autorizado
+    if not is_user_authorized():
+        try:
+            user_email = st.session_state.get("user_email")
+            service_account_file = st.secrets.get("SERVICE_ACCOUNT_FILE", "").strip()
+            drive_source_file_id = st.secrets.get("DRIVE_SOURCE_FILE_ID", "").strip()
+
+            if not user_email:
+                st.error("❌ Identidade do usuário não foi validada. Tente fazer login novamente.")
+                logger.error("user_email missing after OAuth2 authentication")
+                return
+
+            if not service_account_file or not drive_source_file_id:
+                st.error(
+                    "❌ **Erro de Configuração - Google Drive**\n\n"
+                    "`SERVICE_ACCOUNT_FILE` e `DRIVE_SOURCE_FILE_ID` não foram configurados.\n\n"
+                    "Por favor, adicione em `.streamlit/secrets.toml`"
+                )
+                logger.error("Drive configuration missing in st.secrets")
+                return
+
+            # Converter caminho relativo para absoluto se necessário
+            if not os.path.isabs(service_account_file):
+                service_account_file = os.path.join(
+                    Path(__file__).resolve().parent,
+                    service_account_file
+                )
+                logger.debug("Converted relative path to absolute: %s", service_account_file)
+
+            # Verificar permissões com spinner
+            with st.spinner("🔍 Verificando permissões no Google Drive..."):
+                logger.info("Initiating Drive permission check for %s on file %s", user_email, drive_source_file_id)
+                is_authorized = check_permissions_and_authorize(
+                    user_email=user_email,
+                    credential_file=service_account_file,
+                    file_or_folder_id=drive_source_file_id,
+                    min_role="reader",
+                )
+
+            set_user_authorized(is_authorized)
+
+            if not is_authorized:
+                logger.warning("Authorization failed for user %s", user_email)
+                render_access_denied_page(user_email)
+                return
+
+            st.success("✅ Autorização do Google Drive concedida!")
+            logger.info("Drive Authorization Successful")
+            st.rerun()
+
+        except FileNotFoundError as e:
+            st.error(
+                f"❌ Arquivo de credenciais Service Account não encontrado: {e}\n\n"
+                "Verifique se `SERVICE_ACCOUNT_FILE` está correto em `.streamlit/secrets.toml`"
+            )
+            logger.error("Service account file not found: %s", e)
+            return
+        except Exception as e:
+            st.error(f"❌ Erro ao verificar permissões do Google Drive: {e}")
+            logger.exception("Error checking Drive permissions")
+            return
+
+    # STEP 4: Usuário autenticado E autorizado — carregar aplicação principal
+    logger.info("User %s fully authenticated and authorized", st.session_state.get("user_email"))
+
     if "pipeline_state" not in st.session_state:
         st.session_state["pipeline_state"] = initialize_data_pipeline()
+
     run_app_controller(
         render_header_fn=render_app_header,
         render_sidebar_fn=lambda: render_navigation_sidebar(get_adapter),
@@ -161,4 +282,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
