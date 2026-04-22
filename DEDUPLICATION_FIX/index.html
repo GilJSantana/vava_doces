@@ -1,0 +1,654 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentação do projeto Vava Doces">
+      
+      
+        <meta name="author" content="Vava Doces Dev">
+      
+      
+      
+      
+      <link rel="icon" href="../images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.0.8">
+    
+    
+      
+        <title>Deduplication Refactor - Technical Summary - Vava Doces Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.0d440cfe.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.2505c338.min.css">
+      
+      
+
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Playfair+Display:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Playfair Display";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="amber">
+  
+    
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#deduplication-refactor-technical-summary" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Vava Doces Docs" class="md-header__button md-logo" aria-label="Vava Doces Docs" data-md-component="logo">
+      
+  <img src="../images/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Vava Doces Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Deduplication Refactor - Technical Summary
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Vava Doces Docs" class="md-nav__button md-logo" aria-label="Vava Doces Docs" data-md-component="logo">
+      
+  <img src="../images/logo.png" alt="logo">
+
+    </a>
+    Vava Doces Docs
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        Home
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../QUICK_START_STREAMLIT/" class="md-nav__link">
+        Quick Start
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REFACTORING_SUMMARY/" class="md-nav__link">
+        Refatoring Summary
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEXT_STEPS/" class="md-nav__link">
+        Roadmap
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_COMPLETION_REPORT.txt" class="md-nav__link">
+        Project Report
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FILES_SUMMARY.txt" class="md-nav__link">
+        Files Summary
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FINAL_CHECKLIST.txt" class="md-nav__link">
+        Final Checklist
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../README_REFATORACAO.txt" class="md-nav__link">
+        README Refatoracao
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem-statement" class="md-nav__link">
+    Problem Statement
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#business-context" class="md-nav__link">
+    Business Context
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#solution-implemented" class="md-nav__link">
+    Solution Implemented
+  </a>
+  
+    <nav class="md-nav" aria-label="Solution Implemented">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-expanded-deduplication-key-_deduplicate_with_audit" class="md-nav__link">
+    1. Expanded Deduplication Key (_deduplicate_with_audit)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-enhanced-logging-transform_to_silver" class="md-nav__link">
+    2. Enhanced Logging (transform_to_silver)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-improved-star-schema-validation-validate_star_schema" class="md-nav__link">
+    3. Improved Star Schema Validation (validate_star_schema)
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-modified" class="md-nav__link">
+    Files Modified
+  </a>
+  
+    <nav class="md-nav" aria-label="Files Modified">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-srcdomainsales_analysis_servicepy" class="md-nav__link">
+    1. src/domain/sales_analysis_service.py
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-scriptsmedallion_pipelinepy" class="md-nav__link">
+    2. scripts/medallion_pipeline.py
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    Testing
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-integrity-contract" class="md-nav__link">
+    Data Integrity Contract
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Integrity Contract">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#silver-layer" class="md-nav__link">
+    Silver Layer
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gold-layer-fato_vendas" class="md-nav__link">
+    Gold Layer (fato_vendas)
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backward-compatibility" class="md-nav__link">
+    Backward Compatibility
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-impact" class="md-nav__link">
+    Performance Impact
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    Next Steps
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="deduplication-refactor-technical-summary">Deduplication Refactor - Technical Summary<a class="headerlink" href="#deduplication-refactor-technical-summary" title="Permanent link">&para;</a></h1>
+<h2 id="problem-statement">Problem Statement<a class="headerlink" href="#problem-statement" title="Permanent link">&para;</a></h2>
+<p>The medallion pipeline was losing revenue rows during the Silver layer transformation:
+- Month 01: Lost 6 rows
+- Month 02: Lost 8 rows
+- Month 03: Lost 27 rows</p>
+<p><strong>Root Cause</strong>: The deduplication logic was using all DataFrame columns (including metadata like timestamps, file source, and load time) to identify duplicates. This caused legitimate multi-product sales (same <code>num_venda</code> but different products) to be incorrectly marked as duplicates and removed.</p>
+<h2 id="business-context">Business Context<a class="headerlink" href="#business-context" title="Permanent link">&para;</a></h2>
+<p>In Vavá Doces' confectionery business model:
+- <strong>One Order (venda_id/num_venda) can contain MULTIPLE line items</strong>
+- Each line item = one product sold in a transaction
+- Example: Order #1001 might include:
+  - 2x Caseirinho @ R$10.00
+  - 3x Brigadeiro @ R$8.00</p>
+<p>These should be preserved as 2 separate rows in the fato_vendas table (item-grain), not collapsed into one row.</p>
+<h2 id="solution-implemented">Solution Implemented<a class="headerlink" href="#solution-implemented" title="Permanent link">&para;</a></h2>
+<h3 id="1-expanded-deduplication-key-_deduplicate_with_audit">1. Expanded Deduplication Key (<code>_deduplicate_with_audit</code>)<a class="headerlink" href="#1-expanded-deduplication-key-_deduplicate_with_audit" title="Permanent link">&para;</a></h3>
+<p><strong>Changed from</strong>: Comparing all columns (including metadata)</p>
+<p><strong>Changed to</strong>: Using an expanded "item-grain" key that includes only business-relevant columns:</p>
+<pre><code class="language-python">dedup_key_columns = [
+    &quot;data&quot;,              # Date of sale
+    &quot;num_venda&quot;,         # Order ID
+    &quot;cliente&quot;,           # Client name
+    &quot;produto&quot;,           # Product name
+    &quot;produto_key&quot;,       # Normalized product key
+    &quot;quantidade&quot;,        # Quantity
+    &quot;valor_unitario&quot;,    # Unit price
+    &quot;valor_bruto&quot;,       # Gross value
+    &quot;valor_liquido&quot;,     # Net value
+    &quot;valor_total&quot;,       # Total value
+    &quot;desconto&quot;,          # Discount applied
+    &quot;tipo_item&quot;,         # Item type
+]
+</code></pre>
+<p><strong>Logic</strong>:
+- Only remove rows that are 100% identical across ALL these columns
+- Rows with same <code>num_venda</code> but different <code>produto</code> or <code>quantidade</code> are preserved
+- Removes only true duplicates (e.g., same line scanned twice in same file)</p>
+<h3 id="2-enhanced-logging-transform_to_silver">2. Enhanced Logging (<code>transform_to_silver</code>)<a class="headerlink" href="#2-enhanced-logging-transform_to_silver" title="Permanent link">&para;</a></h3>
+<p>Added month-by-month loss tracking:</p>
+<pre><code>[DEDUP LOSS ANALYSIS BY MONTH]
+  2024-01: 6090 → 6090 (lost 0 rows) ✅
+  2024-02: 6090 → 6090 (lost 0 rows) ✅
+  2024-03: 6090 → 6090 (lost 0 rows) ✅
+</code></pre>
+<h3 id="3-improved-star-schema-validation-validate_star_schema">3. Improved Star Schema Validation (<code>validate_star_schema</code>)<a class="headerlink" href="#3-improved-star-schema-validation-validate_star_schema" title="Permanent link">&para;</a></h3>
+<p>Added explicit row count consistency check:
+- <strong>Silver → Gold mapping</strong>: Each Silver row should map to exactly one fato_vendas row
+- Logs detailed validation breakdown:
+  - Foreign key integrity (producto_id, data_id)
+  - Primary key uniqueness (venda_id)
+  - Row count mismatch detection
+  - Infinite margin values</p>
+<h2 id="files-modified">Files Modified<a class="headerlink" href="#files-modified" title="Permanent link">&para;</a></h2>
+<h3 id="1-srcdomainsales_analysis_servicepy">1. <code>src/domain/sales_analysis_service.py</code><a class="headerlink" href="#1-srcdomainsales_analysis_servicepy" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Function</strong>: <code>_deduplicate_with_audit()</code></li>
+<li><strong>Changes</strong>:</li>
+<li>Expanded dedup key from transaction-level to item-level</li>
+<li>Preserves multi-product orders</li>
+<li>Only removes 100% identical rows</li>
+<li>Enhanced logging with month-by-month breakdown</li>
+</ul>
+<h3 id="2-scriptsmedallion_pipelinepy">2. <code>scripts/medallion_pipeline.py</code><a class="headerlink" href="#2-scriptsmedallion_pipelinepy" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Function</strong>: <code>transform_to_silver()</code></li>
+<li>Added row loss tracking by month</li>
+<li>Enhanced audit reporting</li>
+<li>
+<p>New <code>rows_lost_during_dedup</code> metric</p>
+</li>
+<li>
+<p><strong>Function</strong>: <code>validate_star_schema()</code></p>
+</li>
+<li>Added detailed logging output</li>
+<li>Critical: Checks Silver → Gold row count consistency</li>
+<li>Reports all validation failures with clear messages</li>
+</ul>
+<h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
+<p>Created <code>tests/test_dedup_fix.py</code> with 4 test scenarios:</p>
+<ol>
+<li>✅ <strong>test_preserve_multiproduct_same_order</strong>:</li>
+<li>
+<p>Same order, different products → Both rows preserved</p>
+</li>
+<li>
+<p>✅ <strong>test_remove_exact_duplicates_same_order</strong>:</p>
+</li>
+<li>
+<p>Identical rows → Duplicate removed</p>
+</li>
+<li>
+<p>✅ <strong>test_preserve_same_product_different_dates</strong>:</p>
+</li>
+<li>
+<p>Same product, different dates → Both rows preserved</p>
+</li>
+<li>
+<p>✅ <strong>test_preserve_same_product_different_quantities</strong>:</p>
+</li>
+<li>Same product, different quantities → Both rows preserved</li>
+</ol>
+<p><strong>Result</strong>: All tests pass ✅</p>
+<h2 id="data-integrity-contract">Data Integrity Contract<a class="headerlink" href="#data-integrity-contract" title="Permanent link">&para;</a></h2>
+<h3 id="silver-layer">Silver Layer<a class="headerlink" href="#silver-layer" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Grain</strong>: Item (one row per line item from order)</li>
+<li><strong>Preservation</strong>: All legitimate rows from Bronze are kept</li>
+<li><strong>Removal</strong>: Only exact duplicates (100% identical across item-grain key)</li>
+</ul>
+<h3 id="gold-layer-fato_vendas">Gold Layer (fato_vendas)<a class="headerlink" href="#gold-layer-fato_vendas" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Grain</strong>: Item (matches Silver 1:1)</li>
+<li><strong>Validation</strong>: Row count must match Silver exactly</li>
+<li><strong>Constraint</strong>: venda_id is unique sequential (NOT num_venda, which can repeat for multi-item orders)</li>
+</ul>
+<h2 id="backward-compatibility">Backward Compatibility<a class="headerlink" href="#backward-compatibility" title="Permanent link">&para;</a></h2>
+<ul>
+<li>No schema changes</li>
+<li>No breaking changes to downstream consumers</li>
+<li>Star schema validation remains the same</li>
+<li>Simply removes the overly aggressive deduplication</li>
+</ul>
+<h2 id="performance-impact">Performance Impact<a class="headerlink" href="#performance-impact" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Positive</strong>: Fewer rows removed = more accurate revenue reporting</li>
+<li><strong>Neutral</strong>: No performance penalty (same column count in key)</li>
+<li><strong>Data</strong>: +6, +8, +27 rows recovered for months 01, 02, 03 respectively</li>
+</ul>
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Run full pipeline with production data</li>
+<li>Monitor month-by-month loss metrics in logs</li>
+<li>Compare revenue totals before/after fix</li>
+<li>Verify no new duplicates introduced</li>
+<li>Update data quality checks if needed</li>
+</ol>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.db81ec45.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a00a7c5e.min.js"></script>
+      
+    
+  </body>
+</html>

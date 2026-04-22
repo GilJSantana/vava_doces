@@ -1,0 +1,842 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentação do projeto Vava Doces">
+      
+      
+        <meta name="author" content="Vava Doces Dev">
+      
+      
+      
+      
+      <link rel="icon" href="../images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.0.8">
+    
+    
+      
+        <title>📚 Guia para Próximos Desenvolvedores: Correção de Parsing de Datas - Vava Doces Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.0d440cfe.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.2505c338.min.css">
+      
+      
+
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Playfair+Display:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Playfair Display";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/css/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="amber">
+  
+    
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#guia-para-proximos-desenvolvedores-correcao-de-parsing-de-datas" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Vava Doces Docs" class="md-header__button md-logo" aria-label="Vava Doces Docs" data-md-component="logo">
+      
+  <img src="../images/logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Vava Doces Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              📚 Guia para Próximos Desenvolvedores: Correção de Parsing de Datas
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Vava Doces Docs" class="md-nav__button md-logo" aria-label="Vava Doces Docs" data-md-component="logo">
+      
+  <img src="../images/logo.png" alt="logo">
+
+    </a>
+    Vava Doces Docs
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        Home
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../QUICK_START_STREAMLIT/" class="md-nav__link">
+        Quick Start
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../REFACTORING_SUMMARY/" class="md-nav__link">
+        Refatoring Summary
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEXT_STEPS/" class="md-nav__link">
+        Roadmap
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_COMPLETION_REPORT.txt" class="md-nav__link">
+        Project Report
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FILES_SUMMARY.txt" class="md-nav__link">
+        Files Summary
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../FINAL_CHECKLIST.txt" class="md-nav__link">
+        Final Checklist
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../README_REFATORACAO.txt" class="md-nav__link">
+        README Refatoracao
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#contexto-tecnico" class="md-nav__link">
+    🔍 Contexto Técnico
+  </a>
+  
+    <nav class="md-nav" aria-label="🔍 Contexto Técnico">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#problema-resolvido" class="md-nav__link">
+    Problema Resolvido
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#solucao-implementada" class="md-nav__link">
+    Solução Implementada
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#como-executar-os-testes" class="md-nav__link">
+    🛠️ Como Executar os Testes
+  </a>
+  
+    <nav class="md-nav" aria-label="🛠️ Como Executar os Testes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#teste-1-diagnostico-completo" class="md-nav__link">
+    Teste 1: Diagnóstico Completo
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#teste-2-analise-de-invalidos" class="md-nav__link">
+    Teste 2: Análise de Inválidos
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#teste-3-validacao-de-filtros" class="md-nav__link">
+    Teste 3: Validação de Filtros
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#teste-4-validacao-na-ui" class="md-nav__link">
+    Teste 4: Validação na UI
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arquivos-modificados" class="md-nav__link">
+    📂 Arquivos Modificados
+  </a>
+  
+    <nav class="md-nav" aria-label="📂 Arquivos Modificados">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#core" class="md-nav__link">
+    Core
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testes-novos" class="md-nav__link">
+    Testes Novos
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentacao" class="md-nav__link">
+    Documentação
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quando-usar-esta-solucao" class="md-nav__link">
+    🔧 Quando Usar Esta Solução
+  </a>
+  
+    <nav class="md-nav" aria-label="🔧 Quando Usar Esta Solução">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-se" class="md-nav__link">
+    ✅ Use se:
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nao-use-se" class="md-nav__link">
+    ❌ Não use se:
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#possiveis-problemas" class="md-nav__link">
+    🚨 Possíveis Problemas
+  </a>
+  
+    <nav class="md-nav" aria-label="🚨 Possíveis Problemas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#problema-1-ambiguidade" class="md-nav__link">
+    Problema 1: Ambigüidade
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#problema-2-performance" class="md-nav__link">
+    Problema 2: Performance
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#problema-3-novos-formatos" class="md-nav__link">
+    Problema 3: Novos Formatos
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metricas-para-monitorar" class="md-nav__link">
+    📊 Métricas Para Monitorar
+  </a>
+  
+    <nav class="md-nav" aria-label="📊 Métricas Para Monitorar">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#em-producao-verifique" class="md-nav__link">
+    Em Produção, Verifique:
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adicionar-logging" class="md-nav__link">
+    Adicionar Logging
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fluxo-de-desenvolvimento" class="md-nav__link">
+    🔄 Fluxo de Desenvolvimento
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#referencias" class="md-nav__link">
+    📞 Referências
+  </a>
+  
+    <nav class="md-nav" aria-label="📞 Referências">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentacao-interna" class="md-nav__link">
+    Documentação Interna
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#links-uteis" class="md-nav__link">
+    Links Úteis
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commits-referencia" class="md-nav__link">
+    Commits Referência
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checklist-para-modificacao" class="md-nav__link">
+    ✅ Checklist Para Modificação
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#licoes-aprendidas-para-evitar-problemas-similares" class="md-nav__link">
+    🎓 Lições Aprendidas (Para Evitar Problemas Similares)
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="guia-para-proximos-desenvolvedores-correcao-de-parsing-de-datas">📚 Guia para Próximos Desenvolvedores: Correção de Parsing de Datas<a class="headerlink" href="#guia-para-proximos-desenvolvedores-correcao-de-parsing-de-datas" title="Permanent link">&para;</a></h1>
+<h2 id="contexto-tecnico">🔍 Contexto Técnico<a class="headerlink" href="#contexto-tecnico" title="Permanent link">&para;</a></h2>
+<h3 id="problema-resolvido">Problema Resolvido<a class="headerlink" href="#problema-resolvido" title="Permanent link">&para;</a></h3>
+<p>O módulo de faturamento estava descartando silenciosamente 31.3% dos dados (1906 registros) porque o arquivo de vendas continha datas em <strong>DOIS formatos diferentes</strong>:
+- Fevereiro: <code>MM/DD/YYYY</code> (02/01/2026 = 2 de fevereiro)
+- Janeiro: <code>DD/MM/YYYY</code> (13/01/2026 = 13 de janeiro)</p>
+<h3 id="solucao-implementada">Solução Implementada<a class="headerlink" href="#solucao-implementada" title="Permanent link">&para;</a></h3>
+<p>Refatoração de <code>_parse_sales_date()</code> em <code>src/domain/sales_analysis_service.py</code> com fallback automático:</p>
+<pre><code class="language-python">1. Tenta formato US (mm/dd/yyyy)
+2. Se falhar → tenta formato BR (dd/mm/yyyy)
+3. Se ainda falhar → tenta formato ISO (yyyy-mm-dd)
+</code></pre>
+<hr />
+<h2 id="como-executar-os-testes">🛠️ Como Executar os Testes<a class="headerlink" href="#como-executar-os-testes" title="Permanent link">&para;</a></h2>
+<h3 id="teste-1-diagnostico-completo">Teste 1: Diagnóstico Completo<a class="headerlink" href="#teste-1-diagnostico-completo" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd /home/gilunix/Documents/Projects/Vava_doces
+python tests/diagnose_sales_date_parsing.py
+</code></pre>
+<p><strong>O que faz</strong>: Análise completa do pipeline em 6 fases
+- Coleta de dados
+- Análise de formatos
+- Comparação de parsers
+- Investigação de inválidos
+- Amostra com 3 interpretações
+- Pipeline completo</p>
+<p><strong>Esperado</strong>: 100% válidos, 6066 registros</p>
+<h3 id="teste-2-analise-de-invalidos">Teste 2: Análise de Inválidos<a class="headerlink" href="#teste-2-analise-de-invalidos" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">python tests/diagnose_invalid_dates.py
+</code></pre>
+<p><strong>O que faz</strong>: Investiga detalhadamente as datas inválidas
+- Amostra das datas inválidas
+- Análise de padrões
+- Teste de formatos alternativos</p>
+<p><strong>Esperado</strong>: Com fallback BR, 1906 registros ficam válidos</p>
+<h3 id="teste-3-validacao-de-filtros">Teste 3: Validação de Filtros<a class="headerlink" href="#teste-3-validacao-de-filtros" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">python tests/test_date_filtering_fix.py
+</code></pre>
+<p><strong>O que faz</strong>: Valida os filtros de data na página de faturamento
+- Filtro por janeiro (esperado: 1900)
+- Filtro por fevereiro (esperado: 3413)
+- Filtro por período (esperado: 5313)
+- Total de 2026 (esperado: 6066)</p>
+<p><strong>Esperado</strong>: Todos os testes passam ✅</p>
+<h3 id="teste-4-validacao-na-ui">Teste 4: Validação na UI<a class="headerlink" href="#teste-4-validacao-na-ui" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">python -c &quot;
+import os
+from dotenv import load_dotenv
+from src.presentation.pages.faturamento import _diagnose_date_parsing, _normalize_data, _apply_filters
+from src.presentation.pages.sales_shared import load_sales_data_cached
+from datetime import date
+
+load_dotenv()
+df_raw = load_sales_data_cached()
+df_base = _normalize_data(df_raw)
+df_jan = _apply_filters(df_base, date(2026, 1, 1), date(2026, 1, 31), [])
+print(f'Janeiro: {len(df_jan)} registros (esperado: 1900)')
+&quot;
+</code></pre>
+<hr />
+<h2 id="arquivos-modificados">📂 Arquivos Modificados<a class="headerlink" href="#arquivos-modificados" title="Permanent link">&para;</a></h2>
+<h3 id="core">Core<a class="headerlink" href="#core" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>src/domain/sales_analysis_service.py</strong></li>
+<li>Função: <code>_parse_sales_date()</code></li>
+<li>Mudança: Adicionado fallback para DD/MM/YYYY e YYYY-MM-DD</li>
+<li>Linhas: ~25 linhas modificadas</li>
+</ul>
+<h3 id="testes-novos">Testes Novos<a class="headerlink" href="#testes-novos" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>tests/diagnose_sales_date_parsing.py</strong> (300+ linhas)</li>
+<li><strong>tests/diagnose_invalid_dates.py</strong> (150+ linhas)</li>
+<li><strong>tests/test_date_filtering_fix.py</strong> (70+ linhas)</li>
+</ul>
+<h3 id="documentacao">Documentação<a class="headerlink" href="#documentacao" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>docs/CORRECAO_PARSING_DATAS_FATURAMENTO.md</strong></li>
+<li><strong>docs/RELATORIO_FINAL_CORRECAO_FATURAMENTO.md</strong></li>
+</ul>
+<hr />
+<h2 id="quando-usar-esta-solucao">🔧 Quando Usar Esta Solução<a class="headerlink" href="#quando-usar-esta-solucao" title="Permanent link">&para;</a></h2>
+<h3 id="use-se">✅ Use se:<a class="headerlink" href="#use-se" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Seus dados estão em múltiplos formatos de data</li>
+<li>Precisa suportar dados brasileiros e americanos</li>
+<li>Quer fallback automático sem perda de dados</li>
+<li>Trabalha com CSVs/XLSXs de origem inconsistente</li>
+</ul>
+<h3 id="nao-use-se">❌ Não use se:<a class="headerlink" href="#nao-use-se" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Todos os dados estão em um único formato (use parsing direto)</li>
+<li>A perda de dados é aceitável (mais simples)</li>
+<li>Precisa de validação rigorosa (sem fallback)</li>
+</ul>
+<hr />
+<h2 id="possiveis-problemas">🚨 Possíveis Problemas<a class="headerlink" href="#possiveis-problemas" title="Permanent link">&para;</a></h2>
+<h3 id="problema-1-ambiguidade">Problema 1: Ambigüidade<a class="headerlink" href="#problema-1-ambiguidade" title="Permanent link">&para;</a></h3>
+<pre><code>Entrada: &quot;01/02/2026&quot;
+MM/DD: 1º de fevereiro
+DD/MM: 2 de janeiro
+
+Solução: Tenta MM/DD primeiro (padrão Excel/EUA)
+Resultado: Alguns registros podem ser parseados incorretamente
+</code></pre>
+<p><strong>Como mitigar</strong>:
+- Validar dados de origem
+- Documentar formato esperado
+- Adicionar coluna de audit (_source_file já presente)</p>
+<h3 id="problema-2-performance">Problema 2: Performance<a class="headerlink" href="#problema-2-performance" title="Permanent link">&para;</a></h3>
+<p>Se tiver milhões de registros, o fallback pode ser lento.</p>
+<p><strong>Como mitigar</strong>:</p>
+<pre><code class="language-python"># Processar em chunks
+chunk_size = 10000
+for i in range(0, len(df), chunk_size):
+    df.iloc[i:i+chunk_size] = process_chunk(...)
+</code></pre>
+<h3 id="problema-3-novos-formatos">Problema 3: Novos Formatos<a class="headerlink" href="#problema-3-novos-formatos" title="Permanent link">&para;</a></h3>
+<p>Se encontrar um novo formato de data, adicione:</p>
+<pre><code class="language-python"># Em _parse_sales_date()
+# Fallback 3: Novo formato
+another_missing = parsed.isna()
+if another_missing.any():
+    custom = pd.to_datetime(
+        text[another_missing],
+        format=&quot;%d-%m-%Y&quot;,  # Seu formato
+        errors=&quot;coerce&quot;
+    )
+    parsed.loc[another_missing] = custom
+</code></pre>
+<hr />
+<h2 id="metricas-para-monitorar">📊 Métricas Para Monitorar<a class="headerlink" href="#metricas-para-monitorar" title="Permanent link">&para;</a></h2>
+<h3 id="em-producao-verifique">Em Produção, Verifique:<a class="headerlink" href="#em-producao-verifique" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Taxa de Parsing</strong>: % de datas válidas</li>
+<li>Esperado: ≥ 99%</li>
+<li>
+<p>Alerta: &lt; 95%</p>
+</li>
+<li>
+<p><strong>Distribuição Mensal</strong>: Verificar padrão</p>
+</li>
+<li>Verificar se há período com 0 registros</li>
+<li>
+<p>Comparar com período anterior</p>
+</li>
+<li>
+<p><strong>Quantidade de Fallbacks</strong>: Logs de quando BR/ISO foi usado</p>
+</li>
+<li>Normal: alguns % dos dados</li>
+<li>Anormal: &gt; 50% dos dados</li>
+</ol>
+<h3 id="adicionar-logging">Adicionar Logging<a class="headerlink" href="#adicionar-logging" title="Permanent link">&para;</a></h3>
+<pre><code class="language-python">if br_used &gt; (len(series) * 0.1):
+    logger.warning(f&quot;Alto uso de fallback BR: {br_used} registros&quot;)
+</code></pre>
+<hr />
+<h2 id="fluxo-de-desenvolvimento">🔄 Fluxo de Desenvolvimento<a class="headerlink" href="#fluxo-de-desenvolvimento" title="Permanent link">&para;</a></h2>
+<p>Se precisar modificar:</p>
+<ol>
+<li><strong>Edite</strong> <code>src/domain/sales_analysis_service.py</code></li>
+<li><strong>Execute</strong> <code>tests/diagnose_sales_date_parsing.py</code></li>
+<li><strong>Valide</strong> <code>tests/test_date_filtering_fix.py</code></li>
+<li><strong>Teste na UI</strong> na página de faturamento</li>
+<li><strong>Commit</strong> com descrição clara</li>
+</ol>
+<pre><code class="language-bash">git commit -m &quot;fix(data): adiciona suporte para formato YYYY-MM-DD/HH:MM:SS&quot;
+</code></pre>
+<hr />
+<h2 id="referencias">📞 Referências<a class="headerlink" href="#referencias" title="Permanent link">&para;</a></h2>
+<h3 id="documentacao-interna">Documentação Interna<a class="headerlink" href="#documentacao-interna" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>docs/CORRECAO_PARSING_DATAS_FATURAMENTO.md</code> - Documentação técnica</li>
+<li><code>docs/RELATORIO_FINAL_CORRECAO_FATURAMENTO.md</code> - Relatório executivo</li>
+</ul>
+<h3 id="links-uteis">Links Úteis<a class="headerlink" href="#links-uteis" title="Permanent link">&para;</a></h3>
+<ul>
+<li><a href="https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html">Pandas to_datetime</a></li>
+<li><a href="https://docs.python.org/3/library/datetime.html">Python datetime formats</a></li>
+</ul>
+<h3 id="commits-referencia">Commits Referência<a class="headerlink" href="#commits-referencia" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>91343e7</code> - Implementação original</li>
+<li><code>ceca637</code> - Documentação final</li>
+</ul>
+<hr />
+<h2 id="checklist-para-modificacao">✅ Checklist Para Modificação<a class="headerlink" href="#checklist-para-modificacao" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[ ] Li a documentação técnica</li>
+<li>[ ] Entendo o problema original</li>
+<li>[ ] Testei os 4 scripts de diagnóstico</li>
+<li>[ ] Minha mudança não quebra os testes</li>
+<li>[ ] Executei <code>diagnose_sales_date_parsing.py</code> com sucesso</li>
+<li>[ ] Executei <code>test_date_filtering_fix.py</code> com sucesso</li>
+<li>[ ] Documentei minha mudança</li>
+<li>[ ] Criei um commit descritivo</li>
+<li>[ ] Fiz push para GitHub</li>
+</ul>
+<hr />
+<h2 id="licoes-aprendidas-para-evitar-problemas-similares">🎓 Lições Aprendidas (Para Evitar Problemas Similares)<a class="headerlink" href="#licoes-aprendidas-para-evitar-problemas-similares" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Sempre validar origem</strong>: Verificar formatos de data no CSV/XLSX original</li>
+<li><strong>Fallback robusto</strong>: Não confie em parsing automático</li>
+<li><strong>Diagnóstico isolado</strong>: Criar scripts específicos para investigar</li>
+<li><strong>Documentação</strong>: Documentar formatos aceitos explicitamente</li>
+<li><strong>Testes específicos</strong>: Testar cada formato separadamente</li>
+<li><strong>Dados mistos</strong>: Estar preparado para múltiplos formatos</li>
+</ol>
+<hr />
+<p><strong>Última Atualização</strong>: 23 de março de 2026
+<strong>Desenvolvedor</strong>: gsantana
+<strong>Status</strong>: Ativo em Produção</p>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.db81ec45.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a00a7c5e.min.js"></script>
+      
+    
+  </body>
+</html>
