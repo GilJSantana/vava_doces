@@ -2,26 +2,26 @@
   <img src="assets/logo.png" alt="Vava Doces Logo" width="200" height="200" style="border-radius: 20px;">
 </div>
 
-# Vava Doces - Análise de Custos e Faturamento
+# Vavá Doces Data App
 
-## 📋 Sobre o Projeto
+Aplicação de Business Intelligence e Engenharia de Dados para transformar planilhas operacionais em decisões de rentabilidade.
 
-Este projeto fornece ferramentas para análise de custos de produção e faturamento para a loja Vava Doces. A ideia é conectar os dados (planilhas Google / Excel) a serviços de domínio que calculam custo por receita, margens e outras métricas de negócio.
+## Visão Executiva
 
-O repositório foi organizado com boas práticas (injeção de dependência, separação entre *ports* e *adapters*, e testes orientados por TDD) para facilitar manutenção e evolução.
+A Vavá Doces tinha um problema clássico de pequenas operações: havia volume de vendas, mas pouca visibilidade sobre **quanto cada produto realmente contribuía para o lucro**.
 
----
+Este projeto resolve essa lacuna com um app de dados que:
+- integra dados de Google Drive e Google Sheets;
+- padroniza e valida os dados em pipeline Medallion;
+- publica análises executivas em Streamlit para decisão rápida.
 
-## 🧭 Visão rápida
+## Problema que o App Resolve
 
-- Linguagem: Python
-- Gerenciador de ambiente/execução aqui usado: `uv` (conforme seu fluxo)
-- Testes: `pytest`
-- Principais bibliotecas: `pandas`, `gspread` (para Google Sheets; adaptador), `decimal` (para precisão financeira)
+O app foi desenhado para responder à pergunta central:
 
----
+**"Quais produtos geram lucro de verdade, quais sustentam caixa e quais estão destruindo margem?"**
 
-## 🗂 Estrutura relevante do projeto
+Sem essa visibilidade, ajustes de preço, compra de insumos e priorização comercial tendem a ser feitos por percepção. Com o app, as decisões passam a ser baseadas em fatos auditáveis.
 
 ### Funcionalidades principais:
 
@@ -35,11 +35,22 @@ O repositório foi organizado com boas práticas (injeção de dependência, sep
   - `tests/test_streamlit_app.py` — testes para funções auxiliares da aplicação Streamlit.
 - `RECEITAS AWI.xlsx` — planilha de referência/entrada para alinhamento de esquema (não é usada diretamente pelos testes).
 
----
+### Bronze
+- Ingestão dos arquivos brutos (CSV/XLSX) e exportações auxiliares de planilhas.
+- Preservação do dado original para rastreabilidade.
 
-## Como rodar localmente (com `uv`)
+### Silver
+- Normalização de colunas, datas, valores monetários e chaves de produto.
+- Deduplicação técnica controlada (sem colapsar itens legítimos de pedidos).
+- Tratamento de inconsistências para reduzir ruído analítico.
 
-Observação: neste repositório você informou que está usando o gerenciador `uv`. Os comandos abaixo assumem que as dependências foram instaladas no ambiente gerenciado por `uv`.
+### Gold
+- Tabelas analíticas para consumo da aplicação:
+  - fato e dimensões (`fato_vendas`, `dim_produto`, `dim_tempo`);
+  - agregados de vendas;
+  - custos de produção (`custos_producao_agregado`, `receitas_detalhadas`);
+  - rentabilidade (`gold_rentabilidade`).
+- Preservação de linhagem de `NaN` para evitar falsos positivos de margem.
 
 ### 1. Instalar dependências
 
@@ -119,55 +130,55 @@ B) Autenticação local (desenvolvimento):
 - Erros: adaptadores normalizam exceções para `DataSourceError` para facilitar tratamento e testes.
 - Testes escritos com TDD em mente: primeiro os testes de domínio com mocks/fakes, depois implementação da infraestrutura.
 
-Principais princípios: SOLID (SRP, DIP, ISP, OCP) e testes unitários para regras de negócio.
+## Guia de Uso de Negócio (Resumo)
 
----
+### Matriz de Rentabilidade
+A matriz cruza:
+- eixo X: volume vendido;
+- eixo Y: margem percentual.
 
-## Como o `CostAnalysisService` é esperado agir
+Quadrantes e plano de ação:
+- **Estrelas**: alto volume e alta margem. Proteger disponibilidade e manter destaque comercial.
+- **Vacas Leiteiras**: alto volume e baixa margem. Otimizar custos e revisar preço/tamanho.
+- **Dilemas**: baixo volume e alta margem. Testar campanhas e canais para ganhar escala.
+- **Problemas**: baixo volume e baixa margem. Reprecificar, reformular ou descontinuar.
 
-- Método principal disponível: `calculate_cost_per_recipe(sheet_name: str) -> Dict[str, Decimal]`.
-- Entrada esperada: um `DataFrame` com pelo menos as colunas (case-insensitive) `recipe`, `qty`, `unit_price`.
-- Comportamento:
-  - Se a folha estiver vazia, retorna `{}`.
-  - Se faltar coluna obrigatória, lança `ValueError` com mensagem clara.
-  - Usa `decimal.Decimal` para somas de valores monetários (evita imprecisão de floats).
+### Tabela de Decisão e Alertas
+- **Vermelho**: margem negativa (produto em perda).
+- **Oliva**: custo/margem ausente (`NaN`), item precisa de auditoria antes de decisão.
 
----
+Leitura recomendada:
+1. tratar primeiro linhas vermelhas;
+2. resolver pendências oliva (dados faltantes);
+3. priorizar ganhos por quadrante.
 
-## Execução de desenvolvimento (fluxo recomendado)
+## Stack Técnica
 
-- Use TDD: escreva um teste unitário em `tests/` que descreva o comportamento desejado do domínio.
-- Faça o teste falhar (red).
-- Implemente a lógica mínima no `CostAnalysisService`/adapter (green).
-- Refatore preservando os testes.
+- **Python**: orquestração e regras de negócio.
+- **Streamlit**: interface executiva.
+- **Pandas**: transformação e modelagem tabular.
+- **Plotly**: visualizações analíticas interativas.
 
----
+## Regras de Limpeza e Qualidade de Dados
 
-## Riscos e pontos de atenção
+Princípios aplicados para evitar diagnósticos errados:
+- conversão robusta de moeda e datas com fallback controlado;
+- padronização de chaves textuais para reduzir mismatches;
+- tratamento explícito de `None`/`NaN` em custos;
+- invalidação de margem/markup quando custo está ausente ou zero;
+- diferenciação entre dado ausente e valor real zero.
 
-- Credenciais no repositório: não comitar arquivos de chave.
-- Formato dos dados: células vazias, separadores decimais (vírgula vs ponto) podem causar `ValueError`. Normalizar no adaptador se precisar.
-- Quotas da API Google: para leituras frequentes, implemente cache ou backoff.
+Essas regras evitam **falsos positivos de lucratividade** e preservam confiabilidade analítica.
 
----
+## Execução Local
 
-## Próximos passos e melhorias sugeridas
+```bash
+uv sync
+uv run pytest -q
+uv run streamlit run app.py
+```
 
-- Adicionar verificação de schema (validar cabeçalho com regras configuráveis) e um adaptador de validação antes do serviço de domínio.
-- Implementar caching para leituras frequentes (ex.: Redis ou cache local com TTL).
-- Expor um CLI simples ou uma API HTTP (FastAPI/Flask) para executar análises remotamente.
-- Adicionar um pipeline de CI (GitHub Actions) que:
-  - Instale dependências (usando `uv` se aplicável),
-  - Rode `uv run pytest -q`,
-  - Não exponha credenciais (use secrets do repositório).
-
----
-
-## Contato e contribuições
-
-Contribuições são bem-vindas. Abra issues para descrever bugs ou melhorias e PRs para mudanças implementadas com testes.
-
----
+## Documentação Complementar
 
 _Boa prática: sempre rode a suíte de testes (`uv run pytest`) antes de abrir um PR._
 

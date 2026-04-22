@@ -11,6 +11,10 @@ dependencies = [
     "python-dotenv",
     "pytest>=9.0.2",
     "pytest-mock>=3.15.1",
+    "pandas-stubs~=2.3.3",
+    "plotly>=5.19",
+    "openpyxl>=3.1.5",
+    "google-api-python-client>=2.193.0",
 ]
 
 [project.optional-dependencies]
