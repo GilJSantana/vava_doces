@@ -1,0 +1,24 @@
+/* Extra CSS para personalizar o site MkDocs - identidade Vava Doces */
+
+/* Tornar o logo arredondado quando exibido no tema */
+.md-header-nav__title img, .md-header-nav__logo img, .md-header-logo img {
+  border-radius: 12px;
+  max-height: 56px;
+  width: auto;
+}
+
+/* Ajuste de cores gerais (tinta verde + dourado) */
+.md-header, .md-footer {
+  background-color: #0F3B2E; /* verde escuro */
+}
+
+.md-nav__link--active {
+  color: #C9A23A !important; /* dourado */
+}
+
+/* Pequeno ajuste para que imagens nos docs fiquem com bordas arredondadas */
+.markdown img {
+  border-radius: 8px;
+  max-width: 100%;
+}
+

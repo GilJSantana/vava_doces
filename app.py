@@ -1,135 +1,89 @@
-"""Aplicação Streamlit da Vavá Doces com três páginas executivas.
+"""
+Aplicação Streamlit para análise de custos e faturamento da Vava Doces.
 
-O MVP em produção é composto por:
-- Dashboard de rentabilidade
-- Custos de produção
-- Faturamento (auditoria)
-
-Camada de Segurança:
-- OAuth2 via Google (autenticação de identidade)
-- Google Drive API (verificação de permissões via Service Account)
-- Session state com gates de acesso antes de carregar dados
+Esta aplicação oferece interface interativa para:
+- Visualizar dados de custos de produção
+- Visualizar dados de faturamento
+- Calcular custo por receita
+- Análises de margens e rentabilidade
 """
 
-import logging
-import os
-from pathlib import Path
-from time import perf_counter
-from typing import Callable
-
 import streamlit as st
+import pandas as pd
+from decimal import Decimal
+import os
 from dotenv import load_dotenv
-from scripts.medallion_pipeline import MedallionPipeline
 
-from src.domain.sales_analysis_service import sync_drive_files_to_raw_from_env
-from src.infrastructure.google_oauth2_adapter import (
-    init_session_state_auth,
-    is_user_authenticated,
-    is_user_authorized,
-    set_user_authorized,
-)
 from src.infrastructure.google_sheets_adapter import GoogleSheetsAdapter
-from src.presentation.auth_page import (
-    check_permissions_and_authorize,
-    render_access_denied_page,
-    render_login_page,
-)
-from src.presentation.components import render_app_header
-
-logger = logging.getLogger(__name__)
-from src.presentation.controller import run_app_controller
-from src.presentation.navigation import (
-    PAGE_DASHBOARD,
-    PAGE_PRODUCTION_COSTS,
-    PAGE_FATURAMENTO,
-    render_sidebar as render_navigation_sidebar,
-)
-from src.presentation.pages import (
-    show_dashboard,
-    show_production_costs,
-    show_faturamento,
-)
-from src.presentation.theme import apply_global_styles
+from src.domain.cost_analysis_service import CostAnalysisService
+from src.ports.data_source import DataSourceError
 
 # Carregar variáveis de ambiente
 load_dotenv()
 
 # Configuração da página
-_PROJECT_ROOT = Path(__file__).resolve().parent
-_favicon_path = _PROJECT_ROOT / "assets" / "favicon.png"
-_page_icon = str(_favicon_path) if _favicon_path.exists() else "🍰"
-
 st.set_page_config(
-    page_title="Vava Doces - Análise de Produtos e Vendas",
-    page_icon=_page_icon,
+    page_title="Vava Doces - Análise de Custos",
+    page_icon="🍰",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-apply_global_styles()
+# Estilos CSS customizados para identidade visual (verde + dourado)
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap');
+    :root{
+        --vava-green-dark: #0F3B2E;
+        --vava-green: #145D44;
+        --vava-gold: #C9A23A;
+        --vava-cream: #F6F1E6;
+    }
+    html, body, [data-testid='stAppViewContainer'] {
+        background: linear-gradient(180deg, var(--vava-green-dark) 0%, #0B2E25 100%);
+        color: var(--vava-cream);
+        font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    }
+    .header {
+        text-align: center;
+        padding: 1.2rem 0 0.25rem 0;
+    }
+    .vava-logo-wrapper {
+        display:flex;align-items:center;justify-content:center;margin-bottom:0.6rem;
+    }
+    .vava-logo {
+        border-radius: 999px;
+        border: 4px solid var(--vava-gold);
+        box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+    }
+    /* estilizar imagens geradas por st.image */
+    .stImage img { border-radius: 999px !important; border:4px solid var(--vava-gold) !important; box-shadow: 0 6px 18px rgba(0,0,0,0.4) !important; }
+    .metric-card {
+        background: linear-gradient(180deg, rgba(201,162,58,0.09), rgba(255,255,255,0.02));
+        padding: 0.9rem 1rem;
+        border-radius: 14px;
+        margin: 0.4rem 0;
+        border: 1px solid rgba(201,162,58,0.14);
+        color: var(--vava-cream);
+    }
+    .metric-card .card-title { font-size:0.95rem; opacity:0.9; }
+    .metric-card .card-value { font-size:1.25rem; font-weight:700; color: var(--vava-cream); }
+    .stButton>button {
+        background: linear-gradient(90deg, var(--vava-gold), #E6C46B) !important;
+        color: #0b2e25 !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+    }
+    .stDownloadButton>button { padding: 0.45rem 0.8rem !important; }
+    .dataframe-wrapper { border-radius:12px; overflow:hidden; border:1px solid rgba(255,255,255,0.03); }
+    .dataframe thead tr th { background: rgba(20,93,68,0.6) !important; }
+    .streamlit-expanderHeader { color: var(--vava-cream) !important; }
+</style>
+""", unsafe_allow_html=True)
 
-PAGE_HANDLERS: dict[str, Callable] = {
-    PAGE_DASHBOARD: show_dashboard,
-    PAGE_PRODUCTION_COSTS: show_production_costs,
-    PAGE_FATURAMENTO: show_faturamento,
-}
-
-
-@st.cache_resource
-def initialize_data_pipeline() -> dict[str, object]:
-    """Executa bootstrap de ingestão RAW->SILVER->GOLD antes da renderização."""
-    try:
-        t0 = perf_counter()
-        # Tentar sincronizar dados do Google Drive
-        try:
-            t_sync = perf_counter()
-            synced_files = sync_drive_files_to_raw_from_env()
-            print(f"[perf] bronze_sync_ms={(perf_counter() - t_sync) * 1000:.2f}")
-            if synced_files > 0:
-                print(f"✅ Sincronizados {synced_files} arquivo(s) do Google Drive")
-        except Exception as sync_err:
-            print(f"⚠️  Não foi possível sincronizar do Google Drive: {sync_err}")
-            print("  Continuando com dados locais em data/raw/ (se disponível)")
-
-        # Verificar se há dados em data/raw/
-        raw_dir = Path(__file__).resolve().parent / "data" / "raw"
-        raw_files = list(raw_dir.glob("*.csv")) + list(raw_dir.glob("*.xlsx"))
-
-        if len(raw_files) == 0:
-            # Se não há dados locais, usar modo demo
-            print("⚠️  Nenhum arquivo encontrado em data/raw/")
-            print("   Use: python -m src.domain.sales_analysis_service --download-demo")
-            print("   Ou configure GOOGLE_APPLICATION_CREDENTIALS e DRIVE_FOLDER_ID no .env")
-            os.environ["VAVA_SALES_SOURCE"] = "demo"
-            return {
-                "bronze_rows": 0,
-                "silver_rows": 0,
-                "gold_rows": 0,
-                "mode": "demo",
-                "message": "Modo demo: configure Google Drive ou adicione arquivos em data/raw/",
-            }
-
-        # Executar pipeline com dados locais
-        t_pipeline = perf_counter()
-        result = MedallionPipeline().run()
-        print(f"[perf] medallion_run_ms={(perf_counter() - t_pipeline) * 1000:.2f}")
-        print(f"[perf] initialize_data_pipeline_ms={(perf_counter() - t0) * 1000:.2f}")
-        os.environ["VAVA_SALES_SOURCE"] = "gold"
-        print(f"✅ Pipeline executado com sucesso: {result}")
-        return result
-
-    except Exception as e:
-        print(f"❌ Erro ao executar pipeline: {e}")
-        # Retornar modo seguro em vez de falhar
-        os.environ["VAVA_SALES_SOURCE"] = "demo"
-        return {
-            "bronze_rows": 0,
-            "silver_rows": 0,
-            "gold_rows": 0,
-            "mode": "demo",
-            "error": str(e),
-        }
-
+# =====================================================================
+# INICIALIZAÇÃO E CACHE
+# =====================================================================
 
 @st.cache_resource
 def get_adapter():
@@ -140,7 +94,7 @@ def get_adapter():
 
         adapter = GoogleSheetsAdapter(
             credential_file=credential_file,
-            sheet_id=sheet_id,
+            sheet_id=sheet_id
         )
         return adapter
     except Exception as e:
@@ -148,137 +102,500 @@ def get_adapter():
         return None
 
 
-def render_selected_page(
-    page: str,
-    service: object | None = None,
-    product_service: object | None = None,
-) -> None:
-    """Despacha renderização da página selecionada.
+def get_service(adapter):
+    """Cria instância do serviço de análise de custos."""
+    if adapter is None:
+        return None
+    return CostAnalysisService(data_source=adapter)
 
-    Compatível com handlers legado (sem args) e novo (service, product_service).
-    """
-    handler = PAGE_HANDLERS.get(page)
-    if handler is None:
-        st.error("❌ Página inválida selecionada")
-        return
+
+# =====================================================================
+# FUNÇÕES AUXILIARES
+# =====================================================================
+
+def format_currency(value):
+    """Formata um valor em moeda brasileira."""
+    if isinstance(value, Decimal):
+        return f"R$ {float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def load_data_from_sheet(adapter, sheet_name):
+    """Carrega dados de uma planilha específica."""
     try:
-        handler(service, product_service)
-    except TypeError:
-        handler()
+        return adapter.get_data(sheet_name)
+    except DataSourceError as e:
+        st.error(f"❌ Erro ao carregar dados de '{sheet_name}': {e}")
+        return None
+    except Exception as e:
+        st.error(f"❌ Erro inesperado: {e}")
+        return None
 
+
+# =====================================================================
+# PÁGINA PRINCIPAL
+# =====================================================================
 
 def main():
-    """Executa a aplicação Streamlit com autenticação e autorização obrigatórias."""
-
-    # STEP 1: Inicializar estado de autenticação
-    init_session_state_auth()
-    logger.info("Iniciando aplicação Vavá Doces com camada de segurança")
-
-    # STEP 2: Verificar autenticação OAuth2
-    if not is_user_authenticated():
+    # Header
+    st.markdown('<div class="header">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        # logo: usar assets/logo.png
+        logo_path = "assets/logo.png"
+        # Use st.image para renderizar (mais confiável em Streamlit)
         try:
-            oauth2_client_id = st.secrets.get("OAUTH2_CLIENT_ID", "").strip()
-            oauth2_client_secret = st.secrets.get("OAUTH2_CLIENT_SECRET", "").strip()
-            oauth2_redirect_uri = st.secrets.get("OAUTH2_REDIRECT_URI", "http://localhost:8501").strip()
+            st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
+            st.image(logo_path, width=150)
+            st.markdown('</div>', unsafe_allow_html=True)
+        except Exception:
+            st.markdown('<div class="vava-logo-wrapper">', unsafe_allow_html=True)
+            st.markdown('<div style="width:150px;height:150px;border-radius:999px;background:#C9A23A;display:inline-block"></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+    st.title("🍰 Vava Doces - Análise de Custos e Faturamento")
+    st.markdown("_Ferramenta de análise de custos de produção e faturamento_")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-            if not oauth2_client_id or not oauth2_client_secret:
-                st.error(
-                    "❌ **Erro de Configuração - OAuth2**\n\n"
-                    "`OAUTH2_CLIENT_ID` e `OAUTH2_CLIENT_SECRET` não foram configurados.\n\n"
-                    "Por favor, adicione em `.streamlit/secrets.toml`"
-                )
-                logger.error("OAuth2 credentials missing in st.secrets")
-                return
+    # Sidebar - Configuração
+    with st.sidebar:
+        st.markdown(f"<div style='padding:0.5rem 0; color:{'#F6F1E6'}'><h3>⚙️ Configuração</h3></div>", unsafe_allow_html=True)
 
-            if not oauth2_redirect_uri:
-                oauth2_redirect_uri = "http://localhost:8501"
-                logger.debug("Using default redirect_uri: http://localhost:8501")
+        # Status de conexão
+        adapter = get_adapter()
+        if adapter:
+            st.success("✅ Conectado ao Google Sheets")
+        else:
+            st.error("❌ Desconectado - Configure as credenciais")
+            st.stop()
 
-            logger.info("OAuth2 credentials loaded from secrets")
-            render_login_page(
-                client_id=oauth2_client_id,
-                client_secret=oauth2_client_secret,
-                redirect_uri=oauth2_redirect_uri,
-            )
-        except Exception as e:
-            st.error(f"❌ Erro ao carregar configuração de autenticação: {e}")
-            logger.exception("Error loading OAuth2 configuration")
-        return
+        # Menu de navegação
+        page = st.radio(
+            "Selecione uma página:",
+            options=[
+                "📊 Dashboard",
+                "📦 Cadastro de Produtos",
+                "🥘 Matéria Prima",
+                "💳 Vendas Diárias",
+                "📈 Resumo Diário",
+                "📊 Análise por Categoria",
+                "🔍 Análise Detalhada"
+            ]
+        )
 
-    # STEP 3: Verificar autorização via Drive se autenticado mas não autorizado
-    if not is_user_authorized():
-        try:
-            user_email = st.session_state.get("user_email")
-            service_account_file = st.secrets.get("SERVICE_ACCOUNT_FILE", "").strip()
-            drive_source_file_id = st.secrets.get("DRIVE_SOURCE_FILE_ID", "").strip()
+    # Inicializar serviço
+    service = get_service(adapter)
+    if service is None:
+        st.error("❌ Falha ao inicializar serviço de análise")
+        st.stop()
 
-            if not user_email:
-                st.error("❌ Identidade do usuário não foi validada. Tente fazer login novamente.")
-                logger.error("user_email missing after OAuth2 authentication")
-                return
+    # Renderizar página selecionada
+    if page == "📊 Dashboard":
+        show_dashboard(service, adapter)
+    elif page == "📦 Cadastro de Produtos":
+        show_produtos(adapter)
+    elif page == "🥘 Matéria Prima":
+        show_materia_prima(adapter)
+    elif page == "💳 Vendas Diárias":
+        show_vendas_diarias(adapter)
+    elif page == "📈 Resumo Diário":
+        show_resumo_diario(adapter)
+    elif page == "📊 Análise por Categoria":
+        show_analise_categoria(adapter)
+    elif page == "🔍 Análise Detalhada":
+        show_analise_detalhada(service)
 
-            if not service_account_file or not drive_source_file_id:
-                st.error(
-                    "❌ **Erro de Configuração - Google Drive**\n\n"
-                    "`SERVICE_ACCOUNT_FILE` e `DRIVE_SOURCE_FILE_ID` não foram configurados.\n\n"
-                    "Por favor, adicione em `.streamlit/secrets.toml`"
-                )
-                logger.error("Drive configuration missing in st.secrets")
-                return
 
-            # Converter caminho relativo para absoluto se necessário
-            if not os.path.isabs(service_account_file):
-                service_account_file = os.path.join(
-                    Path(__file__).resolve().parent,
-                    service_account_file
-                )
-                logger.debug("Converted relative path to absolute: %s", service_account_file)
+# =====================================================================
+# PÁGINA: DASHBOARD
+# =====================================================================
 
-            # Verificar permissões com spinner
-            with st.spinner("🔍 Verificando permissões no Google Drive..."):
-                logger.info("Initiating Drive permission check for %s on file %s", user_email, drive_source_file_id)
-                is_authorized = check_permissions_and_authorize(
-                    user_email=user_email,
-                    credential_file=service_account_file,
-                    file_or_folder_id=drive_source_file_id,
-                    min_role="reader",
-                )
+def show_dashboard(service, adapter):
+    st.header("📊 Dashboard")
+    st.markdown("---")
 
-            set_user_authorized(is_authorized)
+    try:
+        # Carregar dados
+        produtos_df = load_data_from_sheet(adapter, "Cadastro Produtos")
+        vendas_df = load_data_from_sheet(adapter, "Vendas Diárias")
+        resumo_df = load_data_from_sheet(adapter, "Resumo Diário")
 
-            if not is_authorized:
-                logger.warning("Authorization failed for user %s", user_email)
-                render_access_denied_page(user_email)
-                return
-
-            st.success("✅ Autorização do Google Drive concedida!")
-            logger.info("Drive Authorization Successful")
-            st.rerun()
-
-        except FileNotFoundError as e:
-            st.error(
-                f"❌ Arquivo de credenciais Service Account não encontrado: {e}\n\n"
-                "Verifique se `SERVICE_ACCOUNT_FILE` está correto em `.streamlit/secrets.toml`"
-            )
-            logger.error("Service account file not found: %s", e)
-            return
-        except Exception as e:
-            st.error(f"❌ Erro ao verificar permissões do Google Drive: {e}")
-            logger.exception("Error checking Drive permissions")
+        if produtos_df is None or produtos_df.empty:
+            st.warning("⚠️ Nenhum dado disponível")
             return
 
-    # STEP 4: Usuário autenticado E autorizado — carregar aplicação principal
-    logger.info("User %s fully authenticated and authorized", st.session_state.get("user_email"))
+        # Métricas principais
+        col1, col2, col3, col4 = st.columns(4)
 
-    if "pipeline_state" not in st.session_state:
-        st.session_state["pipeline_state"] = initialize_data_pipeline()
+        # Renderizar cards métricos
+        def render_metric(col, title, value):
+            with col:
+                st.markdown(f"<div class='metric-card'><div class='card-title'>{title}</div><div class='card-value'>{value}</div></div>", unsafe_allow_html=True)
 
-    run_app_controller(
-        render_header_fn=render_app_header,
-        render_sidebar_fn=lambda: render_navigation_sidebar(get_adapter),
-        render_page_fn=render_selected_page,
-    )
+        total_produtos = len(produtos_df) if produtos_df is not None else 0
+        total_vendas = len(vendas_df) if vendas_df is not None else 0
 
+        # Tentar calcular totais de vendas se existirem colunas numéricas
+        total_valor_vendas = "R$ 0,00"
+        if vendas_df is not None and not vendas_df.empty:
+            numeric_cols = vendas_df.select_dtypes(include=['number']).columns
+            if len(numeric_cols) > 0:
+                total_valor_vendas = format_currency(vendas_df[numeric_cols[0]].sum())
+
+        render_metric(col1, '📦 Total de Produtos', f"{total_produtos}")
+        render_metric(col2, '💳 Total de Vendas', f"{total_vendas}")
+        render_metric(col3, '💰 Valor Total Vendas', total_valor_vendas)
+        render_metric(col4, '📊 Categorias', f"{len(produtos_df['Categoria'].unique()) if 'Categoria' in produtos_df.columns else 0}")
+
+        st.markdown("---")
+
+        # Gráficos
+        st.subheader("📈 Produtos por Categoria")
+
+        if "Categoria" in produtos_df.columns:
+            categoria_count = produtos_df['Categoria'].value_counts()
+            st.bar_chart(categoria_count)
+
+        st.markdown("---")
+
+        # Tabelas com resumo
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("📋 Últimos Produtos Cadastrados")
+            if produtos_df is not None and not produtos_df.empty:
+                display_df = produtos_df.tail(5).copy()
+                st.dataframe(display_df, use_container_width=True)
+            else:
+                st.info("Nenhum dado disponível")
+
+        with col2:
+            st.subheader("💳 Últimas Vendas")
+            if vendas_df is not None and not vendas_df.empty:
+                display_df = vendas_df.tail(5).copy()
+                st.dataframe(display_df, use_container_width=True)
+            else:
+                st.info("Nenhum dado disponível")
+
+
+    except Exception as e:
+        st.error(f"❌ Erro ao processar dashboard: {e}")
+# =====================================================================
+# PÁGINA: CADASTRO DE PRODUTOS
+# =====================================================================
+
+def show_produtos(adapter):
+    st.header("📦 Cadastro de Produtos")
+    st.markdown("---")
+
+    try:
+        df = load_data_from_sheet(adapter, "Cadastro Produtos")
+
+        if df is None or df.empty:
+            st.warning("⚠️ Nenhum produto cadastrado")
+            return
+
+        # Estatísticas
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("📦 Total de Produtos", len(df))
+
+        with col2:
+            if "Categoria" in df.columns:
+                st.metric("📊 Categorias", df["Categoria"].nunique())
+
+        with col3:
+            if "Preço" in df.columns or "preco" in [c.lower() for c in df.columns]:
+                price_col = [c for c in df.columns if c.lower() == "preco" or c.lower() == "preço"][0] if any(c.lower() in ["preco", "preço"] for c in df.columns) else None
+                if price_col:
+                    st.metric("💰 Preço Médio", format_currency(df[price_col].mean()))
+
+        st.markdown("---")
+
+        # Filtros
+        col1, col2 = st.columns(2)
+
+        selected_category = None
+        if "Categoria" in df.columns:
+            with col1:
+                categories = df["Categoria"].unique()
+                selected_category = st.multiselect(
+                    "Filtrar por categoria:",
+                    options=categories,
+                    default=categories if len(categories) <= 5 else list(categories[:5])
+                )
+
+        # Aplicar filtro
+        if selected_category:
+            df_filtered = df[df["Categoria"].isin(selected_category)]
+        else:
+            df_filtered = df
+
+        # Exibir tabela
+        st.subheader("📋 Lista de Produtos")
+        st.dataframe(df_filtered, use_container_width=True)
+
+        # Download
+        st.markdown("---")
+        st.subheader("📥 Download")
+        csv = df_filtered.to_csv(index=False)
+        st.download_button(
+            label="📥 Baixar como CSV",
+            data=csv,
+            file_name="produtos.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir produtos: {e}")
+
+
+# =====================================================================
+# PÁGINA: MATÉRIA PRIMA
+# =====================================================================
+
+def show_materia_prima(adapter):
+    st.header("🥘 Matéria Prima")
+    st.markdown("---")
+
+    try:
+        df = load_data_from_sheet(adapter, "Matéria Prima")
+
+        if df is None or df.empty:
+            st.warning("⚠️ Nenhum dado de matéria prima disponível")
+            return
+
+        # Estatísticas
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("🥘 Total de Itens", len(df))
+
+        with col2:
+            if "Unidade" in df.columns:
+                st.metric("📏 Unidades", df["Unidade"].nunique())
+
+        with col3:
+            if "Preço" in df.columns or "preco" in [c.lower() for c in df.columns]:
+                price_col = [c for c in df.columns if c.lower() == "preco" or c.lower() == "preço"][0] if any(c.lower() in ["preco", "preço"] for c in df.columns) else None
+                if price_col:
+                    st.metric("💰 Preço Médio", format_currency(df[price_col].mean()))
+
+        st.markdown("---")
+
+        # Exibir tabela
+        st.subheader("📋 Tabela de Matéria Prima")
+        st.dataframe(df, use_container_width=True)
+
+        # Download
+        st.markdown("---")
+        st.subheader("📥 Download")
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Baixar como CSV",
+            data=csv,
+            file_name="materia_prima.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir matéria prima: {e}")
+
+
+# =====================================================================
+# PÁGINA: VENDAS DIÁRIAS
+# =====================================================================
+
+def show_vendas_diarias(adapter):
+    st.header("💳 Vendas Diárias")
+    st.markdown("---")
+
+    try:
+        df = load_data_from_sheet(adapter, "Vendas Diárias")
+
+        if df is None or df.empty:
+            st.warning("⚠️ Nenhum dado de vendas disponível")
+            return
+
+        # Estatísticas
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("💳 Total de Vendas", len(df))
+
+        with col2:
+            # Tentar encontrar coluna de valor
+            numeric_cols = df.select_dtypes(include=['number']).columns
+            if len(numeric_cols) > 0:
+                st.metric("💰 Valor Total", format_currency(df[numeric_cols[0]].sum()))
+
+        with col3:
+            if len(numeric_cols) > 0:
+                st.metric("📊 Valor Médio", format_currency(df[numeric_cols[0]].mean()))
+
+        st.markdown("---")
+
+        # Gráfico de vendas
+        if len(numeric_cols) > 0:
+            st.subheader("📈 Gráfico de Vendas")
+            # Tentar agrupar por data se existir coluna de data
+            st.line_chart(df[numeric_cols[0]])
+
+        st.markdown("---")
+
+        # Exibir tabela
+        st.subheader("📋 Tabela de Vendas Diárias")
+        st.dataframe(df, use_container_width=True)
+
+        # Download
+        st.markdown("---")
+        st.subheader("📥 Download")
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Baixar como CSV",
+            data=csv,
+            file_name="vendas_diarias.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir vendas diárias: {e}")
+
+
+# =====================================================================
+# PÁGINA: RESUMO DIÁRIO
+# =====================================================================
+
+def show_resumo_diario(adapter):
+    st.header("📈 Resumo Diário")
+    st.markdown("---")
+
+    try:
+        df = load_data_from_sheet(adapter, "Resumo Diário")
+
+        if df is None or df.empty:
+            st.warning("⚠️ Nenhum dado de resumo disponível")
+            return
+
+        # Exibir tabela
+        st.subheader("📊 Resumo Diário")
+        st.dataframe(df, use_container_width=True)
+
+        # Download
+        st.markdown("---")
+        st.subheader("📥 Download")
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Baixar como CSV",
+            data=csv,
+            file_name="resumo_diario.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir resumo diário: {e}")
+
+
+# =====================================================================
+# PÁGINA: ANÁLISE POR CATEGORIA
+# =====================================================================
+
+def show_analise_categoria(adapter):
+    st.header("📊 Análise por Categoria")
+    st.markdown("---")
+
+    try:
+        df = load_data_from_sheet(adapter, "Análise por Categoria")
+
+        if df is None or df.empty:
+            st.warning("⚠️ Nenhum dado de análise disponível")
+            return
+
+        # Exibir tabela
+        st.subheader("📊 Análise por Categoria")
+        st.dataframe(df, use_container_width=True)
+
+        # Download
+        st.markdown("---")
+        st.subheader("📥 Download")
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📥 Baixar como CSV",
+            data=csv,
+            file_name="analise_categoria.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir análise por categoria: {e}")
+
+
+# =====================================================================
+# PÁGINA: ANÁLISE DETALHADA
+# =====================================================================
+
+def show_analise_detalhada(service):
+    st.header("🔍 Análise Detalhada")
+    st.markdown("---")
+
+    try:
+        # Tabs para diferentes análises
+        tab1, tab2, tab3 = st.tabs(["Custos por Receita", "Margens", "Relatórios"])
+
+        with tab1:
+            st.subheader("Custo Total por Receita")
+
+            custo_por_receita = service.calculate_cost_per_recipe("Custos")
+
+            if custo_por_receita:
+                # Criar DataFrame
+                analise_df = pd.DataFrame(
+                    [(k, float(v)) for k, v in sorted(custo_por_receita.items(), key=lambda x: x[1], reverse=True)],
+                    columns=["Receita", "Custo Total (R$)"]
+                )
+
+                # Métricas
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric("Total de Receitas", len(analise_df))
+
+                with col2:
+                    total = analise_df["Custo Total (R$)"].sum()
+                    st.metric("Custo Total", format_currency(total))
+
+                with col3:
+                    media = analise_df["Custo Total (R$)"].mean()
+                    st.metric("Custo Médio", format_currency(media))
+
+                # Gráfico
+                st.bar_chart(analise_df.set_index("Receita"))
+
+                # Tabela
+                display_df = analise_df.copy()
+                display_df["Custo Total (R$)"] = display_df["Custo Total (R$)"].apply(
+                    lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                )
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("ℹ️ Nenhum dado disponível para análise")
+
+        with tab2:
+            st.subheader("Análise de Margens")
+            st.info("ℹ️ Esta funcionalidade será implementada após integração de dados de faturamento com custos")
+
+        with tab3:
+            st.subheader("Relatórios")
+            st.info("ℹ️ Relatórios personalizados em desenvolvimento")
+
+    except Exception as e:
+        st.error(f"❌ Erro ao processar análise: {e}")
+
+
+# =====================================================================
+# EXECUÇÃO
+# =====================================================================
 
 if __name__ == "__main__":
     main()
+
