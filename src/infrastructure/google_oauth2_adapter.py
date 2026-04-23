@@ -70,8 +70,8 @@ class GoogleOAuth2Adapter:
             f"redirect_uri={redirect_uri}&"
             f"response_type=code&"
             f"scope={'+'.join(OAUTH2_SCOPES)}&"
-            f"access_type=offline&"
-            f"prompt=consent"
+            f"access_type=online&"
+            f"prompt=select_account"
         )
         return auth_url
 
