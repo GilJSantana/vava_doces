@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 
 import streamlit as st
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -195,22 +196,50 @@ class GoogleOAuth2Adapter:
 class GoogleDrivePermissionChecker:
     """Checks if a user has appropriate access to Drive resources."""
 
-    def __init__(self, credential_file: str):
+    def __init__(self, credential_file: str | None = None):
         """Initialize permission checker with service account credentials.
 
         Args:
-            credential_file: Path to service account JSON key file
+            credential_file: Legacy path parameter (kept for compatibility)
         """
         self.credential_file = credential_file
         self._service = None
+
+    @staticmethod
+    def _load_service_account_info() -> dict:
+        """Load service account credentials from Streamlit secrets.
+
+        Streamlit returns an AttrDict wrapper for nested TOML sections; we
+        explicitly cast to a native dict for google-auth compatibility.
+        """
+        account_info = st.secrets.get("gcp_service_account")
+        if account_info is None:
+            raise ValueError("Missing required secret: gcp_service_account")
+
+        logger.debug("Type of gcp_service_account: %s", type(account_info))
+
+        if isinstance(account_info, Mapping):
+            native_info = dict(account_info)
+        else:
+            try:
+                native_info = dict(account_info)
+            except Exception as exc:
+                raise ValueError(
+                    "Invalid secret type for gcp_service_account; expected mapping-like data"
+                ) from exc
+
+        if not native_info:
+            raise ValueError("Missing required secret: gcp_service_account is empty")
+
+        return native_info
 
     @property
     def service(self):
         """Build and cache the Drive API service."""
         if self._service is None:
             try:
-                credentials = ServiceAccountCredentials.from_service_account_file(
-                    self.credential_file,
+                credentials = service_account.Credentials.from_service_account_info(
+                    self._load_service_account_info(),
                     scopes=DRIVE_SCOPES,
                 )
                 self._service = build("drive", "v3", credentials=credentials)
