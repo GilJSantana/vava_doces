@@ -1,12 +1,12 @@
 # ✅ IMPLEMENTAÇÃO SEGURANÇA OAUTH2 + DRIVE PERMISSIONS - CONCLUSÃO
 
-**Data:** 18 de Abril de 2026
-**Status:** ✅ COMPLETO E VALIDADO
+**Data:** 18 de Abril de 2026  
+**Status:** ✅ COMPLETO E VALIDADO  
 **Commits:** 0 (conforme instruído)
 
 ---
 
-## 📋 RESUMO EXECUTIVO
+##  RESUMO EXECUTIVO
 
 Implementação completa de camada de segurança usando:
 - **Google OAuth2** para autenticação de identidade
@@ -17,20 +17,20 @@ Toda a lógica de negócio (cálculo de custos, integridade de dados) permanece 
 
 ---
 
-## 📦 ARQUIVOS IMPLEMENTADOS / MODIFICADOS
+##  ARQUIVOS IMPLEMENTADOS / MODIFICADOS
 
 | Arquivo | Tipo | Linhas | Mudanças |
 |---------|------|--------|----------|
 | `src/infrastructure/google_oauth2_adapter.py` | ✨ Novo | 332 | OAuth2 + Drive permission checker |
 | `src/presentation/auth_page.py` | ✨ Novo | 221 | UI de login e acesso negado |
-| `app.py` | 📝 Modificado | 124+ | 4-step security gate |
-| `.streamlit/secrets.toml.example` | 📝 Modificado | 25 | Documentação de configuração |
-| `docs/IMPLEMENTACAO_SEGURANCA_OAUTH2.md` | 📚 Novo | 211 | Documentação técnica |
+| `app.py` |  Modificado | 124+ | 4-step security gate |
+| `.streamlit/secrets.toml.example` |  Modificado | 25 | Documentação de configuração |
+| `docs/IMPLEMENTACAO_SEGURANCA_OAUTH2.md` |  Novo | 211 | Documentação técnica |
 | **TOTAL** | | **913** | |
 
 ---
 
-## 🔐 ARQUITETURA DE SEGURANÇA
+##  ARQUITETURA DE SEGURANÇA
 
 ### STEP 1: Inicializar Session State
 ```python
@@ -51,7 +51,7 @@ if not is_user_authenticated():
 ### STEP 3: Verificar Drive Authorization
 ```
 if not is_user_authorized():
-    → Service Account lista permissões do DRIVE_SOURCE_FILE_ID
+    → Service Account lista permissões do GOOGLE_DRIVE_FOLDER_ID
     → Valida se user_email está presente (roles: owner|writer|reader)
     → Se sim: autorizado = True
     → Se não: exibir access denied page
@@ -66,7 +66,7 @@ if not is_user_authorized():
 
 ---
 
-## 🛡️ SANITIZAÇÃO CRÍTICA
+## ️ SANITIZAÇÃO CRÍTICA
 
 Todas as credenciais são limpas antes de uso:
 
@@ -84,7 +84,7 @@ def _sanitize_secret_value(value: str) -> str:
 
 ---
 
-## 🎯 PARÂMETRO DRIVE API
+##  PARÂMETRO DRIVE API
 
 **Correção de Limite:**
 ```python
@@ -104,7 +104,7 @@ Comparação: Case-insensitive + stripped
 
 ---
 
-## 📊 VALIDAÇÃO
+##  VALIDAÇÃO
 
 ### Testes Executados
 - ✅ Compilação Python: Sem erros
@@ -121,7 +121,7 @@ Comparação: Case-insensitive + stripped
 
 ---
 
-## 🧪 COMO TESTAR LOCALMENTE
+##  COMO TESTAR LOCALMENTE
 
 1. **Configurar Google Cloud Console:**
    - Projeto novo ou existente
@@ -136,7 +136,7 @@ Comparação: Case-insensitive + stripped
    OAUTH2_CLIENT_SECRET = "YOUR_SECRET"
    OAUTH2_REDIRECT_URI = "http://localhost:8501"
    SERVICE_ACCOUNT_FILE = "credencial/vava-doces-0667d5821bd5.json"
-   DRIVE_SOURCE_FILE_ID = "YOUR_FILE_ID"
+   GOOGLE_DRIVE_FOLDER_ID = "YOUR_FOLDER_ID"
    ```
 
 3. **Executar aplicação:**
@@ -155,7 +155,7 @@ Comparação: Case-insensitive + stripped
 
 ---
 
-## 📝 LOGS E DEPURAÇÃO
+##  LOGS E DEPURAÇÃO
 
 Mensagens de progresso (sem expor segredos):
 
@@ -170,7 +170,7 @@ Mensagens de progresso (sem expor segredos):
 
 ---
 
-## 🚀 PRÓXIMAS AÇÕES
+##  PRÓXIMAS AÇÕES
 
 ### Antes do Commit:
 1. ✅ Validação de sintaxe
@@ -197,7 +197,7 @@ git commit -m "feat: Implement Google OAuth2 + Drive Permission Security Layer
 
 ---
 
-## 📋 CHECKLIST FINAL
+##  CHECKLIST FINAL
 
 - [x] OAuth2 adapter implementado
 - [x] Auth page (login + denied) implementada
@@ -224,7 +224,6 @@ Aguardando confirmação para realizar commit.
 
 ---
 
-**Desenvolvido em:** 18 de Abril de 2026
-**Tempo de Implementação:** < 2 horas
+**Desenvolvido em:** 18 de Abril de 2026  
+**Tempo de Implementação:** < 2 horas  
 **Qualidade:** Production-ready ✅
-

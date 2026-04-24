@@ -86,6 +86,10 @@ PAGE_HANDLERS: dict[str, Callable] = {
 def initialize_data_pipeline() -> dict[str, object]:
     """Executa bootstrap de ingestão RAW->SILVER->GOLD antes da renderização."""
     try:
+        drive_folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
+        if drive_folder_id and not os.getenv("DRIVE_FOLDER_ID"):
+            os.environ["DRIVE_FOLDER_ID"] = drive_folder_id
+
         t0 = perf_counter()
         # Tentar sincronizar dados do Google Drive
         try:
@@ -105,8 +109,8 @@ def initialize_data_pipeline() -> dict[str, object]:
         if len(raw_files) == 0:
             # Se não há dados locais, usar modo demo
             print("⚠️  Nenhum arquivo encontrado em data/raw/")
-            print("   Use: python -m src.domain.sales_analysis_service --download-demo")
-            print("   Ou configure GOOGLE_APPLICATION_CREDENTIALS e DRIVE_FOLDER_ID no .env")
+            print("   Use: python scripts/download_demo_data.py")
+            print("   Ou configure gcp_service_account e GOOGLE_DRIVE_FOLDER_ID em .streamlit/secrets.toml")
             os.environ["VAVA_SALES_SOURCE"] = "demo"
             return {
                 "bronze_rows": 0,
@@ -142,11 +146,10 @@ def initialize_data_pipeline() -> dict[str, object]:
 def get_adapter():
     """Cria instância do adaptador Google Sheets com cache."""
     try:
-        credential_file = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        sheet_id = os.getenv("GOOGLE_SHEET_ID")
+        sheet_id = os.getenv("GOOGLE_SHEET_ID") or st.secrets.get("GOOGLE_SHEET_ID")
 
         adapter = GoogleSheetsAdapter(
-            credential_file=credential_file,
+            credential_file=None,  # Use Streamlit secrets via st.secrets, not env vars
             sheet_id=sheet_id,
         )
         return adapter
@@ -216,38 +219,43 @@ def main():
     if not is_user_authorized():
         try:
             user_email = st.session_state.get("user_email")
-            service_account_file = st.secrets.get("SERVICE_ACCOUNT_FILE", "").strip()
-            drive_source_file_id = st.secrets.get("DRIVE_SOURCE_FILE_ID", "").strip()
+            drive_source_folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
 
             if not user_email:
                 st.error("❌ Identidade do usuário não foi validada. Tente fazer login novamente.")
                 logger.error("user_email missing after OAuth2 authentication")
                 return
 
-            if not service_account_file or not drive_source_file_id:
+            if not drive_source_folder_id:
                 st.error(
                     "❌ **Erro de Configuração - Google Drive**\n\n"
-                    "`SERVICE_ACCOUNT_FILE` e `DRIVE_SOURCE_FILE_ID` não foram configurados.\n\n"
+                    "`GOOGLE_DRIVE_FOLDER_ID` não foi configurado.\n\n"
                     "Por favor, adicione em `.streamlit/secrets.toml`"
                 )
                 logger.error("Drive configuration missing in st.secrets")
                 return
 
-            # Converter caminho relativo para absoluto se necessário
-            if not os.path.isabs(service_account_file):
-                service_account_file = os.path.join(
-                    Path(__file__).resolve().parent,
-                    service_account_file,
-                )
-                logger.debug("Converted relative path to absolute: %s", service_account_file)
+            # ✅ DEBUG: Confirmar que Streamlit está vendo os dados aninhados
+            try:
+                gcp_service_account_info = st.secrets.get("gcp_service_account")
+                if gcp_service_account_info and isinstance(gcp_service_account_info, dict):
+                    client_email = gcp_service_account_info.get("client_email", "NOT_SET")
+                    st.write(f"✅ **DEBUG**: Streamlit leu com sucesso o client_email: `{client_email}`")
+                    logger.info("Service account info successfully loaded from st.secrets: %s", client_email)
+                else:
+                    st.error("❌ **DEBUG**: gcp_service_account não é um dicionário ou está vazio")
+                    logger.error("gcp_service_account is not a dict: %s", type(gcp_service_account_info))
+            except Exception as debug_err:
+                st.error(f"❌ **DEBUG**: Erro ao acessar st.secrets['gcp_service_account']: {debug_err}")
+                logger.exception("Error reading gcp_service_account from st.secrets")
 
             # Verificar permissões com spinner
             with st.spinner("🔍 Verificando permissões no Google Drive..."):
-                logger.info("Initiating Drive permission check for %s on file %s", user_email, drive_source_file_id)
+                logger.info("Initiating Drive permission check for %s on folder %s", user_email, drive_source_folder_id)
                 is_authorized = check_permissions_and_authorize(
                     user_email=user_email,
-                    credential_file=service_account_file,
-                    file_or_folder_id=drive_source_file_id,
+                    credential_file=None,  # Use Streamlit secrets exclusively
+                    file_or_folder_id=drive_source_folder_id,
                     min_role="reader",
                 )
 
@@ -264,10 +272,10 @@ def main():
 
         except FileNotFoundError as e:
             st.error(
-                f"❌ Arquivo de credenciais Service Account não encontrado: {e}\n\n"
-                "Verifique se `SERVICE_ACCOUNT_FILE` está correto em `.streamlit/secrets.toml`"
+                f"❌ Erro ao verificar credenciais: {e}\n\n"
+                "As credenciais de Service Account devem estar configuradas em `.streamlit/secrets.toml` sob `[gcp_service_account]`"
             )
-            logger.error("Service account file not found: %s", e)
+            logger.error("Service account credentials not found: %s", e)
             return
         except Exception as e:
             st.error(f"❌ Erro ao verificar permissões do Google Drive: {e}")

@@ -100,7 +100,7 @@ if perm_email == user_email_normalized and perm_email:
 # Nenhum dado é carregado enquanto:
 if not is_user_authenticated():
     return  # Mostrar login page
-
+    
 if not is_user_authorized():
     return  # Mostrar denied page
 
@@ -123,8 +123,8 @@ OAUTH2_REDIRECT_URI = "http://localhost:8501"
 # Service Account
 SERVICE_ACCOUNT_FILE = "credencial/vava-doces-0667d5821bd5.json"
 
-# Drive Source File/Folder
-DRIVE_SOURCE_FILE_ID = "YOUR_DRIVE_FILE_ID"
+# Drive Source Folder
+GOOGLE_DRIVE_FOLDER_ID = "YOUR_DRIVE_FOLDER_ID"
 ```
 
 ---
@@ -193,7 +193,7 @@ logger.error("Service account may not have access to file %s", file_id)
 2. Copiar secrets.toml.example para .streamlit/secrets.toml
    - Preencher OAUTH2_CLIENT_ID
    - Preencher OAUTH2_CLIENT_SECRET
-   - Preencher DRIVE_SOURCE_FILE_ID
+   - Preencher GOOGLE_DRIVE_FOLDER_ID
 
 3. Testar fluxo:
    ```bash
@@ -208,4 +208,3 @@ logger.error("Service account may not have access to file %s", file_id)
 **Data de Conclusão:** 18 de Abril de 2026
 **Status:** Pronto para Commit
 **Commits Realizados:** 0
-
