@@ -14,6 +14,7 @@ Camada de Segurança:
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from time import perf_counter
 from typing import Callable
@@ -235,19 +236,14 @@ def main():
                 logger.error("Drive configuration missing in st.secrets")
                 return
 
-            # ✅ DEBUG: Confirmar que Streamlit está vendo os dados aninhados
-            try:
-                gcp_service_account_info = st.secrets.get("gcp_service_account")
-                if gcp_service_account_info and isinstance(gcp_service_account_info, dict):
-                    client_email = gcp_service_account_info.get("client_email", "NOT_SET")
-                    st.write(f"✅ **DEBUG**: Streamlit leu com sucesso o client_email: `{client_email}`")
-                    logger.info("Service account info successfully loaded from st.secrets: %s", client_email)
-                else:
-                    st.error("❌ **DEBUG**: gcp_service_account não é um dicionário ou está vazio")
-                    logger.error("gcp_service_account is not a dict: %s", type(gcp_service_account_info))
-            except Exception as debug_err:
-                st.error(f"❌ **DEBUG**: Erro ao acessar st.secrets['gcp_service_account']: {debug_err}")
-                logger.exception("Error reading gcp_service_account from st.secrets")
+            gcp_service_account_info = st.secrets.get("gcp_service_account")
+            if not isinstance(gcp_service_account_info, Mapping) or not gcp_service_account_info:
+                st.error(
+                    "❌ **Erro de Configuração - Service Account**\n\n"
+                    "`[gcp_service_account]` não foi configurado corretamente em `.streamlit/secrets.toml`."
+                )
+                logger.error("Missing or invalid gcp_service_account in st.secrets: %s", type(gcp_service_account_info))
+                return
 
             # Verificar permissões com spinner
             with st.spinner("🔍 Verificando permissões no Google Drive..."):
