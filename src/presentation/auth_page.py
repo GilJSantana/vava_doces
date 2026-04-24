@@ -76,38 +76,6 @@ section[data-testid="stAppViewContainer"] {
     font-size: 2.8rem;
 }
 
-.google-login-wrap {
-    text-align: center;
-    margin: 1.15rem 0 0.95rem 0;
-}
-
-a.google-login-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.7rem;
-    min-width: 260px;
-    padding: 0.72rem 1rem;
-    border: 1px solid #dfe3e7;
-    border-radius: 999px;
-    background: #ffffff;
-    color: #3c4043;
-    font-size: 0.96rem;
-    font-weight: 600;
-    text-decoration: none;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-a.google-login-btn:hover {
-    border-color: #8ab7ff;
-    box-shadow: 0 3px 12px rgba(5, 34, 28, 0.32);
-}
-
-a.google-login-btn img {
-    width: 18px;
-    height: 18px;
-}
-
 .auth-divider {
     width: 100%;
     max-width: 560px;
@@ -247,26 +215,18 @@ def render_login_page(
                     st.error("Falha na autenticação OAuth2. Tente novamente.")
                     logger.warning("OAuth2 token exchange failed")
         else:
-            # Botão de login no padrão visual do Google.
-            # IMPORTANT: login_url must NOT be passed through html.escape() because
-            # that would corrupt '&' → '&amp;' in the query string, causing a 400/403.
-            # target="_top" is required on Streamlit Cloud: the app runs inside an
-            # <iframe> managed by the platform. "_self" redirects only the inner frame;
-            # "_top" breaks out of ALL nested iframes and hits the browser window
-            # directly, which is what Google's OAuth2 callback expects.
+            # Use componente nativo para navegação OAuth2 em ambiente sandboxed.
+            # Não aplicar html.escape() na URL para preservar query string intacta.
             oauth2 = GoogleOAuth2Adapter(client_id, client_secret, redirect_uri)
             login_url = oauth2.get_login_url()
-            st.markdown(
-                f"""
-                <div class="google-login-wrap">
-                    <a href="{login_url}" target="_top" class="google-login-btn">
-                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo">
-                        Entrar com Google
-                    </a>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            col_btn_left, col_btn_center, col_btn_right = st.columns([1, 1.6, 1])
+            with col_btn_center:
+                st.link_button(
+                    "Entrar com Google",
+                    login_url,
+                    type="primary",
+                    use_container_width=True,
+                )
 
         _render_auth_footer()
         st.markdown("</div>", unsafe_allow_html=True)
