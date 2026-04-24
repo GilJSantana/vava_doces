@@ -247,13 +247,19 @@ def render_login_page(
                     st.error("Falha na autenticação OAuth2. Tente novamente.")
                     logger.warning("OAuth2 token exchange failed")
         else:
-            # Botão de login no padrão visual do Google
+            # Botão de login no padrão visual do Google.
+            # IMPORTANT: login_url must NOT be passed through html.escape() because
+            # that would corrupt '&' → '&amp;' in the query string, causing a 400/403.
+            # target="_top" is required on Streamlit Cloud: the app runs inside an
+            # <iframe> managed by the platform. "_self" redirects only the inner frame;
+            # "_top" breaks out of ALL nested iframes and hits the browser window
+            # directly, which is what Google's OAuth2 callback expects.
             oauth2 = GoogleOAuth2Adapter(client_id, client_secret, redirect_uri)
-            login_url = escape(oauth2.get_login_url(), quote=True)
+            login_url = oauth2.get_login_url()
             st.markdown(
                 f"""
                 <div class="google-login-wrap">
-                    <a href="{login_url}" target="_self" class="google-login-btn">
+                    <a href="{login_url}" target="_top" class="google-login-btn">
                         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo">
                         Entrar com Google
                     </a>
