@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 import streamlit as st
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
@@ -53,13 +52,38 @@ class GoogleOAuth2Adapter:
         """Normalize OAuth credential values to avoid hidden whitespace/newline issues."""
         return str(value).strip().replace("\r", "").replace("\n", "")
 
-    @staticmethod
-    def _get_redirect_uri_from_secrets() -> str:
-        """Return the exact OAuth2 redirect URI configured in Streamlit secrets."""
+    def _get_canonical_redirect_uri(self) -> str:
+        """Return a sanitized redirect URI, preferring Streamlit secrets when present.
+
+        In Streamlit Cloud, the canonical redirect URI should come from `st.secrets`
+        so it matches the value registered in Google Cloud Console exactly. For local
+        or test scenarios, fall back to the constructor value.
+        """
         configured = st.secrets.get("OAUTH2_REDIRECT_URI")
-        if not configured:
-            raise ValueError("Missing required secret: OAUTH2_REDIRECT_URI")
-        return str(configured)
+        if configured:
+            return self._sanitize_secret_value(configured)
+
+        if self.redirect_uri:
+            return self._sanitize_secret_value(self.redirect_uri)
+
+        raise ValueError("Missing required redirect URI for OAuth2 flow")
+
+    @staticmethod
+    def _quote_query_value(
+        string: str,
+        safe: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> str:
+        """Percent-encode query-string values using `%20` for spaces.
+
+        `urllib.parse.urlencode` defaults to `quote_plus`, which would encode
+        spaces as `+`. For OAuth2 `scope`, we explicitly want `%20` so the URL
+        stays RFC-friendly and consistent across browsers and proxies.
+        """
+        import urllib.parse
+
+        return urllib.parse.quote(string, safe=safe, encoding=encoding, errors=errors)
 
     def get_login_url(self) -> str:
         """Generate Google OAuth2 login URL.
@@ -70,7 +94,7 @@ class GoogleOAuth2Adapter:
         """
         import urllib.parse
 
-        redirect_uri = self._get_redirect_uri_from_secrets()
+        redirect_uri = self._get_canonical_redirect_uri()
         params = urllib.parse.urlencode(
             {
                 "client_id": self._sanitize_secret_value(self.client_id),
@@ -83,7 +107,7 @@ class GoogleOAuth2Adapter:
                 # select_account: always shows account picker (UX safety)
                 "prompt": "select_account",
             },
-            quote_via=urllib.parse.quote,
+            quote_via=self._quote_query_value,  # type: ignore[arg-type]
         )
         return f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
 
@@ -108,7 +132,7 @@ class GoogleOAuth2Adapter:
             token_url = "https://oauth2.googleapis.com/token"
 
             # Canonical values — stripped of any hidden whitespace / newlines
-            redirect_uri = self._get_redirect_uri_from_secrets()
+            redirect_uri = self._get_canonical_redirect_uri()
             client_id = self._sanitize_secret_value(self.client_id)
             client_secret = self._sanitize_secret_value(self.client_secret)
 
