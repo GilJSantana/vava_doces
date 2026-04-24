@@ -62,18 +62,30 @@ class GoogleOAuth2Adapter:
         return str(configured)
 
     def get_login_url(self) -> str:
-        """Generate Google OAuth2 login URL."""
+        """Generate Google OAuth2 login URL.
+
+        Uses urllib.parse.urlencode to guarantee correct percent-encoding of all
+        parameters, including redirect_uri (which contains ':', '/') and scopes
+        (which must be space-separated, not '+'-separated per RFC 6749 §3.3).
+        """
+        import urllib.parse
+
         redirect_uri = self._get_redirect_uri_from_secrets()
-        auth_url = (
-            f"https://accounts.google.com/o/oauth2/v2/auth?"
-            f"client_id={self._sanitize_secret_value(self.client_id)}&"
-            f"redirect_uri={redirect_uri}&"
-            f"response_type=code&"
-            f"scope={'+'.join(OAUTH2_SCOPES)}&"
-            f"access_type=online&"
-            f"prompt=select_account"
+        params = urllib.parse.urlencode(
+            {
+                "client_id": self._sanitize_secret_value(self.client_id),
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                # RFC 6749 §3.3: scope values separated by spaces, not '+'
+                "scope": " ".join(OAUTH2_SCOPES),
+                # access_type=online: no refresh token, avoids 403 on shared Cloud domains
+                "access_type": "online",
+                # select_account: always shows account picker (UX safety)
+                "prompt": "select_account",
+            },
+            quote_via=urllib.parse.quote,
         )
-        return auth_url
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
 
     def exchange_code_for_token(self, code: str) -> dict | None:
         """Exchange authorization code for access token.
@@ -329,4 +341,5 @@ def clear_auth_session():
     st.session_state["auth_access_token"] = None
     st.session_state["auth_is_authorized"] = False
     st.session_state["auth_login_attempted"] = False
+
 
