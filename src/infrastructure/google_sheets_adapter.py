@@ -1,5 +1,7 @@
 import os
 import time
+import logging
+from collections.abc import Mapping
 from typing import Optional
 
 import gspread
@@ -12,6 +14,32 @@ from src.ports.data_source import DataSource, DataSourceError
 DEFAULT_CONTROLE_VENDAS_SHEET_ID = "1KEzf8FcL21DMk_64t-B9gMQIxjEx3ZPS_XsY-jYNVNk"
 MANUAL_TABS = {"Matéria Prima", "Receitas", "Produtos"}
 _SHEETS_CACHE_TTL_SECONDS = int(os.getenv("VAVA_SHEETS_CACHE_TTL", "300"))
+
+logger = logging.getLogger(__name__)
+
+
+def _load_service_account_info() -> dict:
+    """Load and normalize Service Account info from Streamlit secrets."""
+    account_info = st.secrets.get("gcp_service_account")
+    if account_info is None:
+        raise DataSourceError("Missing required secret: gcp_service_account")
+
+    logger.debug("Type of gcp_service_account: %s", type(account_info))
+
+    if isinstance(account_info, Mapping):
+        native_info = dict(account_info)
+    else:
+        try:
+            native_info = dict(account_info)
+        except Exception as exc:
+            raise DataSourceError(
+                "Invalid secret type for gcp_service_account; expected mapping-like data"
+            ) from exc
+
+    if not native_info:
+        raise DataSourceError("Missing required secret: gcp_service_account is empty")
+
+    return native_info
 
 
 @st.cache_data(ttl=_SHEETS_CACHE_TTL_SECONDS)
@@ -26,7 +54,7 @@ def _fetch_values_cached(
     The adapter still keeps its own in-memory TTL cache, but this function avoids
     repeated network calls across Streamlit reruns/process-local adapter instances.
     """
-    client = gspread.service_account(filename=credential_file) if credential_file else gspread.service_account()
+    client = gspread.service_account_from_dict(_load_service_account_info())
     worksheet = client.open_by_key(sheet_id).worksheet(sheet_name)
     if cell_range:
         return worksheet.get(cell_range)
@@ -35,7 +63,7 @@ def _fetch_values_cached(
 
 class GoogleSheetsAdapter(DataSource):
     def __init__(self, credential_file: Optional[str] = None, sheet_id: Optional[str] = None):
-        self.credential_file = credential_file or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        self.credential_file = credential_file
         self.sheet_id = sheet_id or os.getenv("GOOGLE_SHEET_ID") or DEFAULT_CONTROLE_VENDAS_SHEET_ID
         self._client = None
         self._spreadsheet = None
@@ -44,12 +72,7 @@ class GoogleSheetsAdapter(DataSource):
     @property
     def client(self):
         if self._client is None:
-            # If a credential file path is provided, use it; otherwise rely on
-            # environment (GOOGLE_APPLICATION_CREDENTIALS) or default service account.
-            if self.credential_file:
-                self._client = gspread.service_account(filename=self.credential_file)
-            else:
-                self._client = gspread.service_account()
+            self._client = gspread.service_account_from_dict(_load_service_account_info())
         return self._client
 
     @client.setter
