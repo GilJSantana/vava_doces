@@ -287,7 +287,7 @@ def render_auth_status_badge() -> None:
 
 def check_permissions_and_authorize(
     user_email: str,
-    credential_file: str,
+    credential_file: str | None,
     file_or_folder_id: str,
     min_role: str = "reader",
 ) -> bool:
@@ -295,7 +295,7 @@ def check_permissions_and_authorize(
 
     Args:
         user_email: Email do usuário para verificação
-        credential_file: Caminho para arquivo de credenciais de Service Account
+        credential_file: Caminho para arquivo de credenciais (legado, ignorado - usa st.secrets)
         file_or_folder_id: ID do arquivo/pasta no Google Drive
         min_role: Papel mínimo necessário (padrão: reader)
 
@@ -309,7 +309,7 @@ def check_permissions_and_authorize(
 
         logger.info("Iniciando verificação de permissões para %s no arquivo %s", user_email, file_or_folder_id)
 
-        permission_checker = GoogleDrivePermissionChecker(credential_file)
+        permission_checker = GoogleDrivePermissionChecker(credential_file=None)
         is_authorized = permission_checker.check_user_permission_on_file(
             file_id=file_or_folder_id,
             user_email=user_email,
