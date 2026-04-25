@@ -5,14 +5,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 from src.presentation.components import render_separator
 
 logger = logging.getLogger(__name__)
+
+_DRIVE_RO_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 # ── Gold layer paths ──────────────────────────────────────────────────────────
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -44,6 +49,55 @@ def _read_first_existing_parquet(paths: tuple[Path, ...]) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def _build_drive_ro_service():
+    try:
+        account_info = st.secrets.get("gcp_service_account")
+    except Exception:
+        return None
+    if not isinstance(account_info, Mapping):
+        return None
+    credentials = service_account.Credentials.from_service_account_info(
+        dict(account_info),
+        scopes=_DRIVE_RO_SCOPES,
+    )
+    return build("drive", "v3", credentials=credentials)
+
+
+def _download_parquet_from_drive(file_name: str, target_path: Path) -> bool:
+    try:
+        folder_id = str(st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")).strip()
+    except Exception:
+        return False
+    if not folder_id:
+        return False
+
+    service = _build_drive_ro_service()
+    if service is None:
+        return False
+
+    safe_name = file_name.replace("'", "\\'")
+    query = f"'{folder_id}' in parents and trashed=false and name='{safe_name}'"
+    found = service.files().list(
+        q=query,
+        pageSize=1,
+        fields="files(id,name,modifiedTime)",
+        orderBy="modifiedTime desc",
+    ).execute().get("files", [])
+    if not found:
+        return False
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    blob = service.files().get_media(fileId=found[0]["id"]).execute()
+    target_path.write_bytes(blob)
+    logger.info(
+        "Downloaded latest %s from Drive to %s (modified=%s)",
+        file_name,
+        target_path,
+        found[0].get("modifiedTime"),
+    )
+    return True
+
+
 # ── Data loading ──────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=1800)
@@ -53,6 +107,10 @@ def load_custos_producao_cached() -> pd.DataFrame:
     Tenta o caminho rápido ``data/gold/`` primeiro; recorre a
     ``data/processed/gold/`` como fallback.
     """
+    if not any(path.exists() for path in (_GOLD_PRIMARY, _GOLD_FALLBACK, _GOLD_LEGACY_PRIMARY, _GOLD_LEGACY_FALLBACK)):
+        if not _download_parquet_from_drive("custos_producao_agregado.parquet", _GOLD_FALLBACK):
+            _download_parquet_from_drive("custos_producao.parquet", _GOLD_LEGACY_FALLBACK)
+
     df = _read_first_existing_parquet(
         (
             _GOLD_PRIMARY,
@@ -83,6 +141,9 @@ def load_custos_producao_cached() -> pd.DataFrame:
 @st.cache_data(ttl=1800)
 def load_receitas_detalhadas_cached() -> pd.DataFrame:
     """Carrega receitas_detalhadas.parquet (Gold detalhado) com fallback."""
+    if not any(path.exists() for path in (_DETAIL_PRIMARY, _DETAIL_FALLBACK)):
+        _download_parquet_from_drive("receitas_detalhadas.parquet", _DETAIL_FALLBACK)
+
     df = _read_first_existing_parquet((_DETAIL_PRIMARY, _DETAIL_FALLBACK))
     if not df.empty:
         if "nome_produto" in df.columns:

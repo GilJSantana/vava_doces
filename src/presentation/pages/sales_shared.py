@@ -105,7 +105,8 @@ def _download_gold_layer_from_drive(layer: str) -> bool:
     found = service.files().list(
         q=query,
         pageSize=1,
-        fields="files(id,name)",
+        fields="files(id,name,modifiedTime)",
+        orderBy="modifiedTime desc",
     ).execute().get("files", [])
     if not found:
         return False
@@ -114,7 +115,12 @@ def _download_gold_layer_from_drive(layer: str) -> bool:
     target.parent.mkdir(parents=True, exist_ok=True)
     blob = service.files().get_media(fileId=found[0]["id"]).execute()
     target.write_bytes(blob)
-    logger.info("Downloaded %s from Drive to %s", file_name, target)
+    logger.info(
+        "Downloaded latest %s from Drive to %s (modified=%s)",
+        file_name,
+        target,
+        found[0].get("modifiedTime"),
+    )
     return True
 
 
