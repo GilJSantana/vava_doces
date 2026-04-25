@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 import unicodedata
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
@@ -22,6 +23,10 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+import streamlit as st
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 # ── Project root on sys.path so src.* imports work ────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent
@@ -45,6 +50,8 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("medallion")
+
+_DRIVE_RW_SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 def log_df_shape(stage: str, df: pd.DataFrame | None, key_cols: list[str] | None = None) -> None:
@@ -1215,6 +1222,34 @@ def _ensure_dir(path: Path) -> Path:
     return path
 
 
+def _load_service_account_info_from_secrets() -> dict | None:
+    """Return a native dict for gcp_service_account, or None when unavailable."""
+    try:
+        account_info = st.secrets.get("gcp_service_account")
+    except Exception:
+        logger.warning("Could not read st.secrets['gcp_service_account']; Drive upload skipped.")
+        return None
+
+    if not isinstance(account_info, Mapping):
+        logger.warning("Missing or invalid gcp_service_account in st.secrets; Drive upload skipped.")
+        return None
+
+    native_info = dict(account_info)
+    if not native_info:
+        logger.warning("Empty gcp_service_account in st.secrets; Drive upload skipped.")
+        return None
+    return native_info
+
+
+def _build_drive_rw_service_from_secrets():
+    """Build Drive service with write scope from Streamlit secrets."""
+    info = _load_service_account_info_from_secrets()
+    if info is None:
+        return None
+    credentials = service_account.Credentials.from_service_account_info(info, scopes=_DRIVE_RW_SCOPES)
+    return build("drive", "v3", credentials=credentials)
+
+
 class MedallionPipeline:
     """Materializes RAW → SILVER → GOLD while preserving all source rows."""
 
@@ -1237,6 +1272,59 @@ class MedallionPipeline:
         self.gold_custos_produtos: Optional[pd.DataFrame] = None
         self.receitas_detalhadas: Optional[pd.DataFrame] = None
         self.gold_rentabilidade: Optional[pd.DataFrame] = None
+
+    def _persist_gold_to_drive(self, parquet_paths: list[Path]) -> int:
+        """Upload/overwrite Gold parquet files in configured Drive folder."""
+        try:
+            folder_id = str(st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")).strip()
+        except Exception:
+            folder_id = ""
+
+        if not folder_id:
+            logger.info("GOOGLE_DRIVE_FOLDER_ID not configured; skipping Gold upload to Drive.")
+            return 0
+
+        service = _build_drive_rw_service_from_secrets()
+        if service is None:
+            return 0
+
+        uploaded = 0
+        for parquet_path in parquet_paths:
+            if not parquet_path.exists():
+                continue
+
+            safe_name = parquet_path.name.replace("'", "\\'")
+            query = (
+                f"'{folder_id}' in parents and trashed=false and name='{safe_name}'"
+            )
+            existing = service.files().list(
+                q=query,
+                pageSize=1,
+                fields="files(id,name)",
+            ).execute().get("files", [])
+
+            media = MediaFileUpload(
+                str(parquet_path),
+                mimetype="application/octet-stream",
+                resumable=False,
+            )
+
+            if existing:
+                service.files().update(
+                    fileId=existing[0]["id"],
+                    media_body=media,
+                ).execute()
+            else:
+                service.files().create(
+                    body={"name": parquet_path.name, "parents": [folder_id]},
+                    media_body=media,
+                    fields="id",
+                ).execute()
+            uploaded += 1
+
+        if uploaded:
+            logger.info("Uploaded %d Gold parquet file(s) to Drive folder %s", uploaded, folder_id)
+        return uploaded
 
     def _load_existing_counts(self) -> dict[str, object]:
         silver_path = self.silver_dir / "sales_silver.parquet"
@@ -1407,6 +1495,11 @@ class MedallionPipeline:
         print(f"Sucesso: Arquivo salvo em {fast_legacy_custos_path}")
         stage_ms["persist_parquet"] = (perf_counter() - stage_start) * 1000
 
+        stage_start = perf_counter()
+        gold_parquet_paths = sorted(self.gold_dir.glob("*.parquet"))
+        uploaded_gold_files = self._persist_gold_to_drive(gold_parquet_paths)
+        stage_ms["persist_drive"] = (perf_counter() - stage_start) * 1000
+
         validation = validate_star_schema(self.fato_vendas, self.dim_produto, self.dim_tempo, len(self.silver_df))
 
         # Log detailed validation results
@@ -1444,6 +1537,7 @@ class MedallionPipeline:
             "integrity_report": integrity_report,
             "validation": validation,
             "gold_custos_rows": int(len(self.gold_custos_produtos)) if self.gold_custos_produtos is not None else 0,
+            "gold_uploaded_files": uploaded_gold_files,
             "timings_ms": {k: round(v, 2) for k, v in stage_ms.items()},
         }
         logger.info("MedallionPipeline.run() finished: %s", result)
