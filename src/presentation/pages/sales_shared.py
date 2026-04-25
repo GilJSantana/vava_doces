@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from io import BytesIO
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 import streamlit as st
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 from src.infrastructure.gold_adapter import GoldParquetAdapter
 from src.ports.data_source import DataSourceError
 
 logger = logging.getLogger(__name__)
+
+_DRIVE_RO_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+_REQUIRED_GOLD_LAYERS = ("fato_vendas", "dim_produto", "dim_tempo")
 
 
 def log_df_shape(stage: str, df: Optional[pd.DataFrame], key_cols: list[str] | None = None) -> None:
@@ -61,6 +68,56 @@ def _normalize_sales_for_presentation(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _gold_local_path(layer: str) -> Path:
+    project_root = Path(__file__).resolve().parents[3]
+    return project_root / "data" / "processed" / "gold" / f"{layer}.parquet"
+
+
+def _build_drive_ro_service():
+    try:
+        account_info = st.secrets.get("gcp_service_account")
+    except Exception:
+        return None
+    if not isinstance(account_info, Mapping):
+        return None
+    credentials = service_account.Credentials.from_service_account_info(
+        dict(account_info),
+        scopes=_DRIVE_RO_SCOPES,
+    )
+    return build("drive", "v3", credentials=credentials)
+
+
+def _download_gold_layer_from_drive(layer: str) -> bool:
+    try:
+        folder_id = str(st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")).strip()
+    except Exception:
+        return False
+    if not folder_id:
+        return False
+
+    service = _build_drive_ro_service()
+    if service is None:
+        return False
+
+    file_name = f"{layer}.parquet"
+    safe_name = file_name.replace("'", "\\'")
+    query = f"'{folder_id}' in parents and trashed=false and name='{safe_name}'"
+    found = service.files().list(
+        q=query,
+        pageSize=1,
+        fields="files(id,name)",
+    ).execute().get("files", [])
+    if not found:
+        return False
+
+    target = _gold_local_path(layer)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    blob = service.files().get_media(fileId=found[0]["id"]).execute()
+    target.write_bytes(blob)
+    logger.info("Downloaded %s from Drive to %s", file_name, target)
+    return True
+
+
 @st.cache_data(ttl=300)
 def load_sales_data_cached() -> Optional[pd.DataFrame]:
     """Load sales data from gold layer (fato_vendas + dim_produto + dim_tempo).
@@ -68,6 +125,11 @@ def load_sales_data_cached() -> Optional[pd.DataFrame]:
     Returns None when no data is available.
     """
     try:
+        for layer in _REQUIRED_GOLD_LAYERS:
+            local_path = _gold_local_path(layer)
+            if not local_path.exists():
+                _download_gold_layer_from_drive(layer)
+
         # Read only columns used by dashboard/faturamento to reduce parquet I/O.
         adapter = GoldParquetAdapter()
         fato_cols = [
