@@ -10,7 +10,6 @@ import io
 import logging
 import re
 import unicodedata
-from collections.abc import Mapping
 from typing import Optional
 
 import pandas as pd
@@ -45,39 +44,17 @@ _DRIVE_SCOPES = [
 ]
 
 
-def _load_service_account_info() -> dict:
-    """Load and normalize Service Account info from Streamlit secrets."""
-    account_info = st.secrets.get("gcp_service_account")
-    if account_info is None:
-        raise ValueError("Missing required secret: gcp_service_account")
-
-    logger.debug("Type of gcp_service_account: %s", type(account_info))
-
-    if isinstance(account_info, Mapping):
-        native_info = dict(account_info)
-    else:
-        try:
-            native_info = dict(account_info)
-        except Exception as exc:
-            raise ValueError(
-                "Invalid secret type for gcp_service_account; expected mapping-like data"
-            ) from exc
-
-    if not native_info:
-        raise ValueError("Missing required secret: gcp_service_account is empty")
-
-    return native_info
-
-
 def build_drive_credentials(credential_file: str | None = None) -> service_account.Credentials:
     """Create Service Account credentials from Streamlit secrets.
 
     The `credential_file` parameter is kept only for backward compatibility.
     """
-    return service_account.Credentials.from_service_account_info(
-        _load_service_account_info(),
-        scopes=_DRIVE_SCOPES,
-    )
+    account_info = st.secrets.get("gcp_service_account")
+    if not isinstance(account_info, dict):
+        raise ValueError("Missing required secret: gcp_service_account")
+
+    base_credentials = service_account.Credentials.from_service_account_info(dict(account_info))
+    return base_credentials.with_scopes(_DRIVE_SCOPES)
 
 
 class GoogleDriveAdapter(DriveDataSource):
