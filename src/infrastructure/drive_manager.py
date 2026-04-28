@@ -18,13 +18,6 @@ _DRIVE_RO_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 _DRIVE_RW_SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
-def _get_drive_folder_id() -> str:
-    try:
-        return str(st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")).strip()
-    except Exception:
-        return ""
-
-
 def _load_service_account_info() -> dict | None:
     try:
         account_info = st.secrets.get("gcp_service_account")
@@ -69,6 +62,7 @@ def get_drive_assets_map() -> dict[str, str]:
             .list(
                 q=query,
                 spaces="drive",
+                corpora="allDrives",
                 fields="nextPageToken, files(id,name,modifiedTime)",
                 orderBy="modifiedTime desc",
                 pageToken=page_token,
@@ -132,6 +126,7 @@ def update_parquet_in_drive(file_name: str, df: pd.DataFrame) -> bool:
         supportsAllDrives=True,
     ).execute()
     return True
+
 
 
 
