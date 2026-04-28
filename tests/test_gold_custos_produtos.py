@@ -4,7 +4,7 @@ import pytest
 from scripts.medallion_pipeline import build_gold_custos_produtos
 
 
-def test_build_gold_custos_produtos_computes_real_margin_and_clean_index():
+def test_build_gold_custos_produtos_computes_yield_adjusted_unit_cost_and_clean_index():
     manual_sheets = {
         "materia_prima": pd.DataFrame(
             [
@@ -72,7 +72,7 @@ def test_build_gold_custos_produtos_computes_real_margin_and_clean_index():
     ]
     assert len(gold_agregado) == 1
     assert gold_agregado.loc[0, "qtd_ingredientes"] == 2
-    assert gold_agregado.loc[0, "custo_producao"] == 10.4
+    assert gold_agregado.loc[0, "custo_producao"] == pytest.approx(1.04)
 
 
 def test_build_gold_custos_produtos_preserves_nan_when_all_ingredient_costs_are_missing():

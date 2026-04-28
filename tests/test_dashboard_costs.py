@@ -9,7 +9,10 @@ from src.presentation.pages.dashboard import (
     _invalidate_metrics_without_cost,
     _normalize_margin_percent,
     _fmt_currency,
+    _normalize_join_key,
+    _stabilize_profitability_metrics,
 )
+import src.presentation.pages.dashboard as dashboard
 
 
 # ── _invalidate_metrics_without_cost ─────────────────────────────────────────
@@ -96,6 +99,35 @@ def test_normalize_handles_nan() -> None:
     assert abs(float(result.iloc[1]) - 40.0) < 0.001
 
 
+def test_normalize_join_key_aligns_numeric_and_string_variants() -> None:
+    s = pd.Series([1.0, " 1 ", "abc ", None])
+    result = _normalize_join_key(s)
+    assert result.iloc[0] == "1"
+    assert result.iloc[1] == "1"
+    assert result.iloc[2] == "ABC"
+    assert pd.isna(result.iloc[3])
+
+
+def test_stabilize_profitability_metrics_caps_positive_margin_and_invalidates_bad_costs() -> None:
+    df = pd.DataFrame(
+        {
+            "preco_venda_unitario": [10.0, 12.0, 8.0],
+            "custo_producao_unitario": [1.0, 0.0, -2.0],
+            "margem_valor": [9.0, 12.0, 10.0],
+            "margem_perc": [150.0, 100.0, 125.0],
+            "markup": [10.0, np.inf, -4.0],
+        }
+    )
+
+    result = _stabilize_profitability_metrics(df)
+
+    assert result.loc[0, "margem_perc"] == 100.0
+    assert pd.isna(result.loc[1, "margem_perc"])
+    assert pd.isna(result.loc[2, "margem_perc"])
+    assert pd.isna(result.loc[1, "markup"])
+    assert pd.isna(result.loc[2, "markup"])
+
+
 # ── _fmt_currency ─────────────────────────────────────────────────────────────
 
 def test_fmt_currency_formats_brl_ptbr() -> None:
@@ -105,4 +137,79 @@ def test_fmt_currency_formats_brl_ptbr() -> None:
 def test_fmt_currency_returns_audit_needed_for_nan() -> None:
     assert _fmt_currency(None) == "⚠️ Audit Needed"
     assert _fmt_currency(float("nan")) == "⚠️ Audit Needed"
+
+
+def test_build_profitability_base_normalizes_keys_before_merge(monkeypatch) -> None:
+    agg_produto = pd.DataFrame(
+        {
+            "produto_id": [1.0],
+            "nome_produto": ["Brigadeiro"],
+            "qtd_vendida": [2],
+            "faturamento_liquido": [20.0],
+        }
+    )
+    rentabilidade = pd.DataFrame(
+        {
+            "id_produto": [" 1 "],
+            "custo_producao_unitario": [5.0],
+            "custo_producao_unitario_audit": [5.0],
+            "margem_valor": [5.0],
+            "margem_perc": [25.0],
+            "markup": [2.0],
+        }
+    )
+
+    def _fake_load(name: str) -> pd.DataFrame:
+        if name == "agg_vendas_produto":
+            return agg_produto
+        if name == "gold_rentabilidade":
+            return rentabilidade
+        return pd.DataFrame()
+
+    monkeypatch.setattr(dashboard, "_load_gold_optional", _fake_load)
+
+    result = dashboard._build_profitability_base.__wrapped__()
+
+    assert len(result) == 1
+    assert result.loc[0, "id_produto"] == "1"
+    assert result.loc[0, "custo_producao_unitario"] == 5.0
+
+
+def test_build_profitability_base_falls_back_to_product_name_when_rentability_ids_are_blank(monkeypatch) -> None:
+    agg_produto = pd.DataFrame(
+        {
+            "produto_id": [38.0],
+            "nome_produto": ["Brigadeiro"],
+            "qtd_vendida": [2],
+            "faturamento_liquido": [20.0],
+        }
+    )
+    rentabilidade = pd.DataFrame(
+        {
+            "id_produto": [None],
+            "nome_produto": ["brigadeiro "],
+            "custo_producao_unitario": [5.0],
+            "custo_producao_unitario_audit": [5.0],
+            "margem_valor": [5.0],
+            "margem_perc": [25.0],
+            "markup": [2.0],
+        }
+    )
+
+    def _fake_load(name: str) -> pd.DataFrame:
+        if name == "agg_vendas_produto":
+            return agg_produto
+        if name == "gold_rentabilidade":
+            return rentabilidade
+        return pd.DataFrame()
+
+    monkeypatch.setattr(dashboard, "_load_gold_optional", _fake_load)
+
+    result = dashboard._build_profitability_base.__wrapped__()
+
+    assert len(result) == 1
+    assert result.loc[0, "id_produto"] == "38"
+    assert result.loc[0, "custo_producao_unitario"] == 5.0
+    assert result.loc[0, "margem_perc"] == 25.0
+
 

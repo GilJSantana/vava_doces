@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +12,11 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from src.domain.sales_analysis_service import _normalise_value
 from src.presentation.components import render_separator
 from src.presentation.pages.sales_shared import inject_roboto_font, load_sales_data_cached
+
+logger = logging.getLogger(__name__)
 
 _GOLD_DIR = Path(__file__).resolve().parents[3] / "data" / "processed" / "gold"
 
@@ -29,6 +33,7 @@ _BRAND_MARGIN_COLORSCALE = [
     (1.0, "#14B8A6"),
 ]
 _MAX_SCATTER_POINTS = 800
+_MAX_REASONABLE_MARGIN_PERCENT = 100.0
 
 
 def _safe_num(series: pd.Series | None, fill: float | None = 0.0) -> pd.Series:
@@ -37,6 +42,61 @@ def _safe_num(series: pd.Series | None, fill: float | None = 0.0) -> pd.Series:
     out = pd.Series(pd.to_numeric(series, errors="coerce"), index=series.index)
     if fill is not None:
         out = out.fillna(fill)
+    return out
+
+
+def _normalize_join_key(series: pd.Series | None) -> pd.Series:
+    """Normalize merge keys across mixed numeric/string sources."""
+    if series is None:
+        return pd.Series(dtype="string")
+    out = pd.Series(series, index=series.index, dtype="string")
+    out = out.str.strip().str.upper()
+    out = out.str.replace(r"\.0+$", "", regex=True)
+    out = out.replace({"": pd.NA, "<NA>": pd.NA, "NAN": pd.NA, "NONE": pd.NA})
+    return out
+
+
+def _sample_keys(series: pd.Series | None, limit: int = 3) -> list[str]:
+    if series is None:
+        return []
+    cleaned = _normalize_join_key(series).dropna().astype(str)
+    return cleaned.head(limit).tolist()
+
+
+def _normalize_name_key(series: pd.Series | None) -> pd.Series:
+    if series is None:
+        return pd.Series(dtype="string")
+    out = pd.Series(series, index=series.index, dtype="string")
+    out = out.fillna("").astype(str).map(_normalise_value)
+    out = pd.Series(out, index=series.index, dtype="string")
+    out = out.replace({"": pd.NA, "nan": pd.NA, "none": pd.NA})
+    return out
+
+
+def _stabilize_profitability_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """Avoid impossible profitability values caused by invalid divisors or source noise."""
+    if df.empty:
+        return df
+
+    out = df.copy()
+    preco_unit = _safe_num(out.get("preco_venda_unitario"), fill=None)
+    custo_unit = _safe_num(out.get("custo_producao_unitario"), fill=None)
+    invalid_mask = preco_unit.isna() | preco_unit.le(0) | custo_unit.isna() | custo_unit.le(0)
+
+    if "margem_valor" in out.columns:
+        out.loc[invalid_mask, "margem_valor"] = np.nan
+    if "margem_perc" in out.columns:
+        out.loc[invalid_mask, "margem_perc"] = np.nan
+        unreasonable_positive_mask = out["margem_perc"].gt(_MAX_REASONABLE_MARGIN_PERCENT)
+        if unreasonable_positive_mask.any():
+            logger.warning(
+                "DEBUG RENTABILIDADE: %d margem(ns) acima de %.1f%% foram limitadas",
+                int(unreasonable_positive_mask.sum()),
+                _MAX_REASONABLE_MARGIN_PERCENT,
+            )
+            out.loc[unreasonable_positive_mask, "margem_perc"] = _MAX_REASONABLE_MARGIN_PERCENT
+    if "markup" in out.columns:
+        out.loc[invalid_mask, "markup"] = np.nan
     return out
 
 
@@ -132,7 +192,22 @@ def _apply_month_filter(
     if month_agg.empty:
         return profitability_df.iloc[0:0].copy()
 
-    out = profitability_df.merge(
+    profitability_norm = profitability_df.copy()
+    profitability_norm["id_produto"] = _normalize_join_key(profitability_norm.get("id_produto"))
+    month_agg = month_agg.copy()
+    month_agg["id_produto"] = _normalize_join_key(month_agg.get("id_produto"))
+    logger.info(
+        "DEBUG RENTABILIDADE: linhas pre-merge mensal profitability=%d month_agg=%d",
+        len(profitability_norm),
+        len(month_agg),
+    )
+    logger.debug(
+        "DEBUG RENTABILIDADE: sample keys profitability mensal=%s month_agg=%s",
+        _sample_keys(profitability_norm.get("id_produto")),
+        _sample_keys(month_agg.get("id_produto")),
+    )
+
+    out = profitability_norm.merge(
         month_agg[["id_produto", "qtd_vendida", "faturamento_item"]],
         on="id_produto",
         how="inner",
@@ -152,6 +227,7 @@ def _apply_month_filter(
 
     drop_cols = [c for c in ["qtd_vendida_mes", "faturamento_item_mes"] if c in out.columns]
     out = out.drop(columns=drop_cols)
+    out = _stabilize_profitability_metrics(out)
     return _invalidate_metrics_without_cost(out)
 
 
@@ -175,7 +251,7 @@ def _build_month_sales_agg(sales_df: pd.DataFrame, selected_months: tuple[str, .
         .agg(qtd_vendida=(qty_col, "sum"), faturamento_item=(revenue_col, "sum"))
         .rename(columns={"produto_id": "id_produto", "produto": "nome_produto"})
     )
-    month_agg["id_produto"] = month_agg["id_produto"].astype("string").str.strip().str.upper()
+    month_agg["id_produto"] = _normalize_join_key(month_agg["id_produto"])
     return month_agg
 
 
@@ -185,7 +261,29 @@ def _build_profitability_base() -> pd.DataFrame:
     rent = _load_gold_optional("gold_rentabilidade")
     custos = _load_gold_optional("custos_producao_agregado")
 
+    logger.info(
+        "DEBUG RENTABILIDADE: linhas vendas=%d rentabilidade=%d custos=%d",
+        len(agg_produto),
+        len(rent),
+        len(custos),
+    )
+    if not agg_produto.empty and "produto_id" in agg_produto.columns:
+        logger.debug("DEBUG RENTABILIDADE: vendas dtypes=\n%s", agg_produto.dtypes)
+        logger.debug(
+            "DEBUG RENTABILIDADE: vendas keys sample=\n%s",
+            agg_produto[["produto_id"]].head(),
+        )
+        logger.info("DEBUG RENTABILIDADE: sample 3 chaves vendas=%s", _sample_keys(agg_produto.get("produto_id")))
+    if not custos.empty and "id_produto" in custos.columns:
+        logger.debug("DEBUG RENTABILIDADE: custos dtypes=\n%s", custos.dtypes)
+        logger.debug(
+            "DEBUG RENTABILIDADE: custos keys sample=\n%s",
+            custos[["id_produto"]].head(),
+        )
+        logger.info("DEBUG RENTABILIDADE: sample 3 chaves custos=%s", _sample_keys(custos.get("id_produto")))
+
     if agg_produto.empty:
+        logger.warning("DEBUG RENTABILIDADE: base de vendas vazia, profitability_df retornara vazio")
         return pd.DataFrame(
             columns=[
                 "id_produto",
@@ -202,15 +300,35 @@ def _build_profitability_base() -> pd.DataFrame:
         )
 
     base = agg_produto.copy()
-    base = base.rename(columns={"produto_id": "id_produto", "faturamento_liquido": "faturamento_item"})
-    base["id_produto"] = base["id_produto"].astype("string").str.strip().str.upper()
+    if "id_produto" not in base.columns and "produto_id" in base.columns:
+        base = base.rename(columns={"produto_id": "id_produto"})
+    if "id_produto" not in base.columns:
+        base["id_produto"] = pd.NA
+    base = base.rename(columns={"faturamento_liquido": "faturamento_item"})
+    base["id_produto"] = _normalize_join_key(base["id_produto"])
+    base["produto_nome_key"] = _normalize_name_key(base.get("nome_produto"))
     base["qtd_vendida"] = _safe_num(base.get("qtd_vendida"), fill=0.0)
     base["faturamento_item"] = _safe_num(base.get("faturamento_item"), fill=0.0)
     base["preco_venda_unitario"] = (base["faturamento_item"] / base["qtd_vendida"]).replace([np.inf, -np.inf], np.nan)
 
     if not rent.empty and "id_produto" in rent.columns:
         rent_df = rent.copy()
-        rent_df["id_produto"] = rent_df["id_produto"].astype("string").str.strip().str.upper()
+        rent_df["id_produto"] = _normalize_join_key(rent_df["id_produto"])
+        rent_df["produto_nome_key"] = _normalize_name_key(rent_df.get("nome_produto"))
+        logger.debug("DEBUG RENTABILIDADE: rentabilidade dtypes=\n%s", rent_df.dtypes)
+        logger.debug(
+            "DEBUG RENTABILIDADE: rentabilidade keys sample=\n%s",
+            rent_df[["id_produto"]].head(),
+        )
+        logger.info("DEBUG RENTABILIDADE: sample 3 chaves rentabilidade=%s", _sample_keys(rent_df.get("id_produto")))
+        common_keys = set(base["id_produto"].dropna().unique()).intersection(set(rent_df["id_produto"].dropna().unique()))
+        logger.info("DEBUG RENTABILIDADE: chaves em comum vendas x rentabilidade=%d", len(common_keys))
+        logger.info(
+            "DEBUG RENTABILIDADE: sample chaves em comum vendas x rentabilidade=%s",
+            list(sorted(common_keys))[:3],
+        )
+        if not common_keys:
+            logger.error("FALHA CRITICA: sem intersecao de chaves entre vendas e rentabilidade")
         merge_cols = [
             "id_produto",
             "custo_producao_unitario",
@@ -221,13 +339,44 @@ def _build_profitability_base() -> pd.DataFrame:
         ]
         merge_cols = [c for c in merge_cols if c in rent_df.columns]
         base = base.merge(rent_df[merge_cols], on="id_produto", how="left")
+        metric_cols = [c for c in merge_cols if c != "id_produto"]
+        missing_cost_mask = base.get("custo_producao_unitario", pd.Series(index=base.index, dtype="float64")).isna()
+        if missing_cost_mask.any() and "produto_nome_key" in rent_df.columns:
+            name_merge_cols = ["produto_nome_key", *metric_cols]
+            rent_by_name = rent_df[name_merge_cols].copy()
+            rent_by_name = rent_by_name.dropna(subset=["produto_nome_key"]).drop_duplicates(subset=["produto_nome_key"], keep="first")
+            if not rent_by_name.empty:
+                base = base.merge(rent_by_name, on="produto_nome_key", how="left", suffixes=("", "_nome"))
+                for col in metric_cols:
+                    fallback_col = f"{col}_nome"
+                    if fallback_col in base.columns:
+                        base[col] = base[col].fillna(base[fallback_col])
+                        base = base.drop(columns=[fallback_col])
     else:
         if not custos.empty and {"id_produto", "custo_producao"}.issubset(custos.columns):
             tmp = custos[["id_produto", "custo_producao"]].copy()
-            tmp["id_produto"] = tmp["id_produto"].astype("string").str.strip().str.upper()
+            tmp["id_produto"] = _normalize_join_key(tmp["id_produto"])
             tmp = tmp.drop_duplicates(subset=["id_produto"], keep="first")
+            common_keys = set(base["id_produto"].dropna().unique()).intersection(set(tmp["id_produto"].dropna().unique()))
+            logger.info("DEBUG RENTABILIDADE: chaves em comum vendas x custos=%d", len(common_keys))
+            logger.info(
+                "DEBUG RENTABILIDADE: sample chaves em comum vendas x custos=%s",
+                list(sorted(common_keys))[:3],
+            )
+            if not common_keys:
+                logger.error("FALHA CRITICA: sem intersecao de chaves entre vendas e custos")
             base = base.merge(tmp, on="id_produto", how="left")
             base["custo_producao_unitario"] = _safe_num(base.get("custo_producao"), fill=None)
+            if base["custo_producao_unitario"].isna().any() and "nome_produto" in custos.columns:
+                tmp_by_name = custos[["nome_produto", "custo_producao"]].copy()
+                tmp_by_name["produto_nome_key"] = _normalize_name_key(tmp_by_name.get("nome_produto"))
+                tmp_by_name = tmp_by_name.dropna(subset=["produto_nome_key"]).drop_duplicates(subset=["produto_nome_key"], keep="first")
+                if not tmp_by_name.empty:
+                    base = base.merge(tmp_by_name[["produto_nome_key", "custo_producao"]], on="produto_nome_key", how="left", suffixes=("", "_nome"))
+                    base["custo_producao_unitario"] = base["custo_producao_unitario"].fillna(_safe_num(base.get("custo_producao_nome"), fill=None))
+                    drop_cols = [c for c in ["custo_producao_nome"] if c in base.columns]
+                    if drop_cols:
+                        base = base.drop(columns=drop_cols)
         else:
             base["custo_producao_unitario"] = np.nan
         base["custo_producao_unitario_audit"] = base["custo_producao_unitario"]
@@ -255,7 +404,9 @@ def _build_profitability_base() -> pd.DataFrame:
     for col in keep:
         if col not in base.columns:
             base[col] = np.nan
+    base = _stabilize_profitability_metrics(base)
     base = _invalidate_metrics_without_cost(base)
+    logger.info("DEBUG RENTABILIDADE: profitability_df final linhas=%d", len(base))
     return base[keep].reset_index(drop=True)
 
 
