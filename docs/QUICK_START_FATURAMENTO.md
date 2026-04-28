@@ -4,215 +4,132 @@
 
 ```bash
 cd /home/gilunix/Documents/Projects/Vava_doces
-
-# Ativar virtual env (se necessário)
-source .venv/bin/activate
-
-# Executar Streamlit
+uv sync
 uv run streamlit run app.py
 ```
 
-Navegue para `http://localhost:8501` e clique em **"💹 Faturamento"** no sidebar.
+Abra `http://localhost:8501` e clique em **"💹 Faturamento (Auditoria)"** no sidebar.
 
 ---
 
-## Arquitetura em Piadas 😄
+## O que a página faz hoje
 
-```
-┌─────────────────────────────────────────────┐
-│       Google Drive + Google Sheets           │
-│  (Vendas CSV + Catálogo de Produtos)        │
-└──────────────────┬──────────────────────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │   SalesETLPipeline   │
-        │  (Extract/Transform) │
-        └──────────┬───────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │  Unified DataFrame   │
-        │  (8 columns ready!)  │
-        └──────────┬───────────┘
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │  Streamlit UI        │
-        │  KPIs + Charts       │
-        │  + Tabelas           │
-        └──────────────────────┘
+A página de faturamento deixou de depender do fluxo antigo baseado em DataFrame unificado de ETL bruto.
+
+Ela agora:
+- lê a Gold layer validada;
+- aplica filtros por data, cliente e mês de referência;
+- exibe KPIs e tabelas de auditoria sobre as vendas processadas.
+
+---
+
+## Fluxo Atual de Dados
+
+```text
+Google Drive / Sheets operacionais
+            ↓
+   Medallion pipeline (quando necessário)
+            ↓
+       fato_vendas.parquet
+            ↓
+ load_sales_data_cached()
+            ↓
+ show_faturamento()
 ```
 
----
-
-## Fluxo de Dados Simplificado
-
-| Etapa | Entrada | Saída | Função |
-|-------|---------|-------|--------|
-| **Extract** | Drive CSV + Sheets | Raw DataFrames | `SalesFilesExtractor`, `ProductsCatalogExtractor` |
-| **Transform** | Raw DFs | Colunas normalizadas | `SalesTransformer`, `ProductsTransformer` |
-| **Deduplicate** | Vendas concat | Linhas únicas | `_deduplicate()` |
-| **Join** | Vendas + Produtos | Merge left | `SalesProductJoiner.join()` |
-| **Load** | Merged DF | lucro_est calculado | `_finalise()` |
-| **Cache** | Final DF | Cached (1h) | `@st.cache_data` |
-| **UI** | Cached DF | 5 seções | `show_faturamento()` |
+### Componentes principais
+- `src/presentation/pages/faturamento.py`
+- `src/presentation/pages/sales_shared.py`
+- `src/infrastructure/drive_manager.py`
+- `scripts/medallion_pipeline.py`
 
 ---
 
-## Key Files Reference
+## Como a página carrega dados
 
-### ETL Pipeline
-- **`src/domain/sales_analysis_service.py`** — Core pipeline (610 linhas)
-- **`src/infrastructure/google_drive_adapter.py`** — Drive I/O (99 linhas)
-- **`src/ports/data_source.py`** — Interfaces (DriveDataSource port)
+1. `load_sales_data_cached()` recupera a base de vendas validada da Gold layer.
+2. `_normalize_data()` padroniza datas, clientes e mês de referência.
+3. `_apply_filters()` aplica filtros por:
+   - data inicial/final;
+   - clientes;
+   - mês de referência.
+4. a UI mostra métricas, tabela paginada e exportações.
+
+---
+
+## Fonte de verdade da página
+
+A fonte principal da página é a Gold layer persistida em Google Drive, especialmente o ativo de vendas validado.
+
+Isso significa que:
+- a página trabalha sobre dados já tipados e auditados;
+- o Google Drive é o armazenamento persistente principal;
+- o disco local não é a fonte analítica principal do app.
+
+---
+
+## Arquivos relevantes
 
 ### UI
-- **`src/presentation/pages/faturamento.py`** — Streamlit page (358 linhas)
-- **`src/presentation/navigation.py`** — Routing (adicionado PAGE_FATURAMENTO)
+- `src/presentation/pages/faturamento.py`
+- `src/presentation/navigation.py`
 
-### Tests
-- **`tests/test_sales_analysis_service.py`** — 34 testes de ETL
-- **`tests/test_faturamento_page.py`** — 13 testes de UI logic
+### Dados
+- `src/presentation/pages/sales_shared.py`
+- `src/infrastructure/drive_manager.py`
+- `scripts/medallion_pipeline.py`
 
----
-
-## API de Uso
-
-### Importar e Executar o Pipeline
-```python
-from src.domain.sales_analysis_service import SalesETLPipeline
-
-# Carrega .env automaticamente
-pipeline = SalesETLPipeline.from_env()
-df = pipeline.run()
-
-# df tem colunas: [data, produto, categoria, qtd, valor_venda, custo_unit, lucro_est, sem_cadastro]
-print(f"Vendas carregadas: {len(df)} linhas")
-print(f"Faturamento total: R$ {df['valor_venda'].sum():,.2f}")
-```
-
-### Usar a Página Diretamente
-```python
-# app.py já importa e renderiza automaticamente
-from src.presentation.pages.faturamento import show_faturamento
-
-st.set_page_config(layout="wide")
-show_faturamento()
-```
-
-### Testar Componentes
-```bash
-# Todos os testes
-uv run pytest tests/test_faturamento_page.py -v
-
-# Um teste específico
-uv run pytest tests/test_faturamento_page.py::TestCalculateKPIMetrics::test_faturamento_total -v
-```
+### Testes
+- `tests/test_faturamento_page.py`
+- `tests/test_integration.py`
+- `tests/test_profitability_pipeline.py`
 
 ---
 
 ## Troubleshooting
 
-### "❌ Não foi possível carregar os dados"
-- ✅ Verificar se `.env` tem variáveis corretas:
-  ```bash
-  cat .env | grep -E "DRIVE_FOLDER_ID|SALES_SHEET_ID|GOOGLE"
-  ```
-- ✅ Verificar autenticação Google:
-  ```bash
-  cat $GOOGLE_APPLICATION_CREDENTIALS | head -3
-  ```
+### "Nenhum dado de vendas encontrado"
+- verifique se os secrets foram configurados corretamente em `.streamlit/secrets.toml`;
+- confira se a Service Account consegue ler os ativos Gold no Drive;
+- confirme que o pipeline conseguiu materializar `fato_vendas.parquet`.
 
-### "⚠️ Nenhuma venda encontrada no período"
-- ✅ Alterar range de datas (usar min/max disponível)
-- ✅ Verificar se o arquivo de vendas está no Drive
+### Filtros por data retornam vazio
+- verifique se existem linhas com `data` invalida na base carregada;
+- revise o período selecionado e o campo `mes_referencia`.
 
-### "112 orphan product(s)" (aviso)
-- ✅ Normal! Significa 112 nomes diferentes entre vendas e catálogo
-- ✅ Padronizar nomes na planilha para reduzir (não é bloqueante)
-
-### Gráfico de pizza não aparece
-- ✅ Verificar se há produtos com `categoria != null`
-- ✅ Reduzir filtro de datas para ter mais dados
+### A pagina nao abre apos login
+- confirme se o usuario possui permissao no `GOOGLE_DRIVE_FOLDER_ID`;
+- confira os logs de autorizacao OAuth2/Drive no terminal.
 
 ---
 
-## Métricas Esperadas (Dados Atuais)
-
-| Métrica | Valor | Observação |
-|---------|-------|-----------|
-| Total de linhas | 3.337 | Do arquivo de fevereiro/2026 |
-| Faturamento total | R$ 58.193,25 | Em reais |
-| Lucro bruto médio | R$ 19,16 | Apenas produtos matched |
-| Ticket médio | R$ 14,74 | Faturamento / transações |
-| Produtos matched | 29 | Com custo definido |
-| Produtos órfãos | 112 | Sem match no catálogo |
-
----
-
-## Stack Tecnológico
-
-```
-┌─────────────────────────────────────────────────┐
-│ Streamlit UI Framework                          │
-├─────────────────────────────────────────────────┤
-│ Plotly Charts │ Pandas DataFrames │ st.cache_data │
-├─────────────────────────────────────────────────┤
-│ SalesETLPipeline (domínio)                      │
-├─────────────────────────────────────────────────┤
-│ GoogleDriveAdapter │ GoogleSheetsAdapter        │
-├─────────────────────────────────────────────────┤
-│ Google Drive API | Google Sheets API            │
-└─────────────────────────────────────────────────┘
-```
-
----
-
-## Próximo Passo (Roadmap)
-
-### Semana 1
-- [ ] Adicionar export CSV/PDF dos dados filtrados
-- [ ] Série temporal (gráfico de linha)
-
-### Semana 2
-- [ ] Matriz de rentabilidade (scatter plot)
-- [ ] Comparação período vs. período anterior
-
-### Semana 3
-- [ ] Análise ABC (curva de Pareto)
-- [ ] Integração com dados de NFC-e
-
----
-
-## Cheat Sheet: Comandos Úteis
+## Comandos uteis
 
 ```bash
-# Atualizar dependências
-uv add google-api-python-client
+# Executar o app
+uv run streamlit run app.py
 
-# Rodar testes com coverage
-uv run pytest tests/test_faturamento_page.py --cov=src.presentation.pages.faturamento
+# Rodar a suíte oficial
+uv run pytest -q
 
-# Limpar cache do Streamlit
+# Rodar testes da página de faturamento
+uv run pytest -q tests/test_faturamento_page.py
+
+# Limpar cache local do Streamlit
 rm -rf ~/.streamlit/cache
-
-# Verificar imports
-python -c "from src.presentation.pages.faturamento import show_faturamento; print('✅ OK')"
-
-# Executar pipeline direto (sem Streamlit)
-python -u - <<'PY'
-from src.domain.sales_analysis_service import SalesETLPipeline
-pipeline = SalesETLPipeline.from_env()
-df = pipeline.run()
-print(df.info())
-PY
 ```
 
 ---
 
-**Status**: ✅ Pronto para Produção
-**Testes**: 85/85 passando
-**Cobertura**: Todos os componentes críticos
-**Documentação**: Completa + Markdown + Docstrings
+## Observacao importante
+
+Este guia foi atualizado para a arquitetura atual:
+- **3 paginas executivas**
+- **`st.secrets` como configuracao canonica**
+- **Google Drive como persistencia principal da Gold layer**
+- **consumo diskless/in-memory dos arquivos parquet**
+
+---
+
+**Status**: ✅ Alinhado ao fluxo atual
 

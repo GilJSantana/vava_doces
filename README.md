@@ -25,15 +25,15 @@ Sem essa visibilidade, ajustes de preço, compra de insumos e priorização come
 
 ### Funcionalidades principais:
 
-- `main.py` — script principal (em desenvolvimento).
-  - `src/ports/data_source.py` — contrato/porta `DataSource` e exceção `DataSourceError`.
-  - `src/infrastructure/google_sheets_adapter.py` — adaptador que implementa `DataSource` e acessa Google Sheets (usa `gspread`).
-  - `src/domain/cost_analysis_service.py` — serviço de domínio que implementa regras e calcula custo por receita (injeção de `DataSource`).
-- `tests/` — suíte de testes (pytest)
-  - `tests/test_cost_analysis_service.py` — testes de unidade para `CostAnalysisService` (usa um `FakeDataSource`).
-  - `tests/test_google_sheets_adapter.py` — testes do adaptador com mocks do `gspread`.
-  - `tests/test_streamlit_app.py` — testes para funções auxiliares da aplicação Streamlit.
-- `RECEITAS AWI.xlsx` — planilha de referência/entrada para alinhamento de esquema (não é usada diretamente pelos testes).
+- `app.py` — entrada principal da aplicação Streamlit com gates de autenticação/autorização.
+- `scripts/medallion_pipeline.py` — pipeline RAW → SILVER → GOLD.
+- `src/infrastructure/drive_manager.py` — descoberta e I/O em memória dos arquivos `.parquet` no Google Drive.
+- `src/presentation/pages/` — três páginas executivas do app:
+  - `dashboard.py` — rentabilidade e matriz executiva;
+  - `production_costs.py` — auditoria de custos e receitas;
+  - `faturamento.py` — exploração auditável das vendas da Gold layer.
+- `tests/` — suíte oficial de regressão e integração via `pytest`.
+- `scripts/diagnostics/` — diagnósticos manuais opcionais para troubleshooting local.
 
 ### Bronze
 - Ingestão dos arquivos brutos (CSV/XLSX) e exportações auxiliares de planilhas.
@@ -55,25 +55,27 @@ Sem essa visibilidade, ajustes de preço, compra de insumos e priorização come
 ### 1. Instalar dependências
 
 ```bash
-# Instalar todas as dependências
-uv install
-# Ou, se preferir, recrie o ambiente/instale localmente:
-# python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+# Instalar/sincronizar dependências do pyproject.toml
+uv sync
 ```
 
-### 2. Configurar credenciais do Google Sheets
+### 2. Configurar credenciais da aplicação
 
 ```bash
-# Copiar arquivo de exemplo
-cp .env.example .env
+# Criar arquivo local de secrets a partir do template
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
 
 # Editar com seus dados
-nano .env
+nano .streamlit/secrets.toml
 ```
 
 Configure:
-- `GOOGLE_APPLICATION_CREDENTIALS`: Caminho para o JSON da Service Account
-- `GOOGLE_SHEET_ID`: ID da sua planilha
+- `OAUTH2_CLIENT_ID`, `OAUTH2_CLIENT_SECRET`, `OAUTH2_REDIRECT_URI`
+- `GOOGLE_DRIVE_FOLDER_ID`
+- `GOOGLE_SHEET_ID`
+- `[gcp_service_account]` com as credenciais completas da Service Account
+
+> O fluxo principal usa `st.secrets`. O `.env` ficou apenas como apoio opcional a diagnósticos legados.
 
 ### 3. Rodar testes
 
@@ -82,6 +84,7 @@ Configure:
 uv run pytest -q
 
 # Rodar teste específico
+uv run pytest -q tests/test_google_sheets_adapter.py
 
 # Rodar com cobertura
 uv run pytest --cov=src tests/
@@ -96,39 +99,20 @@ uv run pytest --cov=src tests/
 # Ou diretamente
 uv run streamlit run app.py
 
-# Abrir no navegador
-# http://localhost:8501
+# Ou com porta específica
+uv run streamlit run app.py --server.port 8501
 ```
 
-Para mais detalhes sobre a configuração do Streamlit, consulte [STREAMLIT_SETUP.md](./docs/STREAMLIT_SETUP.md).
-
----
-
-2) Rodar testes (usa o pytest no ambiente uv):
-
-uv run pytest -q
-# Exemplo genérico (adapte conforme seu uso do uv):
-
-3) Rodar um teste específico:
-3. Defina a variável de ambiente antes de rodar a aplicação/tests:
-
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS="/caminho/para/service-account.json"
-```
-
-
-B) Autenticação local (desenvolvimento):
-
-- Alternativa: `gcloud auth application-default login` para usar suas credenciais de usuário localmente (não recomendado para CI).
-
+Para mais detalhes sobre configuração e operação, consulte a [home da documentação](./docs/index.md) e o [Quick Start Streamlit](./docs/QUICK_START_STREAMLIT.md).
 
 ---
 
 ## Contratos, design e boas práticas aplicadas
 
-- `CostAnalysisService` (domain): contém regras de negócio (cálculo de custo) e validação. Recebe um `DataSource` por injeção de dependência.
-- Erros: adaptadores normalizam exceções para `DataSourceError` para facilitar tratamento e testes.
-- Testes escritos com TDD em mente: primeiro os testes de domínio com mocks/fakes, depois implementação da infraestrutura.
+- a Gold layer é o contrato analítico principal consumido pela interface;
+- adaptadores de infraestrutura normalizam erros e encapsulam acesso a Drive/Sheets;
+- `drive_manager.py` centraliza descoberta e I/O dos ativos `.parquet`;
+- a suíte em `tests/` cobre pipeline, páginas, rentabilidade e adaptadores Google.
 
 ## Guia de Uso de Negócio (Resumo)
 
@@ -177,6 +161,12 @@ uv sync
 uv run pytest -q
 uv run streamlit run app.py
 ```
+
+## Páginas Executivas
+
+- `📊 Dashboard`
+- `💰 Custos de Produção`
+- `💹 Faturamento (Auditoria)`
 
 ## Documentação Complementar
 

@@ -1,6 +1,11 @@
 #!/bin/bash
 # Script para testar conexão Google Sheets após conversão
 
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 echo ""
 echo "════════════════════════════════════════════════════════════════"
 echo "🧪 TESTE DE CONEXÃO - Google Sheets"
@@ -18,7 +23,7 @@ echo ""
 
 # Teste 1: Tipo de documento
 echo "1️⃣  Verificando tipo de documento..."
-python3 test_document_type.py > /tmp/test1.log 2>&1
+python3 "${REPO_ROOT}/scripts/diagnostics/test_document_type.py" > /tmp/test1.log 2>&1
 
 if grep -q "Este é um Google Sheets válido" /tmp/test1.log; then
     echo -e "${GREEN}✅ SUCESSO: É um Google Sheets nativo!${NC}"
@@ -36,7 +41,7 @@ echo ""
 
 # Teste 2: Conexão com gspread
 echo "2️⃣  Testando conexão com gspread..."
-python3 test_connection_diagnostic.py > /tmp/test2.log 2>&1
+python3 "${REPO_ROOT}/scripts/diagnostics/test_connection_diagnostic.py" > /tmp/test2.log 2>&1
 
 if grep -q "Planilha acessada com sucesso" /tmp/test2.log; then
     echo -e "${GREEN}✅ SUCESSO: Conectado com Google Sheets!${NC}"
