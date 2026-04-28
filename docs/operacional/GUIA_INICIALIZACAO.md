@@ -4,25 +4,25 @@
 
 Se você vê esta mensagem ao tentar executar o Streamlit, significa que não há dados em `data/raw/`. Siga um dos passos abaixo:
 
-## ✅ Opção 1: Baixar do Google Drive (Recomendado)
+## ✅ Opção 1: Configurar `st.secrets` e sincronizar do Google Drive (Recomendado)
 
-1. **Verifique o arquivo `.env`:**
+1. **Verifique o arquivo `.streamlit/secrets.toml`:**
    ```bash
-   cat .env
+   cat .streamlit/secrets.toml
    ```
-   Procure pelas variáveis:
-   - `GOOGLE_APPLICATION_CREDENTIALS` - Caminho para arquivo JSON de credenciais
-   - `DRIVE_FOLDER_ID` - ID da pasta no Google Drive com arquivos de vendas
+   Procure por:
+   - `GOOGLE_DRIVE_FOLDER_ID`
+   - `GOOGLE_SHEET_ID`
+   - `[gcp_service_account]`
 
-2. **Verifique as credenciais:**
+2. **Verifique se a Service Account foi configurada:**
    ```bash
-   ls -la credencial/
+   python scripts/diagnostics/test_toml_parsing.py
    ```
-   Deve haver um arquivo `.json` (ex: `vava-doces-*.json`)
 
 3. **Execute o script de download:**
    ```bash
-   python scripts/download_demo_data.py
+   uv run python scripts/download_demo_data.py
    ```
 
    Este script vai:
@@ -37,7 +37,7 @@ Se você vê esta mensagem ao tentar executar o Streamlit, significa que não h�
 
 5. **Inicie o Streamlit:**
    ```bash
-   streamlit run app.py
+   uv run streamlit run app.py
    ```
 
 ## ✅ Opção 2: Criar Dados de Demonstração (Rápido)
@@ -45,7 +45,7 @@ Se você vê esta mensagem ao tentar executar o Streamlit, significa que não h�
 Se o Google Drive não está configurado:
 
 ```bash
-python scripts/download_demo_data.py
+uv run python scripts/download_demo_data.py
 ```
 
 Isso criará um arquivo `vendas_demo_2026_02.csv` em `data/raw/`
@@ -67,20 +67,19 @@ Isso criará um arquivo `vendas_demo_2026_02.csv` em `data/raw/`
 
 3. Inicie o app:
    ```bash
-   streamlit run app.py
+   uv run streamlit run app.py
    ```
 
 ## 🔍 Diagnosticar o Problema
 
-**Verificar variáveis de ambiente:**
+**Verificar `st.secrets`:**
 ```bash
-echo "GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS"
-echo "DRIVE_FOLDER_ID=$DRIVE_FOLDER_ID"
+python scripts/diagnostics/test_toml_parsing.py
 ```
 
-**Verificar credenciais:**
+**Verificar diagnósticos de conexão:**
 ```bash
-cat credencial/vava-doces-*.json | head -5
+python scripts/diagnostics/test_connection.py
 ```
 
 **Verificar dados locais:**
@@ -92,6 +91,8 @@ find data/raw/ -type f \( -name "*.csv" -o -name "*.xlsx" \)
 
 ```
 Vava_doces/
+├── .streamlit/
+│   └── secrets.toml               ← Configure aqui!
 ├── data/
 │   ├── raw/                    ← Adicione aqui!
 │   │   ├── vendas_2026_01.csv
@@ -99,9 +100,9 @@ Vava_doces/
 │   └── processed/
 │       ├── silver/
 │       └── gold/
-├── credencial/
-│   └── vava-doces-*.json
-├── .env                        ← Configure aqui!
+├── scripts/
+│   ├── medallion_pipeline.py
+│   └── diagnostics/
 └── app.py
 ```
 
@@ -111,7 +112,7 @@ Depois de ter dados em `data/raw/`:
 
 ```bash
 # 1. Inicie o app
-streamlit run app.py
+uv run streamlit run app.py
 
 # 2. A app automaticamente vai:
 #    - Sincronizar dados do Google Drive (se disponível)
@@ -119,7 +120,7 @@ streamlit run app.py
 #    - Mostrar dashboards com análises
 
 # 3. Ou execute o pipeline manualmente:
-python scripts/medallion_pipeline.py --validate
+uv run python scripts/medallion_pipeline.py --validate
 ```
 
 ## ❓ FAQ
@@ -137,7 +138,7 @@ https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID}
 ```
 
 **P: "Como consigo o JSON de credenciais?"**
-R: Crie uma Service Account no Google Cloud Console e baixe o arquivo JSON.
+R: Gere a Service Account no Google Cloud Console e copie os campos para `[gcp_service_account]` em `.streamlit/secrets.toml`.
 
 ---
 

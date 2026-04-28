@@ -4,13 +4,15 @@ site_author: 'Vava Doces Dev'
 repo_name: ''
 nav:
   - Home: index.md
-  - Quick Start: QUICK_START_STREAMLIT.md
-  - Refatoring Summary: REFACTORING_SUMMARY.md
+  - Quick Start Streamlit: QUICK_START_STREAMLIT.md
+  - Quick Start Faturamento: QUICK_START_FATURAMENTO.md
+  - Arquitetura Técnica: ARQUITETURA_TECNICA.md
+  - Segurança OAuth2: IMPLEMENTACAO_SEGURANCA_OAUTH2.md
+  - Gold Layer Integration: GOLD_LAYER_INTEGRATION.md
+  - Guia de Inicialização: operacional/GUIA_INICIALIZACAO.md
+  - Guia do Usuário de Negócio: GUIA_USUARIO_NEGOCIO.md
   - Roadmap: NEXT_STEPS.md
-  - Project Report: PROJECT_COMPLETION_REPORT.txt
-  - Files Summary: FILES_SUMMARY.txt
-  - Final Checklist: FINAL_CHECKLIST.txt
-  - README Refatoracao: README_REFATORACAO.txt
+  - Arquivo Histórico: archive/README.md
 
 theme:
   name: material

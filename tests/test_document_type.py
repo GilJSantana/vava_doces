@@ -1,122 +1,64 @@
-#!/usr/bin/env python3
-"""
-Script avançado para diagnosticar o tipo de documento Google
-"""
+from __future__ import annotations
 
-import os
-import json
-from pathlib import Path
-from dotenv import load_dotenv
+from collections.abc import Iterator, Mapping
 
-load_dotenv()
+import pytest
 
-def inspect_document():
-    """Inspecionar qual tipo de documento é"""
-    print("\n" + "="*70)
-    print("🔬 INSPEÇÃO AVANÇADA DE DOCUMENTO GOOGLE")
-    print("="*70)
+import src.infrastructure.google_oauth2_adapter as google_oauth2_adapter
 
-    try:
-        from google.auth.transport.requests import Request
-        from google.oauth2.service_account import Credentials
-        import google.auth.transport.urllib3
-        import urllib3
 
-        cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        sheet_id = os.getenv("GOOGLE_SHEET_ID").strip()
+class MappingLikeSecret(Mapping[str, str]):
+    def __init__(self, data: dict[str, str]) -> None:
+        self._data = data
 
-        print(f"\n📍 ID do Documento: {sheet_id}")
+    def __getitem__(self, key: str) -> str:
+        return self._data[key]
 
-        # Carregar credenciais
-        credentials = Credentials.from_service_account_file(
-            cred_path,
-            scopes=['https://www.googleapis.com/auth/drive.readonly']
-        )
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
 
-        # Autenticar
-        request = Request()
-        credentials.refresh(request)
+    def __len__(self) -> int:
+        return len(self._data)
 
-        # Chamar Google Drive API para inspecionar
-        print("\n🔍 Consultando Google Drive API...")
 
-        http = urllib3.PoolManager()
-        headers = {'Authorization': f'Bearer {credentials.token}'}
+def _service_account_info() -> dict[str, str]:
+    return {
+        "type": "service_account",
+        "project_id": "demo-project",
+        "private_key_id": "key-id",
+        "private_key": "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n",
+        "client_email": "svc@example.iam.gserviceaccount.com",
+        "client_id": "1234567890",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/svc",
+    }
 
-        url = f"https://www.googleapis.com/drive/v3/files/{sheet_id}?fields=name,mimeType,createdTime"
 
-        response = http.request('GET', url, headers=headers)
+def test_load_service_account_info_casts_mapping_like_secret_to_plain_dict(monkeypatch) -> None:
+    mapping_secret = MappingLikeSecret(_service_account_info())
+    monkeypatch.setattr(
+        google_oauth2_adapter.st,
+        "secrets",
+        {"gcp_service_account": mapping_secret},
+        raising=False,
+    )
 
-        if response.status == 200:
-            data = json.loads(response.data.decode('utf-8'))
+    loaded = google_oauth2_adapter.GoogleDrivePermissionChecker._load_service_account_info()
 
-            print(f"\n✅ Documento encontrado!")
-            print(f"   Nome: {data.get('name')}")
-            print(f"   Tipo MIME: {data.get('mimeType')}")
-            print(f"   Criado em: {data.get('createdTime')}")
+    assert loaded == _service_account_info()
+    assert type(loaded) is dict
 
-            mime_type = data.get('mimeType', '')
 
-            # Analisar tipo
-            print(f"\n📊 Análise do Tipo:")
+def test_load_service_account_info_rejects_empty_secret(monkeypatch) -> None:
+    monkeypatch.setattr(
+        google_oauth2_adapter.st,
+        "secrets",
+        {"gcp_service_account": {}},
+        raising=False,
+    )
 
-            if 'spreadsheet' in mime_type:
-                print(f"   ✅ É uma PLANILHA (Google Sheets)")
-                print(f"   Tipo: {mime_type}")
-                return True
-            elif 'document' in mime_type:
-                print(f"   ❌ É um DOCUMENTO (Google Docs) - NÃO é Sheets!")
-                print(f"   Tipo: {mime_type}")
-                print(f"\n💡 Solução: Use o ID de uma Planilha, não de um Documento")
-                return False
-            elif 'presentation' in mime_type:
-                print(f"   ❌ É uma APRESENTAÇÃO (Google Slides) - NÃO é Sheets!")
-                print(f"   Tipo: {mime_type}")
-                print(f"\n💡 Solução: Use o ID de uma Planilha, não de uma Apresentação")
-                return False
-            else:
-                print(f"   ❓ Tipo desconhecido: {mime_type}")
-                return False
-
-        elif response.status == 404:
-            print(f"\n❌ ERRO 404: Documento não encontrado!")
-            print(f"   O ID pode estar errado ou o documento foi deletado")
-            return False
-
-        elif response.status == 403:
-            print(f"\n❌ ERRO 403: Permissão negada!")
-            print(f"   A Service Account não tem acesso a este documento")
-            print(f"\n💡 Solução:")
-            print(f"   1. Compartilhe o documento com o email da Service Account:")
-
-            with open(cred_path) as f:
-                creds = json.load(f)
-            email = creds.get('client_email')
-            print(f"      {email}")
-            print(f"   2. Dê permissão de Visualizador (Reader)")
-            return False
-
-        else:
-            print(f"\n❌ ERRO HTTP {response.status}")
-            print(f"   Resposta: {response.data.decode('utf-8')}")
-            return False
-
-    except Exception as e:
-        print(f"❌ ERRO: {type(e).__name__}: {e}")
-        return False
-
-if __name__ == "__main__":
-    success = inspect_document()
-
-    print("\n" + "="*70)
-    if success:
-        print("🎉 Este é um Google Sheets válido!")
-    else:
-        print("⚠️  Este NÃO é um Google Sheets válido.")
-        print("\n💡 Para encontrar o ID correto:")
-        print("   1. Abra https://sheets.google.com")
-        print("   2. Crie ou abra uma Planilha")
-        print("   3. A URL será: https://docs.google.com/spreadsheets/d/[ID]/")
-        print("   4. Copie o [ID] e coloque no .env")
-    print("="*70 + "\n")
+    with pytest.raises(ValueError, match="empty"):
+        google_oauth2_adapter.GoogleDrivePermissionChecker._load_service_account_info()
 

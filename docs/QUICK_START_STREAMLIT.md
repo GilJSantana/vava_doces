@@ -4,76 +4,51 @@
 
 ### Pré-requisitos
 ```bash
-# Instalar dependências
-uv pip install -r requirements.txt
+# Sincronizar dependências a partir do pyproject.toml
+uv sync
 
-# Ou manualmente
-uv pip install streamlit pandas gspread google-oauth2
+# Alternativa: executar sem ativar o ambiente manualmente
+uv run pytest -q
 ```
 
 ### Executar a Aplicação
 ```bash
 # Método 1: Usando o script
-bash run_app.sh
+./run_app.sh
 
 # Método 2: Direto com Streamlit
-streamlit run app.py
+uv run streamlit run app.py
 
 # Método 3: Com porta específica
-streamlit run app.py --server.port 8501
+uv run streamlit run app.py --server.port 8501
 ```
 
-A aplicação estará disponível em: `http://localhost:8502`
+A aplicação estará disponível em: `http://localhost:8501`
 
 ---
 
 ## 📊 Páginas Disponíveis
 
 ### 1. 📊 Dashboard
-- **Descrição**: Visão geral do sistema com métricas principais
-- **Métricas**: Total de Produtos, Total de Vendas, Valor Total, Categorias
-- **Gráficos**: Distribuição por categoria, Últimos registros
-
-### 2. 📦 Cadastro de Produtos
-- **Descrição**: Gestão completa de produtos
-- **Funcionalidades**: 
-  - Visualização de todos os produtos
-  - Filtro por categoria
-  - Estatísticas (Total, Categorias, Preço Médio)
-  - Download em CSV
-
-### 3. 🥘 Matéria Prima
-- **Descrição**: Gestão de matérias-primas
+- **Descrição**: Visão executiva da rentabilidade
 - **Funcionalidades**:
-  - Lista completa de itens
-  - Estatísticas de unidades e preços
-  - Download em CSV
+  - KPIs de faturamento, lucro e margem
+  - Matriz de rentabilidade
+  - Alertas de auditoria para custos ausentes ou inconsistentes
 
-### 4. 💳 Vendas Diárias
-- **Descrição**: Registro e análise de vendas diárias
+### 2. 💰 Custos de Produção
+- **Descrição**: Cockpit de custos por produto e receita
 - **Funcionalidades**:
-  - Métricas de vendas (total, valor, média)
-  - Gráfico temporal de vendas
-  - Download em CSV
+  - Visualização do custo unitário de produção
+  - Detalhamento por ingrediente
+  - Apoio à auditoria da ficha técnica
 
-### 5. 📈 Resumo Diário
-- **Descrição**: Resumos consolidados diários
+### 3. 💹 Faturamento (Auditoria)
+- **Descrição**: Visão analítica e auditável das vendas processadas
 - **Funcionalidades**:
-  - Visualização de resumos
-  - Download em CSV
-
-### 6. 📊 Análise por Categoria
-- **Descrição**: Análise categórica dos produtos
-- **Funcionalidades**:
-  - Análise por categoria
-  - Download em CSV
-
-### 7. 🔍 Análise Detalhada
-- **Descrição**: Análises avançadas
-- **Funcionalidades**:
-  - Custos por receita
-  - Análise de margens
-  - Relatórios personalizados
+  - Inspeção de vendas da camada Gold
+  - Filtros e apoio ao troubleshooting
+  - Conferência dos dados materializados pelo pipeline
 
 ---
 
@@ -95,25 +70,37 @@ A aplicação usa as cores da Vava Doces:
 
 ```
 Vava_doces/
-├── app.py                          # Aplicação principal Streamlit
+├── app.py                          # Entrada principal Streamlit
+├── .streamlit/
+│   └── secrets.toml.example        # Exemplo de configuração para local/Cloud
+├── scripts/
+│   ├── medallion_pipeline.py       # Pipeline RAW -> SILVER -> GOLD
+│   └── diagnostics/                # Diagnósticos manuais
 ├── src/
 │   ├── domain/
-│   │   └── cost_analysis_service.py
 │   ├── infrastructure/
-│   │   └── google_sheets_adapter.py
-│   └── ports/
-│       └── data_source.py
+│   └── presentation/
+│       ├── navigation.py
+│       └── pages/
+│           ├── dashboard.py
+│           ├── production_costs.py
+│           └── sales_shared.py
+├── data/
+│   ├── raw/
+│   └── processed/
 ├── tests/
-│   ├── test_cost_analysis_service.py
+│   ├── test_app_dispatcher.py
+│   ├── test_dashboard_costs.py
 │   ├── test_google_sheets_adapter.py
 │   ├── test_integration.py
-│   └── test_streamlit_app.py
+│   └── test_profitability_pipeline.py
 ├── assets/
 │   └── logo.png
-├── credencial/
-│   └── vava-doces-0667d5821bd5.json
+├── pyproject.toml
 └── README.md
 ```
+
+> Observação: a estrutura acima foi resumida para destacar os pontos principais do fluxo atual.
 
 ---
 
@@ -122,50 +109,75 @@ Vava_doces/
 ### Executar Testes
 ```bash
 # Todos os testes
-pytest
+uv run pytest -q
 
 # Teste específico
-pytest tests/test_google_sheets_adapter.py -v
+uv run pytest -q tests/test_google_sheets_adapter.py
 
 # Com cobertura
-pytest --cov=src tests/
+uv run pytest --cov=src tests/
 ```
 
 ### Testes Disponíveis
-- ✅ Test Connection (test_connection.py)
-- ✅ Test Streamlit Load (test_streamlit_load.py)
-- ✅ Test Cost Analysis Service
-- ✅ Test Google Sheets Adapter
-- ✅ Test Integration
+- ✅ Suite oficial em `tests/`
+- ✅ Diagnosticos manuais em `scripts/diagnostics/`
+- ✅ Testes de dashboard e rentabilidade
+- ✅ Testes de adaptadores Google
+- ✅ Testes de integração do pipeline
 
 ---
 
 ## 🔐 Configuração de Credenciais
 
-### Variáveis de Ambiente
+### Streamlit Secrets (recomendado)
+Crie o arquivo `.streamlit/secrets.toml` a partir do exemplo:
+
 ```bash
-# .env file
-GOOGLE_APPLICATION_CREDENTIALS=./credencial/vava-doces-0667d5821bd5.json
-GOOGLE_SHEET_ID=1KEzf8FcL21DMk_64t-B9gMQIxjEx3ZPS_XsY-jYNVNk
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
 ```
+
+Preencha pelo menos:
+
+```toml
+OAUTH2_CLIENT_ID = "..."
+OAUTH2_CLIENT_SECRET = "..."
+OAUTH2_REDIRECT_URI = "http://localhost:8501"
+GOOGLE_DRIVE_FOLDER_ID = "..."
+GOOGLE_SHEET_ID = "..."
+
+[gcp_service_account]
+type = "service_account"
+project_id = "..."
+private_key_id = "..."
+private_key = """-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+"""
+client_email = "..."
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "..."
+```
+
+### `.env` (legado opcional)
+O `.env` ainda pode ser útil em alguns diagnósticos manuais, mas o fluxo principal da aplicação usa `st.secrets`.
 
 ### Verificar Conexão
 ```bash
-python test_connection.py
+python scripts/diagnostics/test_connection.py
 ```
 
 ---
 
-## 📊 Abas do Google Sheets
+## 📊 Fontes de Dados
 
-A aplicação trabalha com as seguintes abas:
+- **Google Drive**: origem persistente dos ativos `.parquet` da camada Gold
+- **Google Sheets**: apoio a ingestão e planilhas operacionais/manuais
+- **Camada Gold**: base principal consumida pelas páginas executivas
 
-1. **Cadastro Produtos** - Catálogo de produtos
-2. **Matéria Prima** - Inventário de matérias-primas
-3. **Vendas Diárias** - Registro de vendas
-4. **Resumo Diário** - Consolidado diário
-5. **Análise por Categoria** - Análises categóricas
-6. **Ficha Técnica Exemplo** - Template de fichas técnicas
+> A interface Streamlit atual não expõe mais as antigas 7 páginas operacionais; ela foi reduzida para 3 páginas executivas.
 
 ---
 
@@ -175,25 +187,25 @@ A aplicação trabalha com as seguintes abas:
 **Solução**: Verifique se `assets/logo.png` existe e é uma imagem válida
 
 ### Problema: Erro de conexão com Google Sheets
-**Solução**: Execute `python test_connection.py` para diagnosticar
+**Solução**: Execute `python scripts/diagnostics/test_connection.py` para diagnosticar
 
 ### Problema: Dados não aparecem
-**Solução**: Verifique se as abas da planilha têm os nomes exatos
+**Solução**: Verifique se `.streamlit/secrets.toml` foi configurado, se o acesso ao Google Drive está válido e se o pipeline conseguiu materializar os arquivos Gold
 
-### Problema: Port já está em uso
-**Solução**: Use `streamlit run app.py --server.port 8503`
+### Problema: Porta já está em uso
+**Solução**: Use `uv run streamlit run app.py --server.port 8503`
 
 ---
 
 ## 📝 Notas Importantes
 
-- A aplicação requer conexão com a internet para acessar Google Sheets
-- Certifique-se de que o arquivo de credenciais está no local correto
-- Os nomes das abas do Google Sheets devem ser exatos
-- O cache de dados é armazenado em memória (sem persistência)
+- A aplicação pode usar Google OAuth2, Google Drive e Google Sheets no mesmo fluxo
+- O armazenamento analítico principal está na camada Gold materializada em `.parquet`
+- `st.secrets` é a forma recomendada de configurar credenciais em local e no Streamlit Cloud
+- Os diagnósticos manuais foram movidos para `scripts/diagnostics/`
 
 ---
 
-**Última atualização**: 25 de Fevereiro de 2026
-**Status**: ✅ Operacional
+**Última atualização**: 28 de Abril de 2026
+**Status**: ✅ Alinhado ao fluxo atual
 

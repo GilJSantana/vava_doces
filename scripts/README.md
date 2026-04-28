@@ -49,6 +49,22 @@ python scripts/convert_to_sheets.py
 - Verifica integridade
 - Gera relatório
 
+> Os diagnosticos manuais usados por este script foram centralizados em `scripts/diagnostics/`.
+
+---
+
+### 🔬 `diagnostics/`
+**Descrição:** Scripts manuais legados para diagnostico local e validacoes pontuais
+
+**Uso:**
+```bash
+python scripts/diagnostics/test_connection.py
+python scripts/diagnostics/test_connection_diagnostic.py
+python scripts/diagnostics/test_document_type.py
+python scripts/diagnostics/test_streamlit_load.py
+python scripts/diagnostics/test_toml_parsing.py
+```
+
 ---
 
 ### 🔎 `bronze_ingestion_diagnostic.py`
