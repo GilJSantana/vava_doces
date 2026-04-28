@@ -140,11 +140,11 @@ def test_fmt_currency_returns_audit_needed_for_nan() -> None:
 
 
 def test_build_profitability_base_normalizes_keys_before_merge(monkeypatch) -> None:
-    agg_produto = pd.DataFrame(
+    sales_df = pd.DataFrame(
         {
             "produto_id": [1.0],
-            "nome_produto": ["Brigadeiro"],
-            "qtd_vendida": [2],
+            "produto": ["Brigadeiro"],
+            "qtd": [2],
             "faturamento_liquido": [20.0],
         }
     )
@@ -160,15 +160,13 @@ def test_build_profitability_base_normalizes_keys_before_merge(monkeypatch) -> N
     )
 
     def _fake_load(name: str) -> pd.DataFrame:
-        if name == "agg_vendas_produto":
-            return agg_produto
         if name == "gold_rentabilidade":
             return rentabilidade
         return pd.DataFrame()
 
     monkeypatch.setattr(dashboard, "_load_gold_optional", _fake_load)
 
-    result = dashboard._build_profitability_base.__wrapped__()
+    result = dashboard._build_profitability_base.__wrapped__(sales_df)
 
     assert len(result) == 1
     assert result.loc[0, "id_produto"] == "1"
@@ -176,11 +174,11 @@ def test_build_profitability_base_normalizes_keys_before_merge(monkeypatch) -> N
 
 
 def test_build_profitability_base_falls_back_to_product_name_when_rentability_ids_are_blank(monkeypatch) -> None:
-    agg_produto = pd.DataFrame(
+    sales_df = pd.DataFrame(
         {
             "produto_id": [38.0],
-            "nome_produto": ["Brigadeiro"],
-            "qtd_vendida": [2],
+            "produto": ["Brigadeiro"],
+            "qtd": [2],
             "faturamento_liquido": [20.0],
         }
     )
@@ -197,19 +195,65 @@ def test_build_profitability_base_falls_back_to_product_name_when_rentability_id
     )
 
     def _fake_load(name: str) -> pd.DataFrame:
-        if name == "agg_vendas_produto":
-            return agg_produto
         if name == "gold_rentabilidade":
             return rentabilidade
         return pd.DataFrame()
 
     monkeypatch.setattr(dashboard, "_load_gold_optional", _fake_load)
 
-    result = dashboard._build_profitability_base.__wrapped__()
+    result = dashboard._build_profitability_base.__wrapped__(sales_df)
 
     assert len(result) == 1
     assert result.loc[0, "id_produto"] == "38"
     assert result.loc[0, "custo_producao_unitario"] == 5.0
     assert result.loc[0, "margem_perc"] == 25.0
+
+
+def test_build_sales_agg_preserves_product_key_after_groupby() -> None:
+    sales_df = pd.DataFrame(
+        {
+            "produto_id": [" prod-001 ", "PROD-001"],
+            "produto": ["Brigadeiro", "Brigadeiro"],
+            "qtd": [1, 2],
+            "faturamento_liquido": [10.0, 20.0],
+        }
+    )
+
+    result = dashboard._build_sales_agg_from_sales_df(sales_df)
+
+    assert len(result) == 1
+    assert result.loc[0, "id_produto"] == "PROD-001"
+    assert result.loc[0, "qtd_vendida"] == 3
+
+
+def test_build_profitability_base_marks_mapping_error_when_keys_do_not_intersect(monkeypatch) -> None:
+    sales_df = pd.DataFrame(
+        {
+            "produto_id": ["PROD-001"],
+            "produto": ["Brigadeiro"],
+            "qtd": [2],
+            "faturamento_liquido": [20.0],
+        }
+    )
+    rentabilidade = pd.DataFrame(
+        {
+            "id_produto": ["PROD-999"],
+            "custo_producao_unitario": [5.0],
+            "margem_perc": [25.0],
+            "markup": [2.0],
+        }
+    )
+
+    def _fake_load(name: str) -> pd.DataFrame:
+        if name == "gold_rentabilidade":
+            return rentabilidade
+        return pd.DataFrame()
+
+    monkeypatch.setattr(dashboard, "_load_gold_optional", _fake_load)
+
+    result = dashboard._build_profitability_base.__wrapped__(sales_df)
+
+    assert "_mapping_error" in result.columns
+    assert bool(result["_mapping_error"].iloc[0]) is True
 
 
