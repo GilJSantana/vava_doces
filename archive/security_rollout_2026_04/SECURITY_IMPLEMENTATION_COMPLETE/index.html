@@ -19,7 +19,7 @@
     
     
       
-        <title>Refactoring verification - Vava Doces Docs</title>
+        <title>✅ IMPLEMENTACAO SEGURANCA OAUTH2 + DRIVE PERMISSIONS - CONCLUSAO - Vava Doces Docs</title>
       
     
     
@@ -68,6 +68,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#implementacao-seguranca-oauth2-drive-permissions-conclusao" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -96,7 +101,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Refactoring verification
+              ✅ IMPLEMENTACAO SEGURANCA OAUTH2 + DRIVE PERMISSIONS - CONCLUSAO
             
           </span>
         </div>
@@ -340,6 +345,99 @@
   
   
   
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#resumo-executivo" class="md-nav__link">
+    RESUMO EXECUTIVO
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arquitetura-de-seguranca" class="md-nav__link">
+    ARQUITETURA DE SEGURANCA
+  </a>
+  
+    <nav class="md-nav" aria-label="ARQUITETURA DE SEGURANCA">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-inicializar-session-state" class="md-nav__link">
+    STEP 1: Inicializar Session State
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-2-verificar-oauth2-authentication" class="md-nav__link">
+    STEP 2: Verificar OAuth2 Authentication
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-3-verificar-drive-authorization" class="md-nav__link">
+    STEP 3: Verificar Drive Authorization
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-4-carregar-aplicacao-principal" class="md-nav__link">
+    STEP 4: Carregar Aplicacao Principal
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuracao-atual" class="md-nav__link">
+    CONFIGURACAO ATUAL
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#garantias-tecnicas" class="md-nav__link">
+    GARANTIAS TECNICAS
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#como-testar-localmente" class="md-nav__link">
+    COMO TESTAR LOCALMENTE
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logs-e-depuracao" class="md-nav__link">
+    LOGS E DEPURACAO
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status-atual" class="md-nav__link">
+    STATUS ATUAL
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -355,169 +453,93 @@
 
 
 
-<p>================================================================================
-STREAMLIT REFACTORING VERIFICATION REPORT
-================================================================================
-Date: April 15, 2026
-Task: Replace deprecated use_container_width with new width parameter
-================================================================================
-1. DEPRECATED PARAMETER SEARCH
-================================================================================
-Search Command: grep -r "use_container_width" --include="*.py" .
-Result Before Refactoring: 5 occurrences found
-Result After Refactoring:  0 occurrences found ✅
-Files Analyzed:
-  ✅ src/presentation/navigation.py
-  ✅ src/presentation/pages/faturamento.py
-  ✅ src/presentation/pages/dashboard.py
-  ✅ All other .py files in repository
-================================================================================
-2. SYNTAX VALIDATION
-================================================================================
-File 1: src/presentation/navigation.py
-  Status: ✅ PASSED
-  Errors: None
-File 2: src/presentation/pages/faturamento.py
-  Status: ✅ PASSED
-  Errors: None
-File 3: src/presentation/pages/dashboard.py
-  Status: ✅ PASSED
-  Errors: None
-Overall: ✅ ALL FILES VALID
-================================================================================
-3. IMPORT TESTING
-================================================================================
-Test: Import all modified modules
-Command: python -c "from src.presentation.navigation import render_sidebar; \
-                     from src.presentation.pages.faturamento import show_faturamento; \
-                     from src.presentation.pages.dashboard import show_dashboard"
-Result: ✅ PASSED
-Status: All modules imported successfully without errors
-================================================================================
-4. DEPRECATION WARNING SCAN
-================================================================================
-Command: grep -i "deprecat|use_container_width" /tmp/streamlit_fresh.log
-Result: 0 deprecation warnings found ✅
-Warning Categories Checked:
-  ✅ use_container_width deprecation warnings: NOT FOUND
-  ✅ General deprecation warnings: NOT FOUND
-  ✅ Streamlit API warnings: NOT FOUND
-================================================================================
-5. APPLICATION RUNTIME TEST
-================================================================================
-Command: streamlit run app.py --logger.level=warning
-Duration: 15 seconds (timeout)
-Result: ✅ PASSED
-Application Status:
-  ✅ Server started successfully (Port 8501)
-  ✅ Pipeline executed without errors
-  ✅ Data validation passed (10,176 records)
-  ✅ All pages initialized
-Pipeline Results:
-  • Bronze → Silver → Gold: 10,176 rows (0 diff)
-  • Foreign Key Integrity: ✅ OK (0 orphans)
-  • Primary Key Integrity: ✅ OK
-  • Schema Validation: ✅ PASSED
-================================================================================
-6. COMPONENT VERIFICATION
-================================================================================
-Navigation Components:
-  ✅ st.button() - Navigation sidebar refresh button
-     Changed: use_container_width=True → width="stretch"
-     Expected Behavior: Button spans full sidebar width
-     Actual Behavior: ✅ CORRECT
-Faturamento Page Components:
-  ✅ st.download_button() - CSV export (Line 274)
-     Changed: use_container_width=True → width="stretch"
-     Expected Behavior: Button spans column width
-     Actual Behavior: ✅ CORRECT
-  ✅ st.download_button() - Excel export (Line 284)
-     Changed: use_container_width=True → width="stretch"
-     Expected Behavior: Button spans column width
-     Actual Behavior: ✅ CORRECT
-Dashboard Page Components:
-  ✅ st.dataframe() - Decision table primary (Line 648)
-     Changed: use_container_width=True → width="stretch"
-     Expected Behavior: Table spans full width with column config
-     Actual Behavior: ✅ CORRECT
-  ✅ st.dataframe() - Decision table fallback (Line 660)
-     Changed: use_container_width=True → width="stretch"
-     Expected Behavior: Table spans full width (fallback render)
-     Actual Behavior: ✅ CORRECT
-================================================================================
-7. LAYOUT CONSISTENCY CHECK
-================================================================================
-Dashboard:
-  ✅ Sidebar buttons remain full-width
-  ✅ KPI metrics display correctly (4 columns)
-  ✅ Profitability matrix renders at full width
-  ✅ Pareto chart displays properly
-  ✅ Decision table shows all columns without truncation
-  ✅ No horizontal scrolling issues detected
-Faturamento:
-  ✅ Download buttons positioned correctly in 2-column layout
-  ✅ Both buttons are equally sized and clickable
-  ✅ Buttons remain within their container columns
-  ✅ Export section layout preserved
-Navigation:
-  ✅ Sidebar refresh button full-width and clickable
-  ✅ Connection status display unaffected
-  ✅ Navigation radio buttons display correctly
-================================================================================
-8. PARAMETER MAPPING VERIFICATION
-================================================================================
-Replacement Rules Applied:
-  Rule A: use_container_width=True → width="stretch"
-          Applied to: 5 instances ✅
-  Rule B: use_container_width=False → width="content"
-          Found in repository: 0 instances
-All Replacements:
-  1. navigation.py:30         use_container_width=True ✅ REPLACED
-  2. faturamento.py:274       use_container_width=True ✅ REPLACED
-  3. faturamento.py:284       use_container_width=True ✅ REPLACED
-  4. dashboard.py:648         use_container_width=True ✅ REPLACED
-  5. dashboard.py:660         use_container_width=True ✅ REPLACED
-================================================================================
-9. DOCUMENTATION CREATED
-================================================================================
-Files Generated:
-  ✅ REFACTORING_SUMMARY.md - High-level refactoring overview
-  ✅ TECHNICAL_REFACTORING_REPORT.md - Detailed technical documentation
-  ✅ refactoring_verification.md - This verification report
-================================================================================
-10. FINAL STATUS
-================================================================================
-Refactoring Status: ✅ COMPLETE
-Summary:
-  • Total Changes: 5
-  • Files Modified: 3
-  • Deprecation Warnings Eliminated: 5
-  • Syntax Errors: 0
-  • Runtime Errors: 0
-  • Layout Issues: 0
-  • Test Coverage: 100%
-Risk Assessment:
-  • Visual Impact: 🟢 LOW (No changes to appearance)
-  • Functional Impact: 🟢 LOW (No changes to behavior)
-  • Performance Impact: 🟢 LOW (No performance effects)
-  • Compatibility: 🟡 MEDIUM (Requires Streamlit &gt;= 1.38.0)
-Deployment Readiness: ✅ READY
-Requirements:
-  • Streamlit &gt;= 1.38.0 (verify in production)
-  • No configuration changes needed
-  • No database migrations required
-  • Backward compatibility: N/A (UI parameter only)
-================================================================================
-CONCLUSION
-================================================================================
-The refactoring from deprecated use_container_width to the modern width parameter
-has been completed successfully. All 5 instances have been updated, the application
-has been tested and verified to run without deprecation warnings, and all layout
-consistency has been maintained.
-The application is ready for deployment.
-Status: ✅ PASSED ALL VERIFICATION CHECKS
-No commits made as requested.
-================================================================================</p>
+<h1 id="implementacao-seguranca-oauth2-drive-permissions-conclusao">✅ IMPLEMENTACAO SEGURANCA OAUTH2 + DRIVE PERMISSIONS - CONCLUSAO<a class="headerlink" href="#implementacao-seguranca-oauth2-drive-permissions-conclusao" title="Permanent link">&para;</a></h1>
+<p><strong>Status:</strong> ✅ ATUALIZADO PARA A ARQUITETURA ATUAL</p>
+<hr />
+<h2 id="resumo-executivo">RESUMO EXECUTIVO<a class="headerlink" href="#resumo-executivo" title="Permanent link">&para;</a></h2>
+<p>A camada de seguranca em producao usa:
+- <strong>Google OAuth2</strong> para autenticacao de identidade;
+- <strong>Google Drive API + Service Account</strong> para validacao de permissao;
+- <strong>Session state gating</strong> para bloquear o carregamento da aplicacao ate a autorizacao.</p>
+<p>O fluxo agora esta alinhado a <code>st.secrets</code>, <code>gcp_service_account</code> e <code>GOOGLE_DRIVE_FOLDER_ID</code>.</p>
+<hr />
+<h2 id="arquitetura-de-seguranca">ARQUITETURA DE SEGURANCA<a class="headerlink" href="#arquitetura-de-seguranca" title="Permanent link">&para;</a></h2>
+<h3 id="step-1-inicializar-session-state">STEP 1: Inicializar Session State<a class="headerlink" href="#step-1-inicializar-session-state" title="Permanent link">&para;</a></h3>
+<p><code>init_session_state_auth()</code> prepara os estados necessarios de autenticacao.</p>
+<h3 id="step-2-verificar-oauth2-authentication">STEP 2: Verificar OAuth2 Authentication<a class="headerlink" href="#step-2-verificar-oauth2-authentication" title="Permanent link">&para;</a></h3>
+<ul>
+<li>usuario recebe URL de login OAuth2;</li>
+<li>Google retorna o codigo de autorizacao;</li>
+<li>o app troca o codigo por token e extrai o email.</li>
+</ul>
+<h3 id="step-3-verificar-drive-authorization">STEP 3: Verificar Drive Authorization<a class="headerlink" href="#step-3-verificar-drive-authorization" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>GoogleDrivePermissionChecker</code> constroi o cliente Drive com a Service Account em <code>st.secrets["gcp_service_account"]</code>;</li>
+<li>verifica se o usuario possui acesso ao <code>GOOGLE_DRIVE_FOLDER_ID</code>.</li>
+</ul>
+<h3 id="step-4-carregar-aplicacao-principal">STEP 4: Carregar Aplicacao Principal<a class="headerlink" href="#step-4-carregar-aplicacao-principal" title="Permanent link">&para;</a></h3>
+<ul>
+<li>apos autorizacao, o app executa <code>initialize_data_pipeline()</code>;</li>
+<li>libera as 3 paginas executivas: Dashboard, Custos de Produção e Faturamento.</li>
+</ul>
+<hr />
+<h2 id="configuracao-atual">CONFIGURACAO ATUAL<a class="headerlink" href="#configuracao-atual" title="Permanent link">&para;</a></h2>
+<p>Exemplo resumido de <code>.streamlit/secrets.toml</code>:</p>
+<pre><code class="language-toml">OAUTH2_CLIENT_ID = &quot;YOUR_CLIENT_ID.apps.googleusercontent.com&quot;
+OAUTH2_CLIENT_SECRET = &quot;YOUR_CLIENT_SECRET&quot;
+OAUTH2_REDIRECT_URI = &quot;http://localhost:8501&quot;
+GOOGLE_DRIVE_FOLDER_ID = &quot;YOUR_FOLDER_ID&quot;
+GOOGLE_SHEET_ID = &quot;YOUR_SHEET_ID&quot;
+
+[gcp_service_account]
+type = &quot;service_account&quot;
+project_id = &quot;YOUR_PROJECT_ID&quot;
+private_key_id = &quot;YOUR_PRIVATE_KEY_ID&quot;
+private_key = &quot;&quot;&quot;-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+&quot;&quot;&quot;
+client_email = &quot;YOUR_SERVICE_ACCOUNT_EMAIL&quot;
+client_id = &quot;YOUR_CLIENT_ID&quot;
+auth_uri = &quot;https://accounts.google.com/o/oauth2/auth&quot;
+token_uri = &quot;https://oauth2.googleapis.com/token&quot;
+auth_provider_x509_cert_url = &quot;https://www.googleapis.com/oauth2/v1/certs&quot;
+client_x509_cert_url = &quot;...&quot;
+universe_domain = &quot;googleapis.com&quot;
+</code></pre>
+<hr />
+<h2 id="garantias-tecnicas">GARANTIAS TECNICAS<a class="headerlink" href="#garantias-tecnicas" title="Permanent link">&para;</a></h2>
+<ul>
+<li>sanitizacao de segredos antes do uso em OAuth2;</li>
+<li>cast explicito de <code>AttrDict</code>/<code>Mapping</code> para <code>dict</code> na Service Account;</li>
+<li>validacao clara de segredo ausente ou invalido;</li>
+<li>comparacao case-insensitive de email nas permissoes do Drive;</li>
+<li><code>pageSize=100</code> na listagem de permissoes.</li>
+</ul>
+<hr />
+<h2 id="como-testar-localmente">COMO TESTAR LOCALMENTE<a class="headerlink" href="#como-testar-localmente" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">uv sync
+uv run pytest -q
+uv run streamlit run app.py
+</code></pre>
+<p>Fluxo esperado:
+- pagina de login para usuarios nao autenticados;
+- validacao de permissao do Drive apos login;
+- liberacao da aplicacao apenas para usuarios autorizados.</p>
+<hr />
+<h2 id="logs-e-depuracao">LOGS E DEPURACAO<a class="headerlink" href="#logs-e-depuracao" title="Permanent link">&para;</a></h2>
+<p>Logs esperados incluem:
+- carregamento de credenciais OAuth2 via <code>st.secrets</code>;
+- inicio da verificacao de permissao no Drive;
+- usuario autorizado/negado;
+- falhas tecnicas sem exposicao de segredos.</p>
+<hr />
+<h2 id="status-atual">STATUS ATUAL<a class="headerlink" href="#status-atual" title="Permanent link">&para;</a></h2>
+<p>Documento alinhado ao fluxo real da aplicacao e ao uso de:
+- <code>st.secrets</code>
+- <code>[gcp_service_account]</code>
+- <code>GOOGLE_DRIVE_FOLDER_ID</code>
+- 3 paginas executivas apos autorizacao</p>
 
 
 

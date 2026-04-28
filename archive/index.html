@@ -13,13 +13,15 @@
       
       
       
+        <link rel="prev" href="../NEXT_STEPS/">
+      
       
       <link rel="icon" href="../images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.0.8">
     
     
       
-        <title>Deduplication Refactor - Technical Summary - Vava Doces Docs</title>
+        <title>Arquivo Histórico - Vava Doces Docs</title>
       
     
     
@@ -69,7 +71,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#deduplication-refactor-technical-summary" class="md-skip">
+        <a href="#arquivo-historico" class="md-skip">
           Skip to content
         </a>
       
@@ -101,7 +103,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Deduplication Refactor - Technical Summary
+              Arquivo Histórico
             
           </span>
         </div>
@@ -319,11 +321,114 @@
 
   
   
+    
   
-    <li class="md-nav__item">
-      <a href="../archive/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Arquivo Histórico
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         Arquivo Histórico
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quando-usar" class="md-nav__link">
+    Quando usar
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fonte-principal-da-arquitetura-atual" class="md-nav__link">
+    Fonte principal da arquitetura atual
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conteudo-arquivado" class="md-nav__link">
+    Conteúdo arquivado
+  </a>
+  
+    <nav class="md-nav" aria-label="Conteúdo arquivado">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#2026-02-refatoracao-inicial-do-streamlit" class="md-nav__link">
+    2026-02 · Refatoração inicial do Streamlit
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2026-04-ajustes-de-largura-e-refatoracao-visual-do-streamlit" class="md-nav__link">
+    2026-04 · Ajustes de largura e refatoração visual do Streamlit
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2026-04-rollout-de-seguranca-oauth2" class="md-nav__link">
+    2026-04 · Rollout de segurança OAuth2
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2026-04-deduplicacao-e-correcoes-de-pipeline" class="md-nav__link">
+    2026-04 · Deduplicação e correções de pipeline
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#releases-e-marcos-de-entrega" class="md-nav__link">
+    Releases e marcos de entrega
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#como-navegar-pelo-historico" class="md-nav__link">
+    Como navegar pelo histórico
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -355,44 +460,58 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#problem-statement" class="md-nav__link">
-    Problem Statement
+  <a href="#quando-usar" class="md-nav__link">
+    Quando usar
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#business-context" class="md-nav__link">
-    Business Context
+  <a href="#fonte-principal-da-arquitetura-atual" class="md-nav__link">
+    Fonte principal da arquitetura atual
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#solution-implemented" class="md-nav__link">
-    Solution Implemented
+  <a href="#conteudo-arquivado" class="md-nav__link">
+    Conteúdo arquivado
   </a>
   
-    <nav class="md-nav" aria-label="Solution Implemented">
+    <nav class="md-nav" aria-label="Conteúdo arquivado">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-expanded-deduplication-key-_deduplicate_with_audit" class="md-nav__link">
-    1. Expanded Deduplication Key (_deduplicate_with_audit)
+  <a href="#2026-02-refatoracao-inicial-do-streamlit" class="md-nav__link">
+    2026-02 · Refatoração inicial do Streamlit
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-enhanced-logging-transform_to_silver" class="md-nav__link">
-    2. Enhanced Logging (transform_to_silver)
+  <a href="#2026-04-ajustes-de-largura-e-refatoracao-visual-do-streamlit" class="md-nav__link">
+    2026-04 · Ajustes de largura e refatoração visual do Streamlit
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-improved-star-schema-validation-validate_star_schema" class="md-nav__link">
-    3. Improved Star Schema Validation (validate_star_schema)
+  <a href="#2026-04-rollout-de-seguranca-oauth2" class="md-nav__link">
+    2026-04 · Rollout de segurança OAuth2
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2026-04-deduplicacao-e-correcoes-de-pipeline" class="md-nav__link">
+    2026-04 · Deduplicação e correções de pipeline
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#releases-e-marcos-de-entrega" class="md-nav__link">
+    Releases e marcos de entrega
   </a>
   
 </li>
@@ -403,83 +522,8 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#files-modified" class="md-nav__link">
-    Files Modified
-  </a>
-  
-    <nav class="md-nav" aria-label="Files Modified">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-srcdomainsales_analysis_servicepy" class="md-nav__link">
-    1. src/domain/sales_analysis_service.py
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-scriptsmedallion_pipelinepy" class="md-nav__link">
-    2. scripts/medallion_pipeline.py
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
-    Testing
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#data-integrity-contract" class="md-nav__link">
-    Data Integrity Contract
-  </a>
-  
-    <nav class="md-nav" aria-label="Data Integrity Contract">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#silver-layer" class="md-nav__link">
-    Silver Layer
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#gold-layer-fato_vendas" class="md-nav__link">
-    Gold Layer (fato_vendas)
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#backward-compatibility" class="md-nav__link">
-    Backward Compatibility
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#performance-impact" class="md-nav__link">
-    Performance Impact
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    Next Steps
+  <a href="#como-navegar-pelo-historico" class="md-nav__link">
+    Como navegar pelo histórico
   </a>
   
 </li>
@@ -500,143 +544,71 @@
 
 
 
-<h1 id="deduplication-refactor-technical-summary">Deduplication Refactor - Technical Summary<a class="headerlink" href="#deduplication-refactor-technical-summary" title="Permanent link">&para;</a></h1>
-<h2 id="problem-statement">Problem Statement<a class="headerlink" href="#problem-statement" title="Permanent link">&para;</a></h2>
-<p>The medallion pipeline was losing revenue rows during the Silver layer transformation:
-- Month 01: Lost 6 rows
-- Month 02: Lost 8 rows
-- Month 03: Lost 27 rows</p>
-<p><strong>Root Cause</strong>: The deduplication logic was using all DataFrame columns (including metadata like timestamps, file source, and load time) to identify duplicates. This caused legitimate multi-product sales (same <code>num_venda</code> but different products) to be incorrectly marked as duplicates and removed.</p>
-<h2 id="business-context">Business Context<a class="headerlink" href="#business-context" title="Permanent link">&para;</a></h2>
-<p>In Vavá Doces' confectionery business model:
-- <strong>One Order (venda_id/num_venda) can contain MULTIPLE line items</strong>
-- Each line item = one product sold in a transaction
-- Example: Order #1001 might include:
-  - 2x Caseirinho @ R$10.00
-  - 3x Brigadeiro @ R$8.00</p>
-<p>These should be preserved as 2 separate rows in the fato_vendas table (item-grain), not collapsed into one row.</p>
-<h2 id="solution-implemented">Solution Implemented<a class="headerlink" href="#solution-implemented" title="Permanent link">&para;</a></h2>
-<h3 id="1-expanded-deduplication-key-_deduplicate_with_audit">1. Expanded Deduplication Key (<code>_deduplicate_with_audit</code>)<a class="headerlink" href="#1-expanded-deduplication-key-_deduplicate_with_audit" title="Permanent link">&para;</a></h3>
-<p><strong>Changed from</strong>: Comparing all columns (including metadata)</p>
-<p><strong>Changed to</strong>: Using an expanded "item-grain" key that includes only business-relevant columns:</p>
-<pre><code class="language-python">dedup_key_columns = [
-    &quot;data&quot;,              # Date of sale
-    &quot;num_venda&quot;,         # Order ID
-    &quot;cliente&quot;,           # Client name
-    &quot;produto&quot;,           # Product name
-    &quot;produto_key&quot;,       # Normalized product key
-    &quot;quantidade&quot;,        # Quantity
-    &quot;valor_unitario&quot;,    # Unit price
-    &quot;valor_bruto&quot;,       # Gross value
-    &quot;valor_liquido&quot;,     # Net value
-    &quot;valor_total&quot;,       # Total value
-    &quot;desconto&quot;,          # Discount applied
-    &quot;tipo_item&quot;,         # Item type
-]
-</code></pre>
-<p><strong>Logic</strong>:
-- Only remove rows that are 100% identical across ALL these columns
-- Rows with same <code>num_venda</code> but different <code>produto</code> or <code>quantidade</code> are preserved
-- Removes only true duplicates (e.g., same line scanned twice in same file)</p>
-<h3 id="2-enhanced-logging-transform_to_silver">2. Enhanced Logging (<code>transform_to_silver</code>)<a class="headerlink" href="#2-enhanced-logging-transform_to_silver" title="Permanent link">&para;</a></h3>
-<p>Added month-by-month loss tracking:</p>
-<pre><code>[DEDUP LOSS ANALYSIS BY MONTH]
-  2024-01: 6090 → 6090 (lost 0 rows) ✅
-  2024-02: 6090 → 6090 (lost 0 rows) ✅
-  2024-03: 6090 → 6090 (lost 0 rows) ✅
-</code></pre>
-<h3 id="3-improved-star-schema-validation-validate_star_schema">3. Improved Star Schema Validation (<code>validate_star_schema</code>)<a class="headerlink" href="#3-improved-star-schema-validation-validate_star_schema" title="Permanent link">&para;</a></h3>
-<p>Added explicit row count consistency check:
-- <strong>Silver → Gold mapping</strong>: Each Silver row should map to exactly one fato_vendas row
-- Logs detailed validation breakdown:
-  - Foreign key integrity (producto_id, data_id)
-  - Primary key uniqueness (venda_id)
-  - Row count mismatch detection
-  - Infinite margin values</p>
-<h2 id="files-modified">Files Modified<a class="headerlink" href="#files-modified" title="Permanent link">&para;</a></h2>
-<h3 id="1-srcdomainsales_analysis_servicepy">1. <code>src/domain/sales_analysis_service.py</code><a class="headerlink" href="#1-srcdomainsales_analysis_servicepy" title="Permanent link">&para;</a></h3>
+<h1 id="arquivo-historico">Arquivo Histórico<a class="headerlink" href="#arquivo-historico" title="Permanent link">&para;</a></h1>
+<p>Esta seção reúne documentos preservados apenas para contexto histórico do projeto.</p>
+<h2 id="quando-usar">Quando usar<a class="headerlink" href="#quando-usar" title="Permanent link">&para;</a></h2>
+<p>Consulte estes arquivos apenas se você precisar entender:</p>
 <ul>
-<li><strong>Function</strong>: <code>_deduplicate_with_audit()</code></li>
-<li><strong>Changes</strong>:</li>
-<li>Expanded dedup key from transaction-level to item-level</li>
-<li>Preserves multi-product orders</li>
-<li>Only removes 100% identical rows</li>
-<li>Enhanced logging with month-by-month breakdown</li>
+<li>fases antigas da refatoração do Streamlit;</li>
+<li>checkpoints de entrega e relatórios intermediários;</li>
+<li>resumos operacionais que não representam mais a arquitetura atual.</li>
 </ul>
-<h3 id="2-scriptsmedallion_pipelinepy">2. <code>scripts/medallion_pipeline.py</code><a class="headerlink" href="#2-scriptsmedallion_pipelinepy" title="Permanent link">&para;</a></h3>
+<h2 id="fonte-principal-da-arquitetura-atual">Fonte principal da arquitetura atual<a class="headerlink" href="#fonte-principal-da-arquitetura-atual" title="Permanent link">&para;</a></h2>
+<p>Para o estado vigente do projeto, use:</p>
 <ul>
-<li><strong>Function</strong>: <code>transform_to_silver()</code></li>
-<li>Added row loss tracking by month</li>
-<li>Enhanced audit reporting</li>
-<li>
-<p>New <code>rows_lost_during_dedup</code> metric</p>
-</li>
-<li>
-<p><strong>Function</strong>: <code>validate_star_schema()</code></p>
-</li>
-<li>Added detailed logging output</li>
-<li>Critical: Checks Silver → Gold row count consistency</li>
-<li>Reports all validation failures with clear messages</li>
+<li><a href="../"><code>../index.md</code></a></li>
+<li><a href="../QUICK_START_STREAMLIT/"><code>../QUICK_START_STREAMLIT.md</code></a></li>
+<li><a href="../ARQUITETURA_TECNICA/"><code>../ARQUITETURA_TECNICA.md</code></a></li>
+<li><a href="../IMPLEMENTACAO_SEGURANCA_OAUTH2/"><code>../IMPLEMENTACAO_SEGURANCA_OAUTH2.md</code></a></li>
+<li><a href="../GOLD_LAYER_INTEGRATION/"><code>../GOLD_LAYER_INTEGRATION.md</code></a></li>
 </ul>
-<h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
-<p>Created <code>tests/test_dedup_fix.py</code> with 4 test scenarios:</p>
-<ol>
-<li>✅ <strong>test_preserve_multiproduct_same_order</strong>:</li>
-<li>
-<p>Same order, different products → Both rows preserved</p>
-</li>
-<li>
-<p>✅ <strong>test_remove_exact_duplicates_same_order</strong>:</p>
-</li>
-<li>
-<p>Identical rows → Duplicate removed</p>
-</li>
-<li>
-<p>✅ <strong>test_preserve_same_product_different_dates</strong>:</p>
-</li>
-<li>
-<p>Same product, different dates → Both rows preserved</p>
-</li>
-<li>
-<p>✅ <strong>test_preserve_same_product_different_quantities</strong>:</p>
-</li>
-<li>Same product, different quantities → Both rows preserved</li>
-</ol>
-<p><strong>Result</strong>: All tests pass ✅</p>
-<h2 id="data-integrity-contract">Data Integrity Contract<a class="headerlink" href="#data-integrity-contract" title="Permanent link">&para;</a></h2>
-<h3 id="silver-layer">Silver Layer<a class="headerlink" href="#silver-layer" title="Permanent link">&para;</a></h3>
+<h2 id="conteudo-arquivado">Conteúdo arquivado<a class="headerlink" href="#conteudo-arquivado" title="Permanent link">&para;</a></h2>
+<p>Os documentos foram agrupados por tema e data para reduzir ruído na raiz de <code>docs/</code> e na navegação do MkDocs.</p>
+<h3 id="2026-02-refatoracao-inicial-do-streamlit">2026-02 · Refatoração inicial do Streamlit<a class="headerlink" href="#2026-02-refatoracao-inicial-do-streamlit" title="Permanent link">&para;</a></h3>
+<p>Pasta: <a href="streamlit_refactor_2026_02/"><code>streamlit_refactor_2026_02/</code></a></p>
+<p>Documentos principais:
+- <a href="streamlit_refactor_2026_02/REFACTORING_SUMMARY/"><code>REFACTORING_SUMMARY.md</code></a>
+- <a href="streamlit_refactor_2026_02/README_REFATORACAO.txt"><code>README_REFATORACAO.txt</code></a>
+- <a href="streamlit_refactor_2026_02/PROJECT_COMPLETION_REPORT.txt"><code>PROJECT_COMPLETION_REPORT.txt</code></a></p>
+<p>Materiais complementares:
+- <a href="streamlit_refactor_2026_02/FINAL_CHECKLIST.txt"><code>FINAL_CHECKLIST.txt</code></a>
+- <a href="streamlit_refactor_2026_02/FILES_SUMMARY.txt"><code>FILES_SUMMARY.txt</code></a>
+- <a href="streamlit_refactor_2026_02/STREAMLIT_REFACTORING_SUMMARY.txt"><code>STREAMLIT_REFACTORING_SUMMARY.txt</code></a>
+- <a href="streamlit_refactor_2026_02/ARQUIVOS_CRIADOS.txt"><code>ARQUIVOS_CRIADOS.txt</code></a>
+- <a href="streamlit_refactor_2026_02/COMMIT_HISTORY_NEW/"><code>COMMIT_HISTORY_NEW.md</code></a></p>
+<p>Use este grupo apenas para entender a fase antiga em que a aplicação ainda descrevia 7 páginas operacionais e uma arquitetura anterior ao fluxo executivo atual.</p>
+<h3 id="2026-04-ajustes-de-largura-e-refatoracao-visual-do-streamlit">2026-04 · Ajustes de largura e refatoração visual do Streamlit<a class="headerlink" href="#2026-04-ajustes-de-largura-e-refatoracao-visual-do-streamlit" title="Permanent link">&para;</a></h3>
+<p>Pasta: <a href="streamlit_width_refactor_2026_04/"><code>streamlit_width_refactor_2026_04/</code></a></p>
+<p>Documentos principais:
+- <a href="streamlit_width_refactor_2026_04/REFACTORING_SUMMARY/"><code>REFACTORING_SUMMARY.md</code></a>
+- <a href="streamlit_width_refactor_2026_04/TECHNICAL_REFACTORING_REPORT/"><code>TECHNICAL_REFACTORING_REPORT.md</code></a>
+- <a href="streamlit_width_refactor_2026_04/FINAL_EXECUTION_SUMMARY/"><code>FINAL_EXECUTION_SUMMARY.md</code></a></p>
+<p>Validação:
+- <a href="streamlit_width_refactor_2026_04/refactoring_verification/"><code>refactoring_verification.md</code></a></p>
+<h3 id="2026-04-rollout-de-seguranca-oauth2">2026-04 · Rollout de segurança OAuth2<a class="headerlink" href="#2026-04-rollout-de-seguranca-oauth2" title="Permanent link">&para;</a></h3>
+<p>Pasta: <a href="security_rollout_2026_04/"><code>security_rollout_2026_04/</code></a></p>
+<p>Documentos principais:
+- <a href="security_rollout_2026_04/SECURITY_IMPLEMENTATION_COMPLETE/"><code>SECURITY_IMPLEMENTATION_COMPLETE.md</code></a>
+- <a href="security_rollout_2026_04/OAUTH2_IMPLEMENTATION_COMPLETE.txt"><code>OAUTH2_IMPLEMENTATION_COMPLETE.txt</code></a></p>
+<p>Este grupo registra a fase de implantação inicial da camada de segurança antes dos ajustes finais para <code>st.secrets</code>, <code>gcp_service_account</code> e a arquitetura atual do Drive-backed Gold layer.</p>
+<h3 id="2026-04-deduplicacao-e-correcoes-de-pipeline">2026-04 · Deduplicação e correções de pipeline<a class="headerlink" href="#2026-04-deduplicacao-e-correcoes-de-pipeline" title="Permanent link">&para;</a></h3>
+<p>Pasta: <a href="dedup_fix/"><code>dedup_fix/</code></a></p>
+<p>Documentos principais:
+- <a href="dedup_fix/DEDUP_FIX_IMPLEMENTATION/"><code>DEDUP_FIX_IMPLEMENTATION.md</code></a>
+- <a href="dedup_fix/COMMITS_DEDUP_FIX/"><code>COMMITS_DEDUP_FIX.md</code></a>
+- <a href="dedup_fix/TASK_COMPLETION_SUMMARY/"><code>TASK_COMPLETION_SUMMARY.md</code></a></p>
+<h3 id="releases-e-marcos-de-entrega">Releases e marcos de entrega<a class="headerlink" href="#releases-e-marcos-de-entrega" title="Permanent link">&para;</a></h3>
+<p>Pasta: <a href="releases/"><code>releases/</code></a></p>
+<p>Documentos disponíveis:
+- <a href="releases/PROJETO_CONCLUIDO_FINAL/"><code>PROJETO_CONCLUIDO_FINAL.md</code></a>
+- <a href="releases/PROJETO_FINALIZADO/"><code>PROJETO_FINALIZADO.md</code></a></p>
+<h2 id="como-navegar-pelo-historico">Como navegar pelo histórico<a class="headerlink" href="#como-navegar-pelo-historico" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Grain</strong>: Item (one row per line item from order)</li>
-<li><strong>Preservation</strong>: All legitimate rows from Bronze are kept</li>
-<li><strong>Removal</strong>: Only exact duplicates (100% identical across item-grain key)</li>
+<li>Se você quer entender a <strong>arquitetura atual</strong>, volte para <a href="../"><code>../index.md</code></a>.</li>
+<li>Se você quer entender <strong>como a interface já foi organizada no passado</strong>, comece por <code>streamlit_refactor_2026_02/</code>.</li>
+<li>Se você quer investigar <strong>o rollout antigo de OAuth2</strong>, consulte <code>security_rollout_2026_04/</code>.</li>
+<li>Se você quer rastrear <strong>correções de dados e deduplicação</strong>, consulte <code>dedup_fix/</code>.</li>
 </ul>
-<h3 id="gold-layer-fato_vendas">Gold Layer (fato_vendas)<a class="headerlink" href="#gold-layer-fato_vendas" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Grain</strong>: Item (matches Silver 1:1)</li>
-<li><strong>Validation</strong>: Row count must match Silver exactly</li>
-<li><strong>Constraint</strong>: venda_id is unique sequential (NOT num_venda, which can repeat for multi-item orders)</li>
-</ul>
-<h2 id="backward-compatibility">Backward Compatibility<a class="headerlink" href="#backward-compatibility" title="Permanent link">&para;</a></h2>
-<ul>
-<li>No schema changes</li>
-<li>No breaking changes to downstream consumers</li>
-<li>Star schema validation remains the same</li>
-<li>Simply removes the overly aggressive deduplication</li>
-</ul>
-<h2 id="performance-impact">Performance Impact<a class="headerlink" href="#performance-impact" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Positive</strong>: Fewer rows removed = more accurate revenue reporting</li>
-<li><strong>Neutral</strong>: No performance penalty (same column count in key)</li>
-<li><strong>Data</strong>: +6, +8, +27 rows recovered for months 01, 02, 03 respectively</li>
-</ul>
-<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Run full pipeline with production data</li>
-<li>Monitor month-by-month loss metrics in logs</li>
-<li>Compare revenue totals before/after fix</li>
-<li>Verify no new duplicates introduced</li>
-<li>Update data quality checks if needed</li>
-</ol>
 
 
 

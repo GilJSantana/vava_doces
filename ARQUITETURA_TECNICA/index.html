@@ -13,13 +13,17 @@
       
       
       
+        <link rel="prev" href="../QUICK_START_FATURAMENTO/">
+      
+      
+        <link rel="next" href="../IMPLEMENTACAO_SEGURANCA_OAUTH2/">
       
       <link rel="icon" href="../images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.0.8">
     
     
       
-        <title>Arquitetura Tecnica - Vava Doces Docs</title>
+        <title>Arquitetura Técnica - Vava Doces Docs</title>
       
     
     
@@ -101,7 +105,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Arquitetura Tecnica
+              Arquitetura Técnica
             
           </span>
         </div>
@@ -202,7 +206,7 @@
   
     <li class="md-nav__item">
       <a href="../QUICK_START_STREAMLIT/" class="md-nav__link">
-        Quick Start
+        Quick Start Streamlit
       </a>
     </li>
   
@@ -216,8 +220,8 @@
   
   
     <li class="md-nav__item">
-      <a href="../REFACTORING_SUMMARY/" class="md-nav__link">
-        Refatoring Summary
+      <a href="../QUICK_START_FATURAMENTO/" class="md-nav__link">
+        Quick Start Faturamento
       </a>
     </li>
   
@@ -229,87 +233,27 @@
 
   
   
-  
-    <li class="md-nav__item">
-      <a href="../NEXT_STEPS/" class="md-nav__link">
-        Roadmap
-      </a>
-    </li>
-  
-
     
-      
-      
-      
-
   
   
-  
-    <li class="md-nav__item">
-      <a href="../PROJECT_COMPLETION_REPORT.txt" class="md-nav__link">
-        Project Report
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Arquitetura Técnica
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Arquitetura Técnica
       </a>
-    </li>
-  
-
-    
       
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../FILES_SUMMARY.txt" class="md-nav__link">
-        Files Summary
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../FINAL_CHECKLIST.txt" class="md-nav__link">
-        Final Checklist
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../README_REFATORACAO.txt" class="md-nav__link">
-        README Refatoracao
-      </a>
-    </li>
-  
-
-    
-  </ul>
-</nav>
-                  </div>
-                </div>
-              </div>
-            
-            
-              
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
-                <div class="md-sidebar__scrollwrap">
-                  <div class="md-sidebar__inner">
-                    
+        
 
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
@@ -334,6 +278,13 @@
         <li class="md-nav__item">
   <a href="#stack-principal" class="md-nav__link">
     Stack Principal
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#componentes-centrais" class="md-nav__link">
+    Componentes Centrais
   </a>
   
 </li>
@@ -380,6 +331,220 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#camada-de-seguranca" class="md-nav__link">
+    Camada de Seguranca
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#regras-de-limpeza-e-confiabilidade" class="md-nav__link">
+    Regras de Limpeza e Confiabilidade
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resultado-arquitetural" class="md-nav__link">
+    Resultado Arquitetural
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../IMPLEMENTACAO_SEGURANCA_OAUTH2/" class="md-nav__link">
+        Segurança OAuth2
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../GOLD_LAYER_INTEGRATION/" class="md-nav__link">
+        Gold Layer Integration
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operacional/GUIA_INICIALIZACAO/" class="md-nav__link">
+        Guia de Inicialização
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../GUIA_USUARIO_NEGOCIO/" class="md-nav__link">
+        Guia do Usuário de Negócio
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../NEXT_STEPS/" class="md-nav__link">
+        Roadmap
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../archive/" class="md-nav__link">
+        Arquivo Histórico
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#visao-geral" class="md-nav__link">
+    Visao Geral
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stack-principal" class="md-nav__link">
+    Stack Principal
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#componentes-centrais" class="md-nav__link">
+    Componentes Centrais
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fontes-de-dados" class="md-nav__link">
+    Fontes de Dados
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#arquitetura-medallion" class="md-nav__link">
+    Arquitetura Medallion
+  </a>
+  
+    <nav class="md-nav" aria-label="Arquitetura Medallion">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bronze" class="md-nav__link">
+    Bronze
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#silver" class="md-nav__link">
+    Silver
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gold" class="md-nav__link">
+    Gold
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#camada-de-seguranca" class="md-nav__link">
+    Camada de Seguranca
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#regras-de-limpeza-e-confiabilidade" class="md-nav__link">
     Regras de Limpeza e Confiabilidade
   </a>
@@ -411,56 +576,88 @@
 
 <h1 id="arquitetura-tecnica">Arquitetura Tecnica<a class="headerlink" href="#arquitetura-tecnica" title="Permanent link">&para;</a></h1>
 <h2 id="visao-geral">Visao Geral<a class="headerlink" href="#visao-geral" title="Permanent link">&para;</a></h2>
-<p>A solucao segue padrao de Engenharia de Dados com separacao entre ingestao, tratamento e consumo analitico.</p>
+<p>A arquitetura atual combina autenticacao OAuth2, persistencia analitica em Google Drive e consumo executivo via Streamlit.</p>
 <p>Fluxo principal:
-1. ingestao de fontes operacionais (Drive e Sheets);
-2. normalizacao e validacao em pipeline Medallion;
-3. publicacao de tabelas Gold para o app Streamlit.</p>
+1. autenticacao do usuario via Google OAuth2;
+2. autorizacao por permissao no Google Drive;
+3. sincronizacao/ingestao de dados operacionais quando necessario;
+4. materializacao do pipeline Medallion em ativos Gold;
+5. leitura dos <code>.parquet</code> diretamente do Google Drive em memoria;
+6. publicacao de 3 paginas executivas no Streamlit.</p>
 <h2 id="stack-principal">Stack Principal<a class="headerlink" href="#stack-principal" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Python</strong>: orquestracao de pipeline e regras de negocio.</li>
-<li><strong>Streamlit</strong>: camada de apresentacao executiva.</li>
+<li><strong>Python</strong>: orquestracao de pipeline, adaptadores e regras de negocio.</li>
+<li><strong>Streamlit</strong>: camada de apresentacao e caching.</li>
 <li><strong>Pandas</strong>: limpeza, joins, agregacoes e transformacoes tabulares.</li>
-<li><strong>Plotly</strong>: visualizacoes interativas para analise de rentabilidade.</li>
+<li><strong>Plotly</strong>: visualizacoes interativas de rentabilidade.</li>
+<li><strong>Google Drive API</strong>: persistencia principal dos ativos Gold em <code>.parquet</code>.</li>
+<li><strong>Google Sheets API</strong>: apoio a planilhas operacionais e abas manuais.</li>
+</ul>
+<h2 id="componentes-centrais">Componentes Centrais<a class="headerlink" href="#componentes-centrais" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>app.py</code></li>
+<li>inicializa autenticacao/autorizacao;</li>
+<li>executa <code>initialize_data_pipeline()</code>;</li>
+<li>roteia a interface para 3 paginas executivas.</li>
+<li><code>scripts/medallion_pipeline.py</code></li>
+<li>materializa Bronze, Silver e Gold;</li>
+<li>publica os arquivos <code>.parquet</code> no Google Drive.</li>
+<li><code>src/infrastructure/drive_manager.py</code></li>
+<li>descobre os ativos via <code>get_drive_assets_map()</code>;</li>
+<li>carrega parquet com <code>load_parquet_from_drive()</code>;</li>
+<li>atualiza parquet com <code>update_parquet_in_drive()</code>.</li>
+<li><code>src/presentation/pages/</code></li>
+<li><code>dashboard.py</code>;</li>
+<li><code>production_costs.py</code>;</li>
+<li><code>faturamento.py</code>.</li>
 </ul>
 <h2 id="fontes-de-dados">Fontes de Dados<a class="headerlink" href="#fontes-de-dados" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Arquivos de vendas em CSV/XLSX sincronizados do Google Drive.</li>
-<li>Abas operacionais do Google Sheets (produtos, receitas e materia-prima).</li>
+<li><strong>Google Drive</strong>: origem persistente dos arquivos Gold (<code>fato_vendas.parquet</code>, <code>gold_rentabilidade.parquet</code>, <code>custos_producao_agregado.parquet</code>, etc.).</li>
+<li><strong>Google Sheets</strong>: base operacional e manual para cadastros, receitas e apoio de ingestao.</li>
+<li><strong>data/raw/</strong>: cache local/transitorio para cenarios de fallback e diagnostico.</li>
 </ul>
 <h2 id="arquitetura-medallion">Arquitetura Medallion<a class="headerlink" href="#arquitetura-medallion" title="Permanent link">&para;</a></h2>
 <h3 id="bronze">Bronze<a class="headerlink" href="#bronze" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Persistencia do dado bruto.</li>
-<li>Rastreabilidade de origem por arquivo.</li>
+<li>ingestao de arquivos brutos CSV/XLSX;</li>
+<li>rastreabilidade por origem e arquivo.</li>
 </ul>
 <h3 id="silver">Silver<a class="headerlink" href="#silver" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Padronizacao de headers e tipos.</li>
-<li>Parsing robusto de datas e valores monetarios.</li>
-<li>Deduplicacao tecnica sem perda de granularidade legitima.</li>
+<li>padronizacao de headers e tipos;</li>
+<li>parsing robusto de datas e valores monetarios;</li>
+<li>deduplicacao tecnica sem perder granularidade legitima.</li>
 </ul>
 <h3 id="gold">Gold<a class="headerlink" href="#gold" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Modelagem para consumo analitico (fato, dimensoes e agregados).</li>
-<li>Tabela de rentabilidade com colunas auditaveis para margem e markup.</li>
+<li>modelagem analitica para consumo executivo;</li>
+<li>fatos, dimensoes, agregados, custos e rentabilidade;</li>
+<li>persistencia principal em Google Drive com leitura diskless no app.</li>
+</ul>
+<h2 id="camada-de-seguranca">Camada de Seguranca<a class="headerlink" href="#camada-de-seguranca" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>OAUTH2_CLIENT_ID</code>, <code>OAUTH2_CLIENT_SECRET</code> e <code>OAUTH2_REDIRECT_URI</code> sao lidos de <code>st.secrets</code>.</li>
+<li>A Service Account e carregada a partir de <code>st.secrets["gcp_service_account"]</code>.</li>
+<li>O acesso ao app depende de permissao valida no <code>GOOGLE_DRIVE_FOLDER_ID</code>.</li>
 </ul>
 <h2 id="regras-de-limpeza-e-confiabilidade">Regras de Limpeza e Confiabilidade<a class="headerlink" href="#regras-de-limpeza-e-confiabilidade" title="Permanent link">&para;</a></h2>
 <p>As regras abaixo evitam leituras falsas de lucratividade:</p>
 <ul>
-<li><strong>Normalizacao textual</strong>: remove variacoes de acento/espaco para reduzir falha de join.</li>
-<li><strong>Conversao monetaria robusta</strong>: trata formatos BRL mistos para evitar erro de parse.</li>
+<li><strong>Normalizacao textual</strong>: reduz falhas de join entre vendas, custos e rentabilidade.</li>
+<li><strong>Conversao monetaria robusta</strong>: trata formatos BRL mistos.</li>
 <li><strong>Parsing de data por origem</strong>: reduz ambiguidade entre formatos US e BR.</li>
-<li><strong>Tratamento de NoneType/NaN</strong>:</li>
-<li>custo ausente nao e convertido em lucro artificial;</li>
-<li>margem e markup sao invalidados quando custo e nulo ou zero;</li>
-<li>itens com dados faltantes permanecem auditaveis no front-end.</li>
-<li><strong>Semantica de ausencia vs zero</strong>: diferencia dado faltante de valor legitimo igual a zero.</li>
+<li><strong>Tratamento de NaN/zero em custos</strong>:</li>
+<li>custo ausente nao vira lucro artificial;</li>
+<li>margem e markup sao invalidados quando custo ou preco sao invalidos;</li>
+<li>itens sem custo permanecem auditaveis no front-end.</li>
+<li><strong>Leitura em memoria</strong>: elimina dependencia de disco local volatil no Streamlit Cloud.</li>
 </ul>
 <h2 id="resultado-arquitetural">Resultado Arquitetural<a class="headerlink" href="#resultado-arquitetural" title="Permanent link">&para;</a></h2>
 <p>Com esse desenho, o app entrega:
 - visao executiva confiavel de rentabilidade;
-- trilha auditavel para correcoes de dados;
+- trilha auditavel para correcoes de custos e chaves;
+- armazenamento persistente em Google Drive;
 - base tecnica estavel para evolucao incremental do produto.</p>
 
 

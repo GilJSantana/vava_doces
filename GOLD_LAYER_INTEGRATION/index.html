@@ -13,13 +13,17 @@
       
       
       
+        <link rel="prev" href="../IMPLEMENTACAO_SEGURANCA_OAUTH2/">
+      
+      
+        <link rel="next" href="../operacional/GUIA_INICIALIZACAO/">
       
       <link rel="icon" href="../images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.0.8">
     
     
       
-        <title>Gold Layer Integration — Complete Implementation ✅ - Vava Doces Docs</title>
+        <title>Gold Layer Integration - Vava Doces Docs</title>
       
     
     
@@ -69,7 +73,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#gold-layer-integration-complete-implementation" class="md-skip">
+        <a href="#gold-layer-integration-current-architecture" class="md-skip">
           Skip to content
         </a>
       
@@ -101,7 +105,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Gold Layer Integration — Complete Implementation ✅
+              Gold Layer Integration
             
           </span>
         </div>
@@ -202,7 +206,7 @@
   
     <li class="md-nav__item">
       <a href="../QUICK_START_STREAMLIT/" class="md-nav__link">
-        Quick Start
+        Quick Start Streamlit
       </a>
     </li>
   
@@ -216,8 +220,227 @@
   
   
     <li class="md-nav__item">
-      <a href="../REFACTORING_SUMMARY/" class="md-nav__link">
-        Refatoring Summary
+      <a href="../QUICK_START_FATURAMENTO/" class="md-nav__link">
+        Quick Start Faturamento
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ARQUITETURA_TECNICA/" class="md-nav__link">
+        Arquitetura Técnica
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../IMPLEMENTACAO_SEGURANCA_OAUTH2/" class="md-nav__link">
+        Segurança OAuth2
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Gold Layer Integration
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Gold Layer Integration
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    Overview
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-architecture" class="md-nav__link">
+    Current Architecture
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-components" class="md-nav__link">
+    Key Components
+  </a>
+  
+    <nav class="md-nav" aria-label="Key Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#srcinfrastructuredrive_managerpy" class="md-nav__link">
+    src/infrastructure/drive_manager.py
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scriptsmedallion_pipelinepy" class="md-nav__link">
+    scripts/medallion_pipeline.py
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streamlit-pages" class="md-nav__link">
+    Streamlit pages
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-changed-vs-old-architecture" class="md-nav__link">
+    What Changed vs. Old Architecture
+  </a>
+  
+    <nav class="md-nav" aria-label="What Changed vs. Old Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#old" class="md-nav__link">
+    Old
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#current" class="md-nav__link">
+    Current
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#main-gold-assets" class="md-nav__link">
+    Main Gold Assets
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caching-strategy" class="md-nav__link">
+    Caching Strategy
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#operational-notes" class="md-nav__link">
+    Operational Notes
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation-status" class="md-nav__link">
+    Validation Status
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommendation" class="md-nav__link">
+    Recommendation
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operacional/GUIA_INICIALIZACAO/" class="md-nav__link">
+        Guia de Inicialização
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../GUIA_USUARIO_NEGOCIO/" class="md-nav__link">
+        Guia do Usuário de Negócio
       </a>
     </li>
   
@@ -246,53 +469,8 @@
   
   
     <li class="md-nav__item">
-      <a href="../PROJECT_COMPLETION_REPORT.txt" class="md-nav__link">
-        Project Report
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../FILES_SUMMARY.txt" class="md-nav__link">
-        Files Summary
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../FINAL_CHECKLIST.txt" class="md-nav__link">
-        Final Checklist
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../README_REFATORACAO.txt" class="md-nav__link">
-        README Refatoracao
+      <a href="../archive/" class="md-nav__link">
+        Arquivo Histórico
       </a>
     </li>
   
@@ -332,23 +510,37 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
-    Architecture
+  <a href="#current-architecture" class="md-nav__link">
+    Current Architecture
   </a>
   
-    <nav class="md-nav" aria-label="Architecture">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#key-components" class="md-nav__link">
+    Key Components
+  </a>
+  
+    <nav class="md-nav" aria-label="Key Components">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#before" class="md-nav__link">
-    Before
+  <a href="#srcinfrastructuredrive_managerpy" class="md-nav__link">
+    src/infrastructure/drive_manager.py
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#after-backward-compatible" class="md-nav__link">
-    After (Backward Compatible)
+  <a href="#scriptsmedallion_pipelinepy" class="md-nav__link">
+    scripts/medallion_pipeline.py
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streamlit-pages" class="md-nav__link">
+    Streamlit pages
   </a>
   
 </li>
@@ -359,37 +551,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#new-components" class="md-nav__link">
-    New Components
+  <a href="#what-changed-vs-old-architecture" class="md-nav__link">
+    What Changed vs. Old Architecture
   </a>
   
-    <nav class="md-nav" aria-label="New Components">
+    <nav class="md-nav" aria-label="What Changed vs. Old Architecture">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-golddatasource-port-srcportsdata_sourcepy" class="md-nav__link">
-    1. GoldDataSource Port (src/ports/data_source.py)
+  <a href="#old" class="md-nav__link">
+    Old
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-goldparquetadapter-srcinfrastructuregold_adapterpy" class="md-nav__link">
-    2. GoldParquetAdapter (src/infrastructure/gold_adapter.py)
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-service-integration-srcdomainproduct_analysis_servicepy" class="md-nav__link">
-    3. Service Integration (src/domain/product_analysis_service.py)
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#4-factory-function-srcdomainservice_factorypy" class="md-nav__link">
-    4. Factory Function (src/domain/service_factory.py)
+  <a href="#current" class="md-nav__link">
+    Current
   </a>
   
 </li>
@@ -400,226 +578,36 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#backward-compatibility" class="md-nav__link">
-    Backward Compatibility ✅
-  </a>
-  
-    <nav class="md-nav" aria-label="Backward Compatibility ✅">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#existing-code-still-works" class="md-nav__link">
-    Existing Code Still Works
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#incremental-migration" class="md-nav__link">
-    Incremental Migration
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#safe-fallback" class="md-nav__link">
-    Safe Fallback
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#test-coverage" class="md-nav__link">
-    Test Coverage
-  </a>
-  
-    <nav class="md-nav" aria-label="Test Coverage">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#gold-adapter-tests-18-tests" class="md-nav__link">
-    Gold Adapter Tests (18 tests)
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#usage-examples" class="md-nav__link">
-    Usage Examples
-  </a>
-  
-    <nav class="md-nav" aria-label="Usage Examples">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#example-1-factory-function-recommended" class="md-nav__link">
-    Example 1: Factory Function (Recommended)
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#example-2-direct-adapter" class="md-nav__link">
-    Example 2: Direct Adapter
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#example-3-in-streamlit" class="md-nav__link">
-    Example 3: In Streamlit
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#example-4-demo-script" class="md-nav__link">
-    Example 4: Demo Script
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#data-quality" class="md-nav__link">
-    Data Quality
-  </a>
-  
-    <nav class="md-nav" aria-label="Data Quality">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#star-schema-gold-layer" class="md-nav__link">
-    Star Schema (Gold Layer)
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#integrity-checks" class="md-nav__link">
-    Integrity Checks ✅
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#deduplication-raw-silver-gold" class="md-nav__link">
-    Deduplication (Raw → Silver → Gold)
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#migration-checklist" class="md-nav__link">
-    Migration Checklist
+  <a href="#main-gold-assets" class="md-nav__link">
+    Main Gold Assets
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#performance-improvements" class="md-nav__link">
-    Performance Improvements
-  </a>
-  
-    <nav class="md-nav" aria-label="Performance Improvements">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#before-raw-data" class="md-nav__link">
-    Before (Raw Data)
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#after-gold-layer" class="md-nav__link">
-    After (Gold Layer)
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#file-structure" class="md-nav__link">
-    File Structure
+  <a href="#caching-strategy" class="md-nav__link">
+    Caching Strategy
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#git-commits" class="md-nav__link">
-    Git Commits
+  <a href="#operational-notes" class="md-nav__link">
+    Operational Notes
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    Quick Start
+  <a href="#validation-status" class="md-nav__link">
+    Validation Status
   </a>
-  
-    <nav class="md-nav" aria-label="Quick Start">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#generate-gold-layer" class="md-nav__link">
-    Generate Gold Layer
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#try-the-demo" class="md-nav__link">
-    Try the Demo
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#use-in-code" class="md-nav__link">
-    Use in Code
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#run-tests" class="md-nav__link">
-    Run Tests
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#summary" class="md-nav__link">
-    Summary
+  <a href="#recommendation" class="md-nav__link">
+    Recommendation
   </a>
   
 </li>
@@ -640,345 +628,108 @@
 
 
 
-<h1 id="gold-layer-integration-complete-implementation">Gold Layer Integration — Complete Implementation ✅<a class="headerlink" href="#gold-layer-integration-complete-implementation" title="Permanent link">&para;</a></h1>
+<h1 id="gold-layer-integration-current-architecture">Gold Layer Integration — Current Architecture ✅<a class="headerlink" href="#gold-layer-integration-current-architecture" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Successfully refactored the data source layer to support reading from the gold Parquet star schema while maintaining 100% backward compatibility with raw data (Google Sheets).</p>
+<p>The application now treats the Gold layer persisted in Google Drive as the main analytical source for the Streamlit UI.</p>
+<p>Google Sheets remains available for operational support and ingestion, but the executive pages prioritize <code>.parquet</code> assets loaded directly from Drive into memory.</p>
 <hr />
-<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
-<h3 id="before">Before<a class="headerlink" href="#before" title="Permanent link">&para;</a></h3>
-<pre><code>Streamlit / Domains
-        ↓
-ProductAnalysisService (raw_source only)
-        ↓
-DataSource (Google Sheets)
-        ↓
-Raw Data (10,044 rows, mixed formats)
-</code></pre>
-<h3 id="after-backward-compatible">After (Backward Compatible)<a class="headerlink" href="#after-backward-compatible" title="Permanent link">&para;</a></h3>
-<pre><code>Streamlit / Domains
-        ↓
-ProductAnalysisService (raw_source + optional gold_source)
-        ↓
-   ├─ GoldDataSource → GoldParquetAdapter → data/processed/gold/
-   │                                         (3,348 rows, star schema)
-   │
-   └─ DataSource → GoogleSheetsAdapter → Raw Sheets
-                                         (fallback if gold unavailable)
+<h2 id="current-architecture">Current Architecture<a class="headerlink" href="#current-architecture" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">Google OAuth2 + Drive authorization
+                ↓
+        initialize_data_pipeline()
+                ↓
+   RAW / manual sheets ingestion (when needed)
+                ↓
+      Medallion pipeline (Bronze/Silver/Gold)
+                ↓
+   update_parquet_in_drive(&lt;asset&gt;.parquet)
+                ↓
+Google Drive (persistent Gold lake)
+                ↓
+   load_parquet_from_drive(&lt;asset&gt;.parquet)
+                ↓
+    Streamlit pages (Dashboard / Custos / Faturamento)
 </code></pre>
 <hr />
-<h2 id="new-components">New Components<a class="headerlink" href="#new-components" title="Permanent link">&para;</a></h2>
-<h3 id="1-golddatasource-port-srcportsdata_sourcepy">1. <strong>GoldDataSource Port</strong> (<code>src/ports/data_source.py</code>)<a class="headerlink" href="#1-golddatasource-port-srcportsdata_sourcepy" title="Permanent link">&para;</a></h3>
-<p>Abstract interface for gold layer adapters:</p>
-<pre><code class="language-python">class GoldDataSource(ABC):
-    @abstractmethod
-    def load_gold(
-        self,
-        layer: Literal[&quot;dim_produto&quot;, &quot;dim_tempo&quot;, &quot;fato_vendas&quot;]
-    ) -&gt; pd.DataFrame:
-        &quot;&quot;&quot;Load a gold layer Parquet table by name.&quot;&quot;&quot;
-</code></pre>
-<p><strong>Benefits:</strong>
-- Decouples gold layer logic from storage backend
-- Enables future implementations (S3, Parquet in memory, etc.)
-- Consistent error handling via <code>DataSourceError</code></p>
-<h3 id="2-goldparquetadapter-srcinfrastructuregold_adapterpy">2. <strong>GoldParquetAdapter</strong> (<code>src/infrastructure/gold_adapter.py</code>)<a class="headerlink" href="#2-goldparquetadapter-srcinfrastructuregold_adapterpy" title="Permanent link">&para;</a></h3>
-<p>Implements <code>GoldDataSource</code> for reading local Parquet files:</p>
-<pre><code class="language-python">adapter = GoldParquetAdapter(gold_dir=Path(&quot;data/processed/gold&quot;))
-dim_produto = adapter.load_gold(&quot;dim_produto&quot;)    # 141 rows
-dim_tempo = adapter.load_gold(&quot;dim_tempo&quot;)        # 28 rows
-fato_vendas = adapter.load_gold(&quot;fato_vendas&quot;)    # 3,348 rows
-</code></pre>
-<p><strong>Features:</strong>
-- ✅ Per-table caching (reduces disk I/O)
-- ✅ Automatic default path resolution
-- ✅ Graceful error handling with informative messages
-- ✅ Cache management (<code>clear_cache()</code>)</p>
-<h3 id="3-service-integration-srcdomainproduct_analysis_servicepy">3. <strong>Service Integration</strong> (<code>src/domain/product_analysis_service.py</code>)<a class="headerlink" href="#3-service-integration-srcdomainproduct_analysis_servicepy" title="Permanent link">&para;</a></h3>
-<p>ProductAnalysisService now accepts optional <code>gold_source</code>:</p>
-<pre><code class="language-python">service = ProductAnalysisService(
-    data_source=raw_adapter,           # Always present (fallback)
-    gold_source=gold_adapter,          # Optional (preferred)
-)
-</code></pre>
-<p><strong>New Methods:</strong>
-- <code>get_sales_data(prefer_gold=True|False)</code>: Smart loading with fallback
-- <code>_get_vendas_data_from_gold()</code>: Direct gold access</p>
-<p><strong>Logic:</strong></p>
-<pre><code class="language-python">if prefer_gold:
-    try:
-        return gold_source.load_gold(&quot;fato_vendas&quot;)
-    except:
-        return raw_source.get_data(&quot;Vendas&quot;)  # Fallback
-else:
-    return raw_source.get_data(&quot;Vendas&quot;)      # Default
-</code></pre>
-<h3 id="4-factory-function-srcdomainservice_factorypy">4. <strong>Factory Function</strong> (<code>src/domain/service_factory.py</code>)<a class="headerlink" href="#4-factory-function-srcdomainservice_factorypy" title="Permanent link">&para;</a></h3>
-<p>Convenience factory for common use case:</p>
-<pre><code class="language-python">service = create_product_analysis_service_with_gold(
-    use_gold=True,  # Optional
-    gold_dir=Path(&quot;...&quot;),
-    creds_path=&quot;...&quot;,
-    sheet_id=&quot;...&quot;,
-)
-
-# One-liner to enable gold with fallback
-sales = service.get_sales_data(prefer_gold=True)
-</code></pre>
-<p><strong>Environment Variables:</strong>
-- <code>GOOGLE_APPLICATION_CREDENTIALS</code>: Google Sheets creds
-- <code>GOOGLE_SHEET_ID</code>: Spreadsheet ID
-- <code>GOLD_DIR</code>: Gold directory (optional, defaults to <code>data/processed/gold/</code>)</p>
-<hr />
-<h2 id="backward-compatibility">Backward Compatibility ✅<a class="headerlink" href="#backward-compatibility" title="Permanent link">&para;</a></h2>
-<h3 id="existing-code-still-works">Existing Code Still Works<a class="headerlink" href="#existing-code-still-works" title="Permanent link">&para;</a></h3>
-<pre><code class="language-python"># Old code (no gold support) — works unchanged
-from src.infrastructure.google_sheets_adapter import GoogleSheetsAdapter
-from src.domain.product_analysis_service import ProductAnalysisService
-
-raw_source = GoogleSheetsAdapter()
-service = ProductAnalysisService(data_source=raw_source)  # No gold_source
-sales = service.get_sales_data()  # Works as before
-</code></pre>
-<h3 id="incremental-migration">Incremental Migration<a class="headerlink" href="#incremental-migration" title="Permanent link">&para;</a></h3>
-<pre><code class="language-python"># Old code
-service = ProductAnalysisService(raw_source)
-sales = service.get_sales_data()
-
-# Minimal change to use gold
-service = ProductAnalysisService(raw_source, gold_adapter)  # Add gold_source
-sales = service.get_sales_data(prefer_gold=True)  # Add flag
-</code></pre>
-<h3 id="safe-fallback">Safe Fallback<a class="headerlink" href="#safe-fallback" title="Permanent link">&para;</a></h3>
-<pre><code class="language-python"># Even if gold files missing, no errors
-service = create_product_analysis_service_with_gold(use_gold=True)
-sales = service.get_sales_data(prefer_gold=True)
-# ✅ Returns gold data if available
-# ⚠️  Falls back to raw if gold missing
-# ✅ No exceptions either way
-</code></pre>
-<hr />
-<h2 id="test-coverage">Test Coverage<a class="headerlink" href="#test-coverage" title="Permanent link">&para;</a></h2>
-<p><strong>65 Unit Tests Pass ✅</strong></p>
-<h3 id="gold-adapter-tests-18-tests">Gold Adapter Tests (18 tests)<a class="headerlink" href="#gold-adapter-tests-18-tests" title="Permanent link">&para;</a></h3>
-<pre><code>TestGoldParquetAdapter
-├─ test_load_gold_dim_produto         ✅
-├─ test_load_gold_dim_tempo           ✅
-├─ test_load_gold_fato_vendas         ✅
-├─ test_load_gold_caching             ✅
-├─ test_load_gold_missing_file        ✅
-├─ test_clear_cache                   ✅
-└─ test_default_gold_dir              ✅
-
-TestProductAnalysisServiceGoldIntegration
-├─ test_product_analysis_with_gold_source              ✅
-├─ test_product_analysis_without_gold_source           ✅ (backward compat)
-├─ test_get_sales_data_prefer_gold                     ✅
-├─ test_get_sales_data_prefer_raw                      ✅ (backward compat)
-├─ test_get_sales_data_fallback_to_raw_when_gold_unavailable  ✅
-├─ test_get_vendas_data_from_gold_with_working_adapter ✅
-├─ test_get_vendas_data_from_gold_without_adapter      ✅
-└─ test_get_vendas_data_from_gold_with_failed_adapter  ✅
-
-TestGoldDataSourceInterface
-├─ test_gold_data_source_abstract        ✅
-├─ test_gold_adapter_implements_gold_data_source  ✅
-└─ test_gold_data_source_error_inheritance        ✅
-
-Plus: 47 tests for ProductAnalysisService and SalesAnalysisService (backward compat verified)
-</code></pre>
-<hr />
-<h2 id="usage-examples">Usage Examples<a class="headerlink" href="#usage-examples" title="Permanent link">&para;</a></h2>
-<h3 id="example-1-factory-function-recommended">Example 1: Factory Function (Recommended)<a class="headerlink" href="#example-1-factory-function-recommended" title="Permanent link">&para;</a></h3>
-<pre><code class="language-python">from src.domain.service_factory import create_product_analysis_service_with_gold
-
-# One-liner for gold support
-service = create_product_analysis_service_with_gold(use_gold=True)
-
-# Prefer gold, fallback to raw
-sales = service.get_sales_data(prefer_gold=True)
-</code></pre>
-<h3 id="example-2-direct-adapter">Example 2: Direct Adapter<a class="headerlink" href="#example-2-direct-adapter" title="Permanent link">&para;</a></h3>
-<pre><code class="language-python">from src.infrastructure.gold_adapter import GoldParquetAdapter
-
-adapter = GoldParquetAdapter()
-dim_produto = adapter.load_gold(&quot;dim_produto&quot;)
-dim_tempo = adapter.load_gold(&quot;dim_tempo&quot;)
-fato_vendas = adapter.load_gold(&quot;fato_vendas&quot;)
-
-print(f&quot;Products: {len(dim_produto)}, Sales: {len(fato_vendas)}&quot;)
-</code></pre>
-<h3 id="example-3-in-streamlit">Example 3: In Streamlit<a class="headerlink" href="#example-3-in-streamlit" title="Permanent link">&para;</a></h3>
-<pre><code class="language-python">import streamlit as st
-from src.domain.service_factory import create_product_analysis_service_with_gold
-
-@st.cache_resource
-def get_service():
-    return create_product_analysis_service_with_gold(use_gold=True)
-
-service = get_service()
-sales_df = service.get_sales_data(prefer_gold=True)
-st.dataframe(sales_df)
-</code></pre>
-<h3 id="example-4-demo-script">Example 4: Demo Script<a class="headerlink" href="#example-4-demo-script" title="Permanent link">&para;</a></h3>
-<pre><code class="language-bash">python scripts/demo_gold_layer.py
-</code></pre>
-<p>Output shows:
-- ✅ Direct gold adapter loading
-- ✅ Service with gold support
-- ✅ Backward compatibility
-- ✅ Caching behavior
-- ✅ Data quality metrics</p>
-<hr />
-<h2 id="data-quality">Data Quality<a class="headerlink" href="#data-quality" title="Permanent link">&para;</a></h2>
-<h3 id="star-schema-gold-layer">Star Schema (Gold Layer)<a class="headerlink" href="#star-schema-gold-layer" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Layer</th>
-<th>Rows</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>dim_produto</code></td>
-<td>141</td>
-<td>Product dimension</td>
-</tr>
-<tr>
-<td><code>dim_tempo</code></td>
-<td>28</td>
-<td>Temporal dimension (Feb 1-28, 2026)</td>
-</tr>
-<tr>
-<td><code>fato_vendas</code></td>
-<td>3,348</td>
-<td>Sales facts with FKs</td>
-</tr>
-</tbody>
-</table>
-<h3 id="integrity-checks">Integrity Checks ✅<a class="headerlink" href="#integrity-checks" title="Permanent link">&para;</a></h3>
-<pre><code>FK produto_id: 0 orphans (100% coverage)
-FK data_id:    0 orphans (100% coverage)
-PK venda_id:   0 nulls   (100% unique)
-Margem (∞):    0 infinite values
-</code></pre>
-<h3 id="deduplication-raw-silver-gold">Deduplication (Raw → Silver → Gold)<a class="headerlink" href="#deduplication-raw-silver-gold" title="Permanent link">&para;</a></h3>
-<pre><code>Raw files:       10,044 rows (3 files with 66.6% overlap)
-After dedup:     3,348 rows (6,696 duplicates removed)
-Cross-file:      Yes (removes only between files)
-Intra-file:      Preserved (per business logic)
-</code></pre>
-<hr />
-<h2 id="migration-checklist">Migration Checklist<a class="headerlink" href="#migration-checklist" title="Permanent link">&para;</a></h2>
+<h2 id="key-components">Key Components<a class="headerlink" href="#key-components" title="Permanent link">&para;</a></h2>
+<h3 id="srcinfrastructuredrive_managerpy"><code>src/infrastructure/drive_manager.py</code><a class="headerlink" href="#srcinfrastructuredrive_managerpy" title="Permanent link">&para;</a></h3>
+<p>Main responsibilities:
+- <code>get_drive_assets_map()</code>
+  - discovers <code>.parquet</code> assets in Drive;
+  - uses <code>corpora="allDrives"</code> and <code>supportsAllDrives=True</code>;
+  - keeps the most recent file id per asset name.
+- <code>load_parquet_from_drive(file_name)</code>
+  - downloads bytes via Drive API;
+  - loads the DataFrame with <code>pd.read_parquet(io.BytesIO(...))</code>;
+  - caches the result with <code>@st.cache_data</code>.
+- <code>update_parquet_in_drive(file_name, df)</code>
+  - writes parquet in memory;
+  - updates the existing Drive file with <code>MediaIoBaseUpload</code>.</p>
+<h3 id="scriptsmedallion_pipelinepy"><code>scripts/medallion_pipeline.py</code><a class="headerlink" href="#scriptsmedallion_pipelinepy" title="Permanent link">&para;</a></h3>
+<p>The pipeline now:
+- materializes Gold assets in memory;
+- updates them in Google Drive;
+- avoids relying on local disk as the source of truth for analytical consumption.</p>
+<h3 id="streamlit-pages">Streamlit pages<a class="headerlink" href="#streamlit-pages" title="Permanent link">&para;</a></h3>
 <ul>
-<li>[x] Define <code>GoldDataSource</code> port (abstraction)</li>
-<li>[x] Implement <code>GoldParquetAdapter</code> (concrete adapter)</li>
-<li>[x] Update <code>ProductAnalysisService</code> (add optional gold_source)</li>
-<li>[x] Add <code>get_sales_data(prefer_gold)</code> method</li>
-<li>[x] Create <code>create_product_analysis_service_with_gold()</code> factory</li>
-<li>[x] Write 18 comprehensive gold tests</li>
-<li>[x] Verify 65 total tests pass (backward compat included)</li>
-<li>[x] Create demo script (<code>scripts/demo_gold_layer.py</code>)</li>
-<li>[x] Create documentation (<code>docs/GOLD_LAYER_EXAMPLES.md</code>)</li>
-<li>[x] Verify no existing tests break</li>
-<li>[x] Commit changes with clear messages</li>
+<li><code>dashboard.py</code> reads profitability-related Gold assets;</li>
+<li><code>production_costs.py</code> reads <code>custos_producao_agregado.parquet</code> and <code>receitas_detalhadas.parquet</code>;</li>
+<li><code>faturamento.py</code> reads validated sales data from the Gold layer.</li>
 </ul>
 <hr />
-<h2 id="performance-improvements">Performance Improvements<a class="headerlink" href="#performance-improvements" title="Permanent link">&para;</a></h2>
-<h3 id="before-raw-data">Before (Raw Data)<a class="headerlink" href="#before-raw-data" title="Permanent link">&para;</a></h3>
+<h2 id="what-changed-vs-old-architecture">What Changed vs. Old Architecture<a class="headerlink" href="#what-changed-vs-old-architecture" title="Permanent link">&para;</a></h2>
+<h3 id="old">Old<a class="headerlink" href="#old" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Source: Google Sheets API calls</li>
-<li>Deduplication: None (10,044 rows loaded)</li>
-<li>Date parsing: Inconsistent (US/BR/ISO mixed)</li>
-<li>Caching: Per-instance, resets per request</li>
+<li>local parquet directories were part of the main read path;</li>
+<li>some flows depended on raw Google Sheets/CSV data at render time;</li>
+<li>fallback logic mixed local disk and operational sources more heavily.</li>
 </ul>
-<h3 id="after-gold-layer">After (Gold Layer)<a class="headerlink" href="#after-gold-layer" title="Permanent link">&para;</a></h3>
+<h3 id="current">Current<a class="headerlink" href="#current" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Source: Local Parquet (disk I/O only)</li>
-<li>Deduplication: Built-in (3,348 rows loaded)</li>
-<li>Date parsing: Consistent (all datetime64[ns])</li>
-<li>Caching: Per-adapter + per-table = ~6.7x smaller dataset</li>
+<li>Google Drive is the persistent analytical storage;</li>
+<li>Streamlit consumes Gold assets directly from Drive;</li>
+<li>local disk is no longer the primary analytical store;</li>
+<li><code>st.secrets["gcp_service_account"]</code> is the canonical credential source.</li>
 </ul>
-<p><strong>Estimated Speedup:</strong> 3-5x faster for analytics queries</p>
 <hr />
-<h2 id="file-structure">File Structure<a class="headerlink" href="#file-structure" title="Permanent link">&para;</a></h2>
-<pre><code>src/
-├── ports/
-│   └── data_source.py          (NEW: GoldDataSource port)
-├── infrastructure/
-│   ├── __init__.py             (NEW: exports)
-│   ├── google_sheets_adapter.py (unchanged)
-│   ├── google_drive_adapter.py (unchanged)
-│   └── gold_adapter.py         (NEW: GoldParquetAdapter)
-├── domain/
-│   ├── product_analysis_service.py  (updated: +gold_source, +get_sales_data)
-│   ├── sales_analysis_service.py    (unchanged)
-│   └── service_factory.py           (NEW: factory function)
-└── presentation/
-    └── (unchanged)
-
-scripts/
-├── medallion_pipeline.py    (generate gold)
-└── demo_gold_layer.py       (NEW: demonstrations)
-
-tests/
-├── test_gold_adapter.py     (NEW: 18 gold tests)
-├── test_product_analysis_service.py  (unchanged, all pass)
-├── test_sales_analysis_service.py    (unchanged, all pass)
-└── ...
-
-docs/
-└── GOLD_LAYER_EXAMPLES.md   (NEW: usage guide)
-</code></pre>
+<h2 id="main-gold-assets">Main Gold Assets<a class="headerlink" href="#main-gold-assets" title="Permanent link">&para;</a></h2>
+<p>Typical assets discovered dynamically in Drive:
+- <code>fato_vendas.parquet</code>
+- <code>dim_produto.parquet</code>
+- <code>dim_tempo.parquet</code>
+- <code>agg_vendas_produto.parquet</code>
+- <code>gold_rentabilidade.parquet</code>
+- <code>custos_producao_agregado.parquet</code>
+- <code>receitas_detalhadas.parquet</code></p>
 <hr />
-<h2 id="git-commits">Git Commits<a class="headerlink" href="#git-commits" title="Permanent link">&para;</a></h2>
-<pre><code>b90f0a5 feat(data): gold layer adapter + service integration
-21a49ae fix(test): correct syntax error in test_faturamento_page.py
-0e5324f demo: add gold layer integration examples
-</code></pre>
+<h2 id="caching-strategy">Caching Strategy<a class="headerlink" href="#caching-strategy" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>@st.cache_resource</code> for Drive asset discovery map</li>
+<li><code>@st.cache_data</code> for parquet loads</li>
+<li>targeted cache clear when the user clicks refresh in the sidebar</li>
+</ul>
+<p>This keeps the UI responsive while preserving Drive as the durable backend.</p>
 <hr />
-<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
-<h3 id="generate-gold-layer">Generate Gold Layer<a class="headerlink" href="#generate-gold-layer" title="Permanent link">&para;</a></h3>
-<pre><code class="language-bash">python scripts/medallion_pipeline.py
-</code></pre>
-<h3 id="try-the-demo">Try the Demo<a class="headerlink" href="#try-the-demo" title="Permanent link">&para;</a></h3>
-<pre><code class="language-bash">python scripts/demo_gold_layer.py
-</code></pre>
-<h3 id="use-in-code">Use in Code<a class="headerlink" href="#use-in-code" title="Permanent link">&para;</a></h3>
-<pre><code class="language-python">from src.domain.service_factory import create_product_analysis_service_with_gold
-
-service = create_product_analysis_service_with_gold(use_gold=True)
-sales = service.get_sales_data(prefer_gold=True)
-</code></pre>
-<h3 id="run-tests">Run Tests<a class="headerlink" href="#run-tests" title="Permanent link">&para;</a></h3>
-<pre><code class="language-bash">pytest tests/test_gold_adapter.py -v
-pytest tests/test_product_analysis_service.py -v  # Still pass ✅
-</code></pre>
+<h2 id="operational-notes">Operational Notes<a class="headerlink" href="#operational-notes" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The app still supports operational/manual data coming from Google Sheets during ingestion.</li>
+<li>The executive UI should prefer Gold assets whenever available.</li>
+<li>Missing or invalid costs remain auditable instead of being silently converted into valid profitability.</li>
+</ul>
 <hr />
-<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
-<p>✅ <strong>Complete Integration</strong>
-- Gold layer fully integrated with services
-- Backward compatible (all existing tests pass)
-- Factory function for easy adoption
-- Comprehensive test coverage (65 tests)
-- Production-ready</p>
-<p>✅ <strong>Data Quality</strong>
-- 3,348 deduplicated rows (from 10,044 raw)
-- 100% referential integrity
-- Consistent date parsing
-- Type-safe Parquet storage</p>
-<p>✅ <strong>Developer Experience</strong>
-- One-liner adoption: <code>create_product_analysis_service_with_gold(use_gold=True)</code>
-- Clear error messages
-- Comprehensive documentation
-- Working demo script</p>
-<p>✅ <strong>Operations</strong>
-- Safe fallback to raw if gold missing
-- Optional feature (no breaking changes)
-- Caching for performance
-- Easy to monitor/debug</p>
-<p><strong>Status: Ready for Production</strong> 🚀</p>
+<h2 id="validation-status">Validation Status<a class="headerlink" href="#validation-status" title="Permanent link">&para;</a></h2>
+<p>The current project test suite validates:
+- Drive asset discovery flags and mapping behavior;
+- profitability pipeline integration;
+- dashboard profitability safeguards;
+- production costs and sales pages consuming Gold data.</p>
+<hr />
+<h2 id="recommendation">Recommendation<a class="headerlink" href="#recommendation" title="Permanent link">&para;</a></h2>
+<p>For new development, treat this document as the source of truth for Gold-layer consumption:
+- <strong>Drive-backed</strong>
+- <strong>diskless at read time</strong>
+- <strong><code>st.secrets</code>-based credentials</strong>
+- <strong>3 executive pages only</strong></p>
 
 
 

@@ -222,8 +222,29 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#sumario" class="md-nav__link">
-    Sumário
+  <a href="#arquitetura-atual" class="md-nav__link">
+    Arquitetura Atual
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guias-ativos" class="md-nav__link">
+    Guias Ativos
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentos-de-referencia" class="md-nav__link">
+    Documentos de Referência
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conteudo-historico-legado" class="md-nav__link">
+    Conteúdo Histórico / Legado
   </a>
   
 </li>
@@ -245,7 +266,7 @@
   
     <li class="md-nav__item">
       <a href="QUICK_START_STREAMLIT/" class="md-nav__link">
-        Quick Start
+        Quick Start Streamlit
       </a>
     </li>
   
@@ -259,8 +280,83 @@
   
   
     <li class="md-nav__item">
-      <a href="REFACTORING_SUMMARY/" class="md-nav__link">
-        Refatoring Summary
+      <a href="QUICK_START_FATURAMENTO/" class="md-nav__link">
+        Quick Start Faturamento
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="ARQUITETURA_TECNICA/" class="md-nav__link">
+        Arquitetura Técnica
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="IMPLEMENTACAO_SEGURANCA_OAUTH2/" class="md-nav__link">
+        Segurança OAuth2
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="GOLD_LAYER_INTEGRATION/" class="md-nav__link">
+        Gold Layer Integration
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="operacional/GUIA_INICIALIZACAO/" class="md-nav__link">
+        Guia de Inicialização
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="GUIA_USUARIO_NEGOCIO/" class="md-nav__link">
+        Guia do Usuário de Negócio
       </a>
     </li>
   
@@ -289,53 +385,8 @@
   
   
     <li class="md-nav__item">
-      <a href="PROJECT_COMPLETION_REPORT.txt" class="md-nav__link">
-        Project Report
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="FILES_SUMMARY.txt" class="md-nav__link">
-        Files Summary
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="FINAL_CHECKLIST.txt" class="md-nav__link">
-        Final Checklist
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="README_REFATORACAO.txt" class="md-nav__link">
-        README Refatoracao
+      <a href="archive/" class="md-nav__link">
+        Arquivo Histórico
       </a>
     </li>
   
@@ -368,8 +419,29 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#sumario" class="md-nav__link">
-    Sumário
+  <a href="#arquitetura-atual" class="md-nav__link">
+    Arquitetura Atual
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#guias-ativos" class="md-nav__link">
+    Guias Ativos
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentos-de-referencia" class="md-nav__link">
+    Documentos de Referência
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conteudo-historico-legado" class="md-nav__link">
+    Conteúdo Histórico / Legado
   </a>
   
 </li>
@@ -391,21 +463,38 @@
 
 
 <h1 id="documentacao-vava-doces">Documentação - Vava Doces<a class="headerlink" href="#documentacao-vava-doces" title="Permanent link">&para;</a></h1>
-<p>Bem-vindo à documentação da aplicação Vava Doces.</p>
-<h2 id="sumario">Sumário<a class="headerlink" href="#sumario" title="Permanent link">&para;</a></h2>
+<p>Portal principal da documentação do projeto na arquitetura atual.</p>
+<h2 id="arquitetura-atual">Arquitetura Atual<a class="headerlink" href="#arquitetura-atual" title="Permanent link">&para;</a></h2>
+<p>O projeto hoje segue estes princípios:</p>
 <ul>
-<li><a href="QUICK_START_STREAMLIT/">Quick Start</a></li>
-<li><a href="REFACTORING_SUMMARY/">Refatoring Summary</a></li>
-<li><a href="NEXT_STEPS/">Roadmap</a></li>
-<li><a href="PROJECT_COMPLETION_REPORT.txt">Project Report</a></li>
-<li><a href="FILES_SUMMARY.txt">Files Summary</a></li>
-<li><a href="FINAL_CHECKLIST.txt">Final Checklist</a></li>
-<li><a href="STREAMLIT_SETUP/">Streamlit Setup</a></li>
+<li>autenticação via Google OAuth2;</li>
+<li>autorização baseada em permissões no Google Drive;</li>
+<li>configuração principal via <code>st.secrets</code>;</li>
+<li>pipeline Medallion para materialização Bronze → Silver → Gold;</li>
+<li>Google Drive como persistência principal dos ativos <code>.parquet</code>;</li>
+<li>3 páginas executivas no Streamlit:</li>
+<li><code>📊 Dashboard</code></li>
+<li><code>💰 Custos de Produção</code></li>
+<li><code>💹 Faturamento (Auditoria)</code></li>
 </ul>
-<hr />
-<blockquote>
-<p>Observação: documentos técnicos adicionais estão presentes na pasta <code>docs/</code>.</p>
-</blockquote>
+<h2 id="guias-ativos">Guias Ativos<a class="headerlink" href="#guias-ativos" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="QUICK_START_STREAMLIT/">Quick Start Streamlit</a></li>
+<li><a href="QUICK_START_FATURAMENTO/">Quick Start Faturamento</a></li>
+<li><a href="ARQUITETURA_TECNICA/">Arquitetura Técnica</a></li>
+<li><a href="GOLD_LAYER_INTEGRATION/">Integração da Gold Layer</a></li>
+<li><a href="IMPLEMENTACAO_SEGURANCA_OAUTH2/">Implementação de Segurança OAuth2</a></li>
+<li><a href="operacional/GUIA_INICIALIZACAO/">Guia Operacional de Inicialização</a></li>
+<li><a href="NEXT_STEPS/">Roadmap / Próximos Passos</a></li>
+</ul>
+<h2 id="documentos-de-referencia">Documentos de Referência<a class="headerlink" href="#documentos-de-referencia" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="GUIA_USUARIO_NEGOCIO/">Guia do Usuário de Negócio</a></li>
+<li><a href="archive/">Arquivo Histórico</a></li>
+</ul>
+<h2 id="conteudo-historico-legado">Conteúdo Histórico / Legado<a class="headerlink" href="#conteudo-historico-legado" title="Permanent link">&para;</a></h2>
+<p>Alguns documentos em <code>docs/</code> registram fases anteriores do projeto, refatorações antigas e checkpoints de entrega. Eles foram preservados para histórico, mas não devem ser tratados como fonte principal da arquitetura atual.</p>
+<p>Se você encontrar links antigos para <code>INDEX.md</code>, use esta página (<code>index.md</code>) como entrada canônica.</p>
 
 
 

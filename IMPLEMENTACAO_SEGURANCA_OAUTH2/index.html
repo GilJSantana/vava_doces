@@ -13,13 +13,17 @@
       
       
       
+        <link rel="prev" href="../ARQUITETURA_TECNICA/">
+      
+      
+        <link rel="next" href="../GOLD_LAYER_INTEGRATION/">
       
       <link rel="icon" href="../images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.0.8">
     
     
       
-        <title>IMPLEMENTACAO SEGURANCA OAUTH2 - Vava Doces Docs</title>
+        <title>Segurança OAuth2 - Vava Doces Docs</title>
       
     
     
@@ -101,7 +105,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              IMPLEMENTACAO SEGURANCA OAUTH2
+              Segurança OAuth2
             
           </span>
         </div>
@@ -202,7 +206,7 @@
   
     <li class="md-nav__item">
       <a href="../QUICK_START_STREAMLIT/" class="md-nav__link">
-        Quick Start
+        Quick Start Streamlit
       </a>
     </li>
   
@@ -216,8 +220,249 @@
   
   
     <li class="md-nav__item">
-      <a href="../REFACTORING_SUMMARY/" class="md-nav__link">
-        Refatoring Summary
+      <a href="../QUICK_START_FATURAMENTO/" class="md-nav__link">
+        Quick Start Faturamento
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ARQUITETURA_TECNICA/" class="md-nav__link">
+        Arquitetura Técnica
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Segurança OAuth2
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Segurança OAuth2
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#implementacao-seguranca-oauth2-drive-permission-check" class="md-nav__link">
+    IMPLEMENTACAO SEGURANCA - OAUTH2 + DRIVE PERMISSION CHECK
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#atualizado-para-a-arquitetura-atual" class="md-nav__link">
+    Atualizado para a arquitetura atual
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#status-alinhado-ao-fluxo-em-producao" class="md-nav__link">
+    Status: ✅ ALINHADO AO FLUXO EM PRODUCAO
+  </a>
+  
+    <nav class="md-nav" aria-label="Status: ✅ ALINHADO AO FLUXO EM PRODUCAO">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-autenticacao-identidade" class="md-nav__link">
+    1. AUTENTICACAO (IDENTIDADE)
+  </a>
+  
+    <nav class="md-nav" aria-label="1. AUTENTICACAO (IDENTIDADE)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fluxo-oauth2" class="md-nav__link">
+    Fluxo OAuth2
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#garantias-do-fluxo" class="md-nav__link">
+    Garantias do fluxo
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-autorizacao-porteiro-do-drive" class="md-nav__link">
+    2. AUTORIZACAO (PORTEIRO DO DRIVE)
+  </a>
+  
+    <nav class="md-nav" aria-label="2. AUTORIZACAO (PORTEIRO DO DRIVE)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fluxo-de-verificacao" class="md-nav__link">
+    Fluxo de verificacao
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#observacoes-importantes" class="md-nav__link">
+    Observacoes importantes
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-controle-de-fluxo-na-ui" class="md-nav__link">
+    3. CONTROLE DE FLUXO NA UI
+  </a>
+  
+    <nav class="md-nav" aria-label="3. CONTROLE DE FLUXO NA UI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sequencia-de-execucao" class="md-nav__link">
+    Sequencia de execucao
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#paginas-liberadas-apos-autorizacao" class="md-nav__link">
+    Paginas liberadas apos autorizacao
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-configuracao-necessaria" class="md-nav__link">
+    4. CONFIGURACAO NECESSARIA
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-relacao-com-a-nova-arquitetura-de-dados" class="md-nav__link">
+    5. RELACAO COM A NOVA ARQUITETURA DE DADOS
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-validacao-operacional" class="md-nav__link">
+    6. VALIDACAO OPERACIONAL
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-logs-e-depuracao" class="md-nav__link">
+    7. LOGS E DEPURACAO
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../GOLD_LAYER_INTEGRATION/" class="md-nav__link">
+        Gold Layer Integration
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operacional/GUIA_INICIALIZACAO/" class="md-nav__link">
+        Guia de Inicialização
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../GUIA_USUARIO_NEGOCIO/" class="md-nav__link">
+        Guia do Usuário de Negócio
       </a>
     </li>
   
@@ -246,53 +491,8 @@
   
   
     <li class="md-nav__item">
-      <a href="../PROJECT_COMPLETION_REPORT.txt" class="md-nav__link">
-        Project Report
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../FILES_SUMMARY.txt" class="md-nav__link">
-        Files Summary
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../FINAL_CHECKLIST.txt" class="md-nav__link">
-        Final Checklist
-      </a>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../README_REFATORACAO.txt" class="md-nav__link">
-        README Refatoracao
+      <a href="../archive/" class="md-nav__link">
+        Arquivo Histórico
       </a>
     </li>
   
@@ -324,51 +524,44 @@
       
         <li class="md-nav__item">
   <a href="#implementacao-seguranca-oauth2-drive-permission-check" class="md-nav__link">
-    IMPLEMENTAÇÃO SEGURANÇA - OAUTH2 + DRIVE PERMISSION CHECK
+    IMPLEMENTACAO SEGURANCA - OAUTH2 + DRIVE PERMISSION CHECK
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#data-18-de-abril-de-2026" class="md-nav__link">
-    Data: 18 de Abril de 2026
+  <a href="#atualizado-para-a-arquitetura-atual" class="md-nav__link">
+    Atualizado para a arquitetura atual
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#status-completo-e-validado" class="md-nav__link">
-    Status: ✅ COMPLETO E VALIDADO
+  <a href="#status-alinhado-ao-fluxo-em-producao" class="md-nav__link">
+    Status: ✅ ALINHADO AO FLUXO EM PRODUCAO
   </a>
   
-    <nav class="md-nav" aria-label="Status: ✅ COMPLETO E VALIDADO">
+    <nav class="md-nav" aria-label="Status: ✅ ALINHADO AO FLUXO EM PRODUCAO">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#1-autenticacao-identidade" class="md-nav__link">
-    1. AUTENTICAÇÃO (IDENTIDADE)
+    1. AUTENTICACAO (IDENTIDADE)
   </a>
   
-    <nav class="md-nav" aria-label="1. AUTENTICAÇÃO (IDENTIDADE)">
+    <nav class="md-nav" aria-label="1. AUTENTICACAO (IDENTIDADE)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#fluxo-oauth2" class="md-nav__link">
-    Fluxo OAuth2:
+    Fluxo OAuth2
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#sanitizacao-critica" class="md-nav__link">
-    Sanitização Crítica:
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#redirect-uri" class="md-nav__link">
-    Redirect URI:
+  <a href="#garantias-do-fluxo" class="md-nav__link">
+    Garantias do fluxo
   </a>
   
 </li>
@@ -380,29 +573,22 @@
         
           <li class="md-nav__item">
   <a href="#2-autorizacao-porteiro-do-drive" class="md-nav__link">
-    2. AUTORIZAÇÃO (PORTEIRO DO DRIVE)
+    2. AUTORIZACAO (PORTEIRO DO DRIVE)
   </a>
   
-    <nav class="md-nav" aria-label="2. AUTORIZAÇÃO (PORTEIRO DO DRIVE)">
+    <nav class="md-nav" aria-label="2. AUTORIZACAO (PORTEIRO DO DRIVE)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#fluxo-de-verificacao" class="md-nav__link">
-    Fluxo de Verificação:
+    Fluxo de verificacao
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#parametro-pagesize" class="md-nav__link">
-    Parâmetro pageSize:
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#comparacao-de-email-case-insensitive" class="md-nav__link">
-    Comparação de Email (Case-Insensitive):
+  <a href="#observacoes-importantes" class="md-nav__link">
+    Observacoes importantes
   </a>
   
 </li>
@@ -421,15 +607,15 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#4-etapas-sequenciais-step-1-4" class="md-nav__link">
-    4 Etapas Sequenciais (STEP 1-4):
+  <a href="#sequencia-de-execucao" class="md-nav__link">
+    Sequencia de execucao
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#gates-de-bloqueio" class="md-nav__link">
-    Gates de Bloqueio:
+  <a href="#paginas-liberadas-apos-autorizacao" class="md-nav__link">
+    Paginas liberadas apos autorizacao
   </a>
   
 </li>
@@ -441,55 +627,28 @@
         
           <li class="md-nav__item">
   <a href="#4-configuracao-necessaria" class="md-nav__link">
-    4. CONFIGURAÇÃO NECESSÁRIA
+    4. CONFIGURACAO NECESSARIA
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#5-logs-e-depuracao" class="md-nav__link">
-    5. LOGS E DEPURAÇÃO
-  </a>
-  
-    <nav class="md-nav" aria-label="5. LOGS E DEPURAÇÃO">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#sem-exposicao-de-segredos" class="md-nav__link">
-    Sem Exposição de Segredos:
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#6-validacao-tecnica" class="md-nav__link">
-    6. VALIDAÇÃO TÉCNICA
+  <a href="#5-relacao-com-a-nova-arquitetura-de-dados" class="md-nav__link">
+    5. RELACAO COM A NOVA ARQUITETURA DE DADOS
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#7-calculos-de-custo-e-integridade-de-dados" class="md-nav__link">
-    7. CÁLCULOS DE CUSTO E INTEGRIDADE DE DADOS
+  <a href="#6-validacao-operacional" class="md-nav__link">
+    6. VALIDACAO OPERACIONAL
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#8-status-final" class="md-nav__link">
-    8. STATUS FINAL
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#9-proximos-passos-para-deploy" class="md-nav__link">
-    9. PRÓXIMOS PASSOS PARA DEPLOY
+  <a href="#7-logs-e-depuracao" class="md-nav__link">
+    7. LOGS E DEPURACAO
   </a>
   
 </li>
@@ -515,210 +674,118 @@
 
 
 
-  <h1>IMPLEMENTACAO SEGURANCA OAUTH2</h1>
+  <h1>Segurança OAuth2</h1>
 
-<h2 id="implementacao-seguranca-oauth2-drive-permission-check">IMPLEMENTAÇÃO SEGURANÇA - OAUTH2 + DRIVE PERMISSION CHECK<a class="headerlink" href="#implementacao-seguranca-oauth2-drive-permission-check" title="Permanent link">&para;</a></h2>
-<h2 id="data-18-de-abril-de-2026">Data: 18 de Abril de 2026<a class="headerlink" href="#data-18-de-abril-de-2026" title="Permanent link">&para;</a></h2>
-<h2 id="status-completo-e-validado">Status: ✅ COMPLETO E VALIDADO<a class="headerlink" href="#status-completo-e-validado" title="Permanent link">&para;</a></h2>
+<h2 id="implementacao-seguranca-oauth2-drive-permission-check">IMPLEMENTACAO SEGURANCA - OAUTH2 + DRIVE PERMISSION CHECK<a class="headerlink" href="#implementacao-seguranca-oauth2-drive-permission-check" title="Permanent link">&para;</a></h2>
+<h2 id="atualizado-para-a-arquitetura-atual">Atualizado para a arquitetura atual<a class="headerlink" href="#atualizado-para-a-arquitetura-atual" title="Permanent link">&para;</a></h2>
+<h2 id="status-alinhado-ao-fluxo-em-producao">Status: ✅ ALINHADO AO FLUXO EM PRODUCAO<a class="headerlink" href="#status-alinhado-ao-fluxo-em-producao" title="Permanent link">&para;</a></h2>
 <hr />
-<h3 id="1-autenticacao-identidade">1. AUTENTICAÇÃO (IDENTIDADE)<a class="headerlink" href="#1-autenticacao-identidade" title="Permanent link">&para;</a></h3>
-<p><strong>Arquivo:</strong> <code>src/infrastructure/google_oauth2_adapter.py</code> (332 linhas)
+<h3 id="1-autenticacao-identidade">1. AUTENTICACAO (IDENTIDADE)<a class="headerlink" href="#1-autenticacao-identidade" title="Permanent link">&para;</a></h3>
+<p><strong>Arquivo:</strong> <code>src/infrastructure/google_oauth2_adapter.py</code>
 <strong>Classe:</strong> <code>GoogleOAuth2Adapter</code></p>
-<h4 id="fluxo-oauth2">Fluxo OAuth2:<a class="headerlink" href="#fluxo-oauth2" title="Permanent link">&para;</a></h4>
+<h4 id="fluxo-oauth2">Fluxo OAuth2<a class="headerlink" href="#fluxo-oauth2" title="Permanent link">&para;</a></h4>
 <ol>
-<li>Lê <code>OAUTH2_CLIENT_ID</code>, <code>OAUTH2_CLIENT_SECRET</code> e <code>OAUTH2_REDIRECT_URI</code> de <code>st.secrets</code></li>
-<li>Gera URL de login OAuth2 via <code>get_login_url()</code></li>
-<li>Usuário é redirecionado para Google</li>
-<li>Google redireciona de volta com código de autorização</li>
-<li>Troca código por token via <code>exchange_code_for_token()</code></li>
-<li>Extrai email do usuário via <code>get_user_email_from_token()</code></li>
-<li>Armazena em <code>st.session_state["user_email"]</code> e token de acesso</li>
+<li>Le <code>OAUTH2_CLIENT_ID</code>, <code>OAUTH2_CLIENT_SECRET</code> e <code>OAUTH2_REDIRECT_URI</code> de <code>st.secrets</code></li>
+<li>Gera a URL de login com encoding compativel com OAuth2</li>
+<li>Troca o codigo por token com <code>exchange_code_for_token()</code></li>
+<li>Extrai o email do usuario com <code>get_user_email_from_token()</code></li>
+<li>Armazena a identidade em <code>st.session_state</code></li>
 </ol>
-<h4 id="sanitizacao-critica">Sanitização Crítica:<a class="headerlink" href="#sanitizacao-critica" title="Permanent link">&para;</a></h4>
-<pre><code class="language-python">def _sanitize_secret_value(value: str) -&gt; str:
-    &quot;&quot;&quot;Remove espaços, newlines e caracteres invisíveis&quot;&quot;&quot;
-    return str(value).strip().replace(&quot;\r&quot;, &quot;&quot;).replace(&quot;\n&quot;, &quot;&quot;)
-</code></pre>
-<p>✅ Aplicado em:
-- <code>client_id</code> no payload de token exchange
-- <code>client_secret</code> no payload de token exchange
-- <code>redirect_uri</code> lido do <code>st.secrets</code> (garantir exatidão)</p>
-<h4 id="redirect-uri">Redirect URI:<a class="headerlink" href="#redirect-uri" title="Permanent link">&para;</a></h4>
+<h4 id="garantias-do-fluxo">Garantias do fluxo<a class="headerlink" href="#garantias-do-fluxo" title="Permanent link">&para;</a></h4>
 <ul>
-<li>Lido exclusivamente de <code>st.secrets["OAUTH2_REDIRECT_URI"]</code></li>
-<li>Padrão: <code>http://localhost:8501</code> (sem barra final, HTTP não HTTPS)</li>
-<li>Exato matching com GCP Console registration</li>
+<li>sanitizacao de <code>client_id</code>, <code>client_secret</code> e <code>redirect_uri</code></li>
+<li><code>redirect_uri</code> canonica lida de <code>st.secrets</code></li>
+<li>login compatibilizado com ambiente Streamlit Cloud</li>
 </ul>
 <hr />
-<h3 id="2-autorizacao-porteiro-do-drive">2. AUTORIZAÇÃO (PORTEIRO DO DRIVE)<a class="headerlink" href="#2-autorizacao-porteiro-do-drive" title="Permanent link">&para;</a></h3>
+<h3 id="2-autorizacao-porteiro-do-drive">2. AUTORIZACAO (PORTEIRO DO DRIVE)<a class="headerlink" href="#2-autorizacao-porteiro-do-drive" title="Permanent link">&para;</a></h3>
 <p><strong>Arquivo:</strong> <code>src/infrastructure/google_oauth2_adapter.py</code>
 <strong>Classe:</strong> <code>GoogleDrivePermissionChecker</code></p>
-<h4 id="fluxo-de-verificacao">Fluxo de Verificação:<a class="headerlink" href="#fluxo-de-verificacao" title="Permanent link">&para;</a></h4>
+<h4 id="fluxo-de-verificacao">Fluxo de verificacao<a class="headerlink" href="#fluxo-de-verificacao" title="Permanent link">&para;</a></h4>
 <ol>
-<li>Inicializa Service Account a partir de credencial JSON</li>
-<li>Constrói cliente Google Drive API v3</li>
-<li>Lista permissões do arquivo via <code>permissions().list()</code></li>
-<li><strong>Parâmetro Crítico:</strong> <code>pageSize=100</code> (limite padrão da API)</li>
-<li>Itera permissões procurando por email do usuário</li>
-<li>Valida se papel está em <code>{"owner", "writer", "reader"}</code></li>
+<li>Le a Service Account em <code>st.secrets["gcp_service_account"]</code></li>
+<li>Faz cast explicito para <code>dict</code> antes de usar <code>google-auth</code></li>
+<li>Constrói o cliente Drive API v3</li>
+<li>Lista permissoes do arquivo/pasta com <code>pageSize=100</code></li>
+<li>Procura o email do usuario de forma case-insensitive</li>
+<li>Valida se o papel e <code>owner</code>, <code>writer</code> ou <code>reader</code></li>
 </ol>
-<h4 id="parametro-pagesize">Parâmetro pageSize:<a class="headerlink" href="#parametro-pagesize" title="Permanent link">&para;</a></h4>
-<pre><code class="language-python">permissions_result = self.service.permissions().list(
-    fileId=file_id,
-    fields=&quot;permissions(emailAddress,role,type)&quot;,
-    pageSize=100,  # ✅ Respeitando limite oficial da API
-).execute()
-</code></pre>
-<h4 id="comparacao-de-email-case-insensitive">Comparação de Email (Case-Insensitive):<a class="headerlink" href="#comparacao-de-email-case-insensitive" title="Permanent link">&para;</a></h4>
-<pre><code class="language-python">perm_email = permission.get(&quot;emailAddress&quot;, &quot;&quot;).strip().lower()
-user_email_normalized = str(user_email).strip().lower()
-
-if perm_email == user_email_normalized and perm_email:
-    if perm_role in allowed_roles:
-        return True  # Autorizado
-</code></pre>
-<hr />
-<h3 id="3-controle-de-fluxo-na-ui">3. CONTROLE DE FLUXO NA UI<a class="headerlink" href="#3-controle-de-fluxo-na-ui" title="Permanent link">&para;</a></h3>
-<p><strong>Arquivo:</strong> <code>app.py</code> (Main Function)
-<strong>Arquivo:</strong> <code>src/presentation/auth_page.py</code> (Componentes)</p>
-<h4 id="4-etapas-sequenciais-step-1-4">4 Etapas Sequenciais (STEP 1-4):<a class="headerlink" href="#4-etapas-sequenciais-step-1-4" title="Permanent link">&para;</a></h4>
-<p><strong>STEP 1:</strong> Inicializar estado de autenticação
-- <code>init_session_state_auth()</code> cria chaves session_state</p>
-<p><strong>STEP 2:</strong> Verificar OAuth2 Authentication
-- Se não autenticado → Render login page com botão Google
-- Se autenticado → Prosseguir</p>
-<p><strong>STEP 3:</strong> Verificar Drive Authorization
-- Se não autorizado → Verifica permissões via Service Account
-- Se não tem acesso → Render access denied page
-- Se autorizado → Prosseguir</p>
-<p><strong>STEP 4:</strong> Load Main Application
-- Pipeline de dados (Bronze → Silver → Gold)
-- Controller da aplicação
-- 3 páginas (Dashboard, Custos de Produção, Faturamento)</p>
-<h4 id="gates-de-bloqueio">Gates de Bloqueio:<a class="headerlink" href="#gates-de-bloqueio" title="Permanent link">&para;</a></h4>
-<pre><code class="language-python"># Nenhum dado é carregado enquanto:
-if not is_user_authenticated():
-    return  # Mostrar login page
-
-if not is_user_authorized():
-    return  # Mostrar denied page
-
-# Só aqui executa initialize_data_pipeline()
-pipeline_state = initialize_data_pipeline()
-</code></pre>
-<hr />
-<h3 id="4-configuracao-necessaria">4. CONFIGURAÇÃO NECESSÁRIA<a class="headerlink" href="#4-configuracao-necessaria" title="Permanent link">&para;</a></h3>
-<p><strong>Arquivo:</strong> <code>.streamlit/secrets.toml.example</code></p>
-<pre><code class="language-toml"># Google OAuth2 Configuration
-OAUTH2_CLIENT_ID = &quot;YOUR_CLIENT_ID.apps.googleusercontent.com&quot;
-OAUTH2_CLIENT_SECRET = &quot;YOUR_CLIENT_SECRET&quot;
-OAUTH2_REDIRECT_URI = &quot;http://localhost:8501&quot;
-
-# Service Account
-SERVICE_ACCOUNT_FILE = &quot;credencial/vava-doces-0667d5821bd5.json&quot;
-
-# Drive Source Folder
-GOOGLE_DRIVE_FOLDER_ID = &quot;YOUR_DRIVE_FOLDER_ID&quot;
-</code></pre>
-<hr />
-<h3 id="5-logs-e-depuracao">5. LOGS E DEPURAÇÃO<a class="headerlink" href="#5-logs-e-depuracao" title="Permanent link">&para;</a></h3>
-<p>Todas as operações geram logs sem expor segredos:</p>
-<pre><code class="language-python">logger.info(&quot;OAuth2 Token Exchange Successful&quot;)
-logger.info(&quot;Drive Authorization Successful for user %s&quot;, user_email)
-logger.warning(&quot;User %s NOT authorized for access&quot;, user_email)
-logger.error(&quot;Service account may not have access to file %s&quot;, file_id)
-</code></pre>
-<h4 id="sem-exposicao-de-segredos">Sem Exposição de Segredos:<a class="headerlink" href="#sem-exposicao-de-segredos" title="Permanent link">&para;</a></h4>
+<h4 id="observacoes-importantes">Observacoes importantes<a class="headerlink" href="#observacoes-importantes" title="Permanent link">&para;</a></h4>
 <ul>
-<li>❌ Não exibe client_secret</li>
-<li>❌ Não exibe tokens</li>
-<li>❌ Não exibe tamanho de strings</li>
-<li>✅ Apenas mensagens técnicas profissionais</li>
+<li>nao depende mais de <code>SERVICE_ACCOUNT_FILE</code></li>
+<li>falha de forma clara quando <code>gcp_service_account</code> esta ausente ou invalido</li>
+<li>usa <code>GOOGLE_DRIVE_FOLDER_ID</code> como identificador canonico do recurso protegido</li>
 </ul>
 <hr />
-<h3 id="6-validacao-tecnica">6. VALIDAÇÃO TÉCNICA<a class="headerlink" href="#6-validacao-tecnica" title="Permanent link">&para;</a></h3>
-<p>✅ Compilação Python: Sem erros
-✅ Smoke Test Streamlit: Aplicação sobe em http://localhost:8501
-✅ Imports: Todos os módulos são importados sem erro
-✅ Estrutura: 4 etapas de segurança bloqueiam dados antes de load
-✅ Sanitização: Todas as credenciais vêm com .strip() e remoção de \r\n
-✅ Drive API: pageSize=100, email normalizados em lowercase
-✅ Sessions: Chave canônica <code>st.session_state["user_email"]</code> utilizada</p>
-<hr />
-<h3 id="7-calculos-de-custo-e-integridade-de-dados">7. CÁLCULOS DE CUSTO E INTEGRIDADE DE DADOS<a class="headerlink" href="#7-calculos-de-custo-e-integridade-de-dados" title="Permanent link">&para;</a></h3>
-<p><strong>Regras de Negócio:</strong> INTACTAS
-- Nenhuma alteração em <code>scripts/medallion_pipeline.py</code>
-- Nenhuma alteração em <code>src/domain/</code> (lógica de cálculos)
-- Nenhuma alteração em adapters de dados
-- Segurança é <strong>gate anterior</strong> ao pipeline, não integrada nele</p>
-<hr />
-<h3 id="8-status-final">8. STATUS FINAL<a class="headerlink" href="#8-status-final" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Componente</th>
-<th>Status</th>
-<th>Linhas</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>google_oauth2_adapter.py</td>
-<td>✅</td>
-<td>332</td>
-</tr>
-<tr>
-<td>auth_page.py</td>
-<td>✅</td>
-<td>247</td>
-</tr>
-<tr>
-<td>app.py (segurança)</td>
-<td>✅</td>
-<td>165 (113 adicionadas)</td>
-</tr>
-<tr>
-<td>secrets.toml.example</td>
-<td>✅</td>
-<td>25</td>
-</tr>
-<tr>
-<td><strong>TOTAL</strong></td>
-<td><strong>✅</strong></td>
-<td><strong>769</strong></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Commits:</strong> 0 (conforme instruído)</p>
-<hr />
-<h3 id="9-proximos-passos-para-deploy">9. PRÓXIMOS PASSOS PARA DEPLOY<a class="headerlink" href="#9-proximos-passos-para-deploy" title="Permanent link">&para;</a></h3>
+<h3 id="3-controle-de-fluxo-na-ui">3. CONTROLE DE FLUXO NA UI<a class="headerlink" href="#3-controle-de-fluxo-na-ui" title="Permanent link">&para;</a></h3>
+<p><strong>Arquivo:</strong> <code>app.py</code>
+<strong>Arquivo:</strong> <code>src/presentation/auth_page.py</code></p>
+<h4 id="sequencia-de-execucao">Sequencia de execucao<a class="headerlink" href="#sequencia-de-execucao" title="Permanent link">&para;</a></h4>
 <ol>
-<li>Configurar OAuth2 no Google Cloud Console</li>
-<li>Gerar OAUTH2_CLIENT_ID e OAUTH2_CLIENT_SECRET</li>
-<li>
-<p>Registrar Authorized Redirect URI: http://localhost:8501</p>
-</li>
-<li>
-<p>Copiar secrets.toml.example para .streamlit/secrets.toml</p>
-</li>
-<li>Preencher OAUTH2_CLIENT_ID</li>
-<li>Preencher OAUTH2_CLIENT_SECRET</li>
-<li>
-<p>Preencher GOOGLE_DRIVE_FOLDER_ID</p>
-</li>
-<li>
-<p>Testar fluxo:
-   <code>bash
-   streamlit run app.py</code></p>
-</li>
-<li>Botão "Entrar com Google" deve aparecer</li>
-<li>Após login, Drive deve ser verificado</li>
-<li>Se autorizado, dashboard deve carregar</li>
+<li>inicializa estado de autenticacao</li>
+<li>verifica OAuth2</li>
+<li>verifica permissao no Drive</li>
+<li>somente entao executa <code>initialize_data_pipeline()</code> e libera as paginas executivas</li>
 </ol>
+<h4 id="paginas-liberadas-apos-autorizacao">Paginas liberadas apos autorizacao<a class="headerlink" href="#paginas-liberadas-apos-autorizacao" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>📊 Dashboard</code></li>
+<li><code>💰 Custos de Produção</code></li>
+<li><code>💹 Faturamento (Auditoria)</code></li>
+</ul>
 <hr />
-<p><strong>Data de Conclusão:</strong> 18 de Abril de 2026
-<strong>Status:</strong> Pronto para Commit
-<strong>Commits Realizados:</strong> 0</p>
+<h3 id="4-configuracao-necessaria">4. CONFIGURACAO NECESSARIA<a class="headerlink" href="#4-configuracao-necessaria" title="Permanent link">&para;</a></h3>
+<p><strong>Arquivo:</strong> <code>.streamlit/secrets.toml.example</code></p>
+<pre><code class="language-toml">OAUTH2_CLIENT_ID = &quot;YOUR_CLIENT_ID.apps.googleusercontent.com&quot;
+OAUTH2_CLIENT_SECRET = &quot;YOUR_CLIENT_SECRET&quot;
+OAUTH2_REDIRECT_URI = &quot;http://localhost:8501&quot;
+GOOGLE_DRIVE_FOLDER_ID = &quot;YOUR_DRIVE_FOLDER_ID&quot;
+GOOGLE_SHEET_ID = &quot;YOUR_GOOGLE_SHEET_ID&quot;
+
+[gcp_service_account]
+type = &quot;service_account&quot;
+project_id = &quot;YOUR_PROJECT_ID&quot;
+private_key_id = &quot;YOUR_PRIVATE_KEY_ID&quot;
+private_key = &quot;&quot;&quot;-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+&quot;&quot;&quot;
+client_email = &quot;YOUR_SERVICE_ACCOUNT_EMAIL&quot;
+client_id = &quot;YOUR_CLIENT_ID&quot;
+auth_uri = &quot;https://accounts.google.com/o/oauth2/auth&quot;
+token_uri = &quot;https://oauth2.googleapis.com/token&quot;
+auth_provider_x509_cert_url = &quot;https://www.googleapis.com/oauth2/v1/certs&quot;
+client_x509_cert_url = &quot;...&quot;
+universe_domain = &quot;googleapis.com&quot;
+</code></pre>
+<hr />
+<h3 id="5-relacao-com-a-nova-arquitetura-de-dados">5. RELACAO COM A NOVA ARQUITETURA DE DADOS<a class="headerlink" href="#5-relacao-com-a-nova-arquitetura-de-dados" title="Permanent link">&para;</a></h3>
+<ul>
+<li>a seguranca continua sendo um gate anterior ao carregamento dos dados;</li>
+<li>apos autorizacao, o app pode sincronizar dados operacionais e materializar a Gold layer;</li>
+<li>as paginas executivas consomem os <code>.parquet</code> persistidos no Google Drive.</li>
+</ul>
+<hr />
+<h3 id="6-validacao-operacional">6. VALIDACAO OPERACIONAL<a class="headerlink" href="#6-validacao-operacional" title="Permanent link">&para;</a></h3>
+<p>Fluxo esperado:</p>
+<pre><code class="language-bash">uv run streamlit run app.py
+</code></pre>
+<ul>
+<li>o botao de login deve aparecer para usuarios nao autenticados;</li>
+<li>apos login, a permissao do Drive deve ser validada;</li>
+<li>se autorizado, a aplicacao carrega pipeline + paginas executivas.</li>
+</ul>
+<hr />
+<h3 id="7-logs-e-depuracao">7. LOGS E DEPURACAO<a class="headerlink" href="#7-logs-e-depuracao" title="Permanent link">&para;</a></h3>
+<p>Os logs priorizam rastreabilidade sem expor segredos:</p>
+<ul>
+<li>sucesso/erro no token exchange OAuth2;</li>
+<li>inicio da verificacao de permissao no Drive;</li>
+<li>ausencia ou invalidade de <code>gcp_service_account</code>;</li>
+<li>usuario autorizado ou negado.</li>
+</ul>
+<hr />
+<p><strong>Status Atual:</strong> documento alinhado ao uso de <code>st.secrets</code>, <code>gcp_service_account</code> e <code>GOOGLE_DRIVE_FOLDER_ID</code>.</p>
 
 
 
