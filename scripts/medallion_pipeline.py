@@ -12,10 +12,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 import unicodedata
-from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
@@ -23,10 +21,6 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import streamlit as st
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
 
 # ── Project root on sys.path so src.* imports work ────────────────────────
 _ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +28,10 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from src.infrastructure.data_quality import DataQualityValidator  # noqa: E402
+from src.infrastructure.drive_manager import (  # noqa: E402
+    load_parquet_from_drive,
+    update_parquet_in_drive,
+)
 from src.domain.sales_analysis_service import (  # noqa: E402
     _deduplicate_with_audit,
     _normalise_header,
@@ -42,7 +40,7 @@ from src.domain.sales_analysis_service import (  # noqa: E402
     _to_numeric,
 )
 from src.infrastructure.gold_adapter import GoldParquetAdapter  # noqa: E402
-from src.ports.data_source import DataSourceError, DriveDataSource  # noqa: E402
+from src.ports.data_source import DriveDataSource  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,7 +49,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("medallion")
 
-_DRIVE_RW_SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 def log_df_shape(stage: str, df: pd.DataFrame | None, key_cols: list[str] | None = None) -> None:
@@ -1217,38 +1214,6 @@ def build_gold_rentabilidade(
     return gold[keep_cols].reset_index(drop=True)
 
 
-def _ensure_dir(path: Path) -> Path:
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _load_service_account_info_from_secrets() -> dict | None:
-    """Return a native dict for gcp_service_account, or None when unavailable."""
-    try:
-        account_info = st.secrets.get("gcp_service_account")
-    except Exception:
-        logger.warning("Could not read st.secrets['gcp_service_account']; Drive upload skipped.")
-        return None
-
-    if not isinstance(account_info, Mapping):
-        logger.warning("Missing or invalid gcp_service_account in st.secrets; Drive upload skipped.")
-        return None
-
-    native_info = dict(account_info)
-    if not native_info:
-        logger.warning("Empty gcp_service_account in st.secrets; Drive upload skipped.")
-        return None
-    return native_info
-
-
-def _build_drive_rw_service_from_secrets():
-    """Build Drive service with write scope from Streamlit secrets."""
-    info = _load_service_account_info_from_secrets()
-    if info is None:
-        return None
-    credentials = service_account.Credentials.from_service_account_info(info, scopes=_DRIVE_RW_SCOPES)
-    return build("drive", "v3", credentials=credentials)
-
 
 class MedallionPipeline:
     """Materializes RAW → SILVER → GOLD while preserving all source rows."""
@@ -1273,63 +1238,21 @@ class MedallionPipeline:
         self.receitas_detalhadas: Optional[pd.DataFrame] = None
         self.gold_rentabilidade: Optional[pd.DataFrame] = None
 
-    def _persist_gold_to_drive(self, parquet_paths: list[Path]) -> int:
-        """Upload/overwrite Gold parquet files in configured Drive folder."""
-        try:
-            folder_id = str(st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")).strip()
-        except Exception:
-            folder_id = ""
-
-        if not folder_id:
-            logger.info("GOOGLE_DRIVE_FOLDER_ID not configured; skipping Gold upload to Drive.")
-            return 0
-
-        service = _build_drive_rw_service_from_secrets()
-        if service is None:
-            return 0
-
+    def _persist_gold_to_drive(self, parquet_frames: dict[str, pd.DataFrame]) -> int:
+        """Update existing parquet assets in Drive using in-memory bytes only."""
         uploaded = 0
-        for parquet_path in parquet_paths:
-            if not parquet_path.exists():
-                continue
-
-            safe_name = parquet_path.name.replace("'", "\\'")
-            query = (
-                f"'{folder_id}' in parents and trashed=false and name='{safe_name}'"
-            )
-            existing = service.files().list(
-                q=query,
-                pageSize=1,
-                fields="files(id,name)",
-            ).execute().get("files", [])
-
-            media = MediaFileUpload(
-                str(parquet_path),
-                mimetype="application/octet-stream",
-                resumable=False,
-            )
-
-            if existing:
-                service.files().update(
-                    fileId=existing[0]["id"],
-                    media_body=media,
-                ).execute()
-            else:
-                service.files().create(
-                    body={"name": parquet_path.name, "parents": [folder_id]},
-                    media_body=media,
-                    fields="id",
-                ).execute()
-            uploaded += 1
-
+        for file_name, frame in parquet_frames.items():
+            payload = frame if isinstance(frame, pd.DataFrame) else pd.DataFrame()
+            if update_parquet_in_drive(file_name, payload):
+                uploaded += 1
         if uploaded:
-            logger.info("Uploaded %d Gold parquet file(s) to Drive folder %s", uploaded, folder_id)
+            logger.info("Updated %d parquet asset(s) in Drive", uploaded)
         return uploaded
 
     def _load_existing_counts(self) -> dict[str, object]:
-        silver_path = self.silver_dir / "sales_silver.parquet"
-        gold_path = self.gold_dir / "fato_vendas.parquet"
-        if not silver_path.exists() or not gold_path.exists():
+        silver_df = load_parquet_from_drive("sales_silver.parquet")
+        gold_df = load_parquet_from_drive("fato_vendas.parquet")
+        if gold_df.empty:
             return {
                 "bronze_rows": 0,
                 "silver_rows": 0,
@@ -1337,11 +1260,9 @@ class MedallionPipeline:
                 "gold_rows": 0,
                 "used_existing_layers": False,
             }
-        silver_df = pd.read_parquet(silver_path, engine="pyarrow")
-        gold_df = pd.read_parquet(gold_path, engine="pyarrow")
         return {
             "bronze_rows": 0,
-            "silver_rows": int(len(silver_df)),
+            "silver_rows": int(len(silver_df)) if not silver_df.empty else int(len(gold_df)),
             "quarantine_rows": 0,
             "gold_rows": int(len(gold_df)),
             "used_existing_layers": True,
@@ -1420,10 +1341,6 @@ class MedallionPipeline:
             self.silver_df = enrich_cost_from_catalog(self.silver_df, manual_cost_map)
             logger.info("Applied manual cost enrichment from Receitas/Matéria Prima to SILVER (%d keys).", len(manual_cost_map))
 
-        _ensure_dir(self.silver_dir)
-        _ensure_dir(self.gold_dir)
-        self.silver_df.to_parquet(self.silver_dir / "sales_silver.parquet", engine="pyarrow", index=False)
-
         stage_start = perf_counter()
         self.dim_produto = build_dim_produto(self.silver_df)
         self.dim_tempo = build_dim_tempo(self.silver_df)
@@ -1443,61 +1360,22 @@ class MedallionPipeline:
         _enforce_zero_loss_months(integrity_report)
 
         stage_start = perf_counter()
-        self.dim_produto.to_parquet(self.gold_dir / "dim_produto.parquet", engine="pyarrow", index=False)
-        self.dim_tempo.to_parquet(self.gold_dir / "dim_tempo.parquet", engine="pyarrow", index=False)
-        self.dim_canal.to_parquet(self.gold_dir / "dim_canal.parquet", engine="pyarrow", index=False)
-        self.fato_vendas.to_parquet(self.gold_dir / "fato_vendas.parquet", engine="pyarrow", index=False)
-        agg_dia.to_parquet(self.gold_dir / "agg_vendas_dia.parquet", engine="pyarrow", index=False)
-        agg_canal.to_parquet(self.gold_dir / "agg_vendas_canal.parquet", engine="pyarrow", index=False)
-        agg_produto.to_parquet(self.gold_dir / "agg_vendas_produto.parquet", engine="pyarrow", index=False)
-        agg_tempo.to_parquet(self.gold_dir / "agg_vendas_tempo.parquet", engine="pyarrow", index=False)
-        os.makedirs(str(self.gold_dir), exist_ok=True)
-        processed_agg_path = self.gold_dir / "custos_producao_agregado.parquet"
-        self.gold_custos_produtos.to_parquet(processed_agg_path, engine="pyarrow", index=False)
-        print(f"Sucesso: Arquivo salvo em {processed_agg_path}")
-        processed_detail_path = self.gold_dir / "receitas_detalhadas.parquet"
-        (self.receitas_detalhadas if self.receitas_detalhadas is not None else pd.DataFrame()).to_parquet(
-            processed_detail_path,
-            engine="pyarrow",
-            index=False,
-        )
-        print(f"Sucesso: Arquivo salvo em {processed_detail_path}")
-        processed_rent_path = self.gold_dir / "gold_rentabilidade.parquet"
-        (self.gold_rentabilidade if self.gold_rentabilidade is not None else pd.DataFrame()).to_parquet(
-            processed_rent_path,
-            engine="pyarrow",
-            index=False,
-        )
-        print(f"Sucesso: Arquivo salvo em {processed_rent_path}")
-
-        # Legacy alias kept for compatibility with existing loaders.
-        legacy_custos_path = self.gold_dir / "custos_producao.parquet"
-        self.gold_custos_produtos.to_parquet(legacy_custos_path, engine="pyarrow", index=False)
-        print(f"Sucesso: Arquivo salvo em {legacy_custos_path}")
-
-        # Fast-read location requested for Streamlit cockpit
-        fast_gold_dir = _ROOT / "data" / "gold"
-        os.makedirs(str(fast_gold_dir), exist_ok=True)
-        fast_agg_path = fast_gold_dir / "custos_producao_agregado.parquet"
-        self.gold_custos_produtos.to_parquet(fast_agg_path, engine="pyarrow", index=False)
-        print(f"Sucesso: Arquivo salvo em {fast_agg_path}")
-        fast_detail_path = fast_gold_dir / "receitas_detalhadas.parquet"
-        (self.receitas_detalhadas if self.receitas_detalhadas is not None else pd.DataFrame()).to_parquet(
-            fast_detail_path,
-            engine="pyarrow",
-            index=False,
-        )
-        print(f"Sucesso: Arquivo salvo em {fast_detail_path}")
-
-        # Legacy alias kept for compatibility with existing loaders.
-        fast_legacy_custos_path = fast_gold_dir / "custos_producao.parquet"
-        self.gold_custos_produtos.to_parquet(fast_legacy_custos_path, engine="pyarrow", index=False)
-        print(f"Sucesso: Arquivo salvo em {fast_legacy_custos_path}")
-        stage_ms["persist_parquet"] = (perf_counter() - stage_start) * 1000
-
-        stage_start = perf_counter()
-        gold_parquet_paths = sorted(self.gold_dir.glob("*.parquet"))
-        uploaded_gold_files = self._persist_gold_to_drive(gold_parquet_paths)
+        parquet_payloads: dict[str, pd.DataFrame] = {
+            "sales_silver.parquet": self.silver_df,
+            "dim_produto.parquet": self.dim_produto,
+            "dim_tempo.parquet": self.dim_tempo,
+            "dim_canal.parquet": self.dim_canal,
+            "fato_vendas.parquet": self.fato_vendas,
+            "agg_vendas_dia.parquet": agg_dia,
+            "agg_vendas_canal.parquet": agg_canal,
+            "agg_vendas_produto.parquet": agg_produto,
+            "agg_vendas_tempo.parquet": agg_tempo,
+            "custos_producao_agregado.parquet": self.gold_custos_produtos if self.gold_custos_produtos is not None else pd.DataFrame(),
+            "custos_producao.parquet": self.gold_custos_produtos if self.gold_custos_produtos is not None else pd.DataFrame(),
+            "receitas_detalhadas.parquet": self.receitas_detalhadas if self.receitas_detalhadas is not None else pd.DataFrame(),
+            "gold_rentabilidade.parquet": self.gold_rentabilidade if self.gold_rentabilidade is not None else pd.DataFrame(),
+        }
+        uploaded_gold_files = self._persist_gold_to_drive(parquet_payloads)
         stage_ms["persist_drive"] = (perf_counter() - stage_start) * 1000
 
         validation = validate_star_schema(self.fato_vendas, self.dim_produto, self.dim_tempo, len(self.silver_df))

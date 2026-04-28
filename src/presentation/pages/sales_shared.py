@@ -3,22 +3,16 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
 from io import BytesIO
-from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 import streamlit as st
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 
-from src.infrastructure.gold_adapter import GoldParquetAdapter
-from src.ports.data_source import DataSourceError
+from src.infrastructure.drive_manager import load_parquet_from_drive
 
 logger = logging.getLogger(__name__)
 
-_DRIVE_RO_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 _REQUIRED_GOLD_LAYERS = ("fato_vendas", "dim_produto", "dim_tempo")
 
 
@@ -68,62 +62,6 @@ def _normalize_sales_for_presentation(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _gold_local_path(layer: str) -> Path:
-    project_root = Path(__file__).resolve().parents[3]
-    return project_root / "data" / "processed" / "gold" / f"{layer}.parquet"
-
-
-def _build_drive_ro_service():
-    try:
-        account_info = st.secrets.get("gcp_service_account")
-    except Exception:
-        return None
-    if not isinstance(account_info, Mapping):
-        return None
-    credentials = service_account.Credentials.from_service_account_info(
-        dict(account_info),
-        scopes=_DRIVE_RO_SCOPES,
-    )
-    return build("drive", "v3", credentials=credentials)
-
-
-def _download_gold_layer_from_drive(layer: str) -> bool:
-    try:
-        folder_id = str(st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")).strip()
-    except Exception:
-        return False
-    if not folder_id:
-        return False
-
-    service = _build_drive_ro_service()
-    if service is None:
-        return False
-
-    file_name = f"{layer}.parquet"
-    safe_name = file_name.replace("'", "\\'")
-    query = f"'{folder_id}' in parents and trashed=false and name='{safe_name}'"
-    found = service.files().list(
-        q=query,
-        pageSize=1,
-        fields="files(id,name,modifiedTime)",
-        orderBy="modifiedTime desc",
-    ).execute().get("files", [])
-    if not found:
-        return False
-
-    target = _gold_local_path(layer)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    blob = service.files().get_media(fileId=found[0]["id"]).execute()
-    target.write_bytes(blob)
-    logger.info(
-        "Downloaded latest %s from Drive to %s (modified=%s)",
-        file_name,
-        target,
-        found[0].get("modifiedTime"),
-    )
-    return True
-
-
 @st.cache_data(ttl=300)
 def load_sales_data_cached() -> Optional[pd.DataFrame]:
     """Load sales data from gold layer (fato_vendas + dim_produto + dim_tempo).
@@ -131,13 +69,6 @@ def load_sales_data_cached() -> Optional[pd.DataFrame]:
     Returns None when no data is available.
     """
     try:
-        for layer in _REQUIRED_GOLD_LAYERS:
-            local_path = _gold_local_path(layer)
-            if not local_path.exists():
-                _download_gold_layer_from_drive(layer)
-
-        # Read only columns used by dashboard/faturamento to reduce parquet I/O.
-        adapter = GoldParquetAdapter()
         fato_cols = [
             "venda_id",
             "data_id",
@@ -157,10 +88,17 @@ def load_sales_data_cached() -> Optional[pd.DataFrame]:
             "data_carga",
             "faturamento_liquido",
         ]
-        fato_vendas = adapter.load_gold("fato_vendas", columns=fato_cols)
+        fato_vendas = load_parquet_from_drive("fato_vendas.parquet")
+        if fato_vendas.empty:
+            return None
+        fato_vendas = fato_vendas[[c for c in fato_cols if c in fato_vendas.columns]].copy()
         log_df_shape("load_sales_data_cached:fato_vendas_raw", fato_vendas, ["venda_id", "data_id", "produto_id"])
-        dim_produto = adapter.load_gold("dim_produto", columns=["produto_id", "nome_produto"])
-        dim_tempo = adapter.load_gold("dim_tempo", columns=["data_id", "data"])
+        dim_produto = load_parquet_from_drive("dim_produto.parquet")
+        dim_tempo = load_parquet_from_drive("dim_tempo.parquet")
+        if dim_produto.empty or dim_tempo.empty:
+            return None
+        dim_produto = dim_produto[[c for c in ["produto_id", "nome_produto"] if c in dim_produto.columns]].copy()
+        dim_tempo = dim_tempo[[c for c in ["data_id", "data"] if c in dim_tempo.columns]].copy()
 
         # Join to get product names and dates
         df = fato_vendas.merge(dim_produto, on="produto_id", how="left")
@@ -191,9 +129,6 @@ def load_sales_data_cached() -> Optional[pd.DataFrame]:
         log_df_shape("load_sales_data_cached:after_ui_normalization", normalized, ["num_venda", "produto", "data"])
         return normalized
 
-    except (DataSourceError, FileNotFoundError) as exc:
-        logger.warning("load_sales_data_cached: gold layer unavailable after medallion bootstrap — %s", exc)
-        return None
     except Exception:
         return None
 

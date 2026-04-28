@@ -862,11 +862,13 @@ class TestLocalRawSource:
 # End-to-end: raw → silver → gold (in-memory, no I/O)
 # ─────────────────────────────────────────────────────────────────────────
 class TestMedallionPipelineFacade:
-    def test_run_materializes_silver_and_gold_and_returns_counts(self, tmp_path):
+    def test_run_materializes_silver_and_gold_and_returns_counts(self, tmp_path, monkeypatch):
         raw_dir = tmp_path / "raw"
         silver_dir = tmp_path / "silver"
         gold_dir = tmp_path / "gold"
         raw_dir.mkdir()
+
+        monkeypatch.setattr("scripts.medallion_pipeline.update_parquet_in_drive", lambda *_args, **_kwargs: False)
 
         (raw_dir / "sales_2026_01.csv").write_text(
             "Número da venda;Nota Fiscal / RPS;Data da venda;Cliente;Nome do produto/serviço;"
@@ -887,10 +889,9 @@ class TestMedallionPipelineFacade:
         assert result["silver_rows"] == 1
         assert result["quarantine_rows"] == 0
         assert result["gold_rows"] == 1
-        assert (silver_dir / "sales_silver.parquet").exists()
-        assert (gold_dir / "fato_vendas.parquet").exists()
+        assert result["gold_uploaded_files"] == 0
 
-    def test_run_uses_existing_layers_when_raw_is_empty(self, tmp_path):
+    def test_run_uses_existing_layers_when_raw_is_empty(self, tmp_path, monkeypatch):
         raw_dir = tmp_path / "raw"
         silver_dir = tmp_path / "silver"
         gold_dir = tmp_path / "gold"
@@ -898,7 +899,7 @@ class TestMedallionPipelineFacade:
         silver_dir.mkdir()
         gold_dir.mkdir()
 
-        pd.DataFrame(
+        silver_existing = pd.DataFrame(
             {
                 "num_venda": [1001],
                 "data": [pd.Timestamp("2026-01-02")],
@@ -906,9 +907,9 @@ class TestMedallionPipelineFacade:
                 "quantidade": [2.0],
                 "valor_total": [10.0],
             }
-        ).to_parquet(silver_dir / "sales_silver.parquet", engine="pyarrow")
+        )
 
-        pd.DataFrame(
+        gold_existing = pd.DataFrame(
             {
                 "venda_id": [1],
                 "produto_id": [1],
@@ -922,7 +923,16 @@ class TestMedallionPipelineFacade:
                 "margem_percentual": [100.0],
                 "canal": ["IFOOD"],
             }
-        ).to_parquet(gold_dir / "fato_vendas.parquet", engine="pyarrow")
+        )
+
+        def _fake_load_parquet_from_drive(file_name: str) -> pd.DataFrame:
+            if file_name == "sales_silver.parquet":
+                return silver_existing
+            if file_name == "fato_vendas.parquet":
+                return gold_existing
+            return pd.DataFrame()
+
+        monkeypatch.setattr("scripts.medallion_pipeline.load_parquet_from_drive", _fake_load_parquet_from_drive)
 
         result = MedallionPipeline(
             source=LocalRawSource(raw_dir=raw_dir),

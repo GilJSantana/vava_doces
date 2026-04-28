@@ -5,28 +5,14 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 
+from src.infrastructure.drive_manager import load_parquet_from_drive
 from src.presentation.components import render_separator
 
 logger = logging.getLogger(__name__)
-
-_DRIVE_RO_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-# ── Gold layer paths ──────────────────────────────────────────────────────────
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_GOLD_PRIMARY = _PROJECT_ROOT / "data" / "gold" / "custos_producao_agregado.parquet"
-_GOLD_FALLBACK = _PROJECT_ROOT / "data" / "processed" / "gold" / "custos_producao_agregado.parquet"
-_GOLD_LEGACY_PRIMARY = _PROJECT_ROOT / "data" / "gold" / "custos_producao.parquet"
-_GOLD_LEGACY_FALLBACK = _PROJECT_ROOT / "data" / "processed" / "gold" / "custos_producao.parquet"
-_DETAIL_PRIMARY = _PROJECT_ROOT / "data" / "gold" / "receitas_detalhadas.parquet"
-_DETAIL_FALLBACK = _PROJECT_ROOT / "data" / "processed" / "gold" / "receitas_detalhadas.parquet"
 
 _CUSTOS_COLUMNS = [
     "nome_produto",
@@ -35,90 +21,14 @@ _CUSTOS_COLUMNS = [
 ]
 
 
-def _read_first_existing_parquet(paths: tuple[Path, ...]) -> pd.DataFrame:
-    """Read first existing parquet path from ordered candidates."""
-    for path in paths:
-        if not path.exists():
-            continue
-        try:
-            df = pd.read_parquet(path)
-            logger.info("_read_first_existing_parquet: loaded '%s' (%d row(s))", path, len(df))
-            return df
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("_read_first_existing_parquet: failed '%s' — %s", path, exc)
-    return pd.DataFrame()
-
-
-def _build_drive_ro_service():
-    try:
-        account_info = st.secrets.get("gcp_service_account")
-    except Exception:
-        return None
-    if not isinstance(account_info, Mapping):
-        return None
-    credentials = service_account.Credentials.from_service_account_info(
-        dict(account_info),
-        scopes=_DRIVE_RO_SCOPES,
-    )
-    return build("drive", "v3", credentials=credentials)
-
-
-def _download_parquet_from_drive(file_name: str, target_path: Path) -> bool:
-    try:
-        folder_id = str(st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")).strip()
-    except Exception:
-        return False
-    if not folder_id:
-        return False
-
-    service = _build_drive_ro_service()
-    if service is None:
-        return False
-
-    safe_name = file_name.replace("'", "\\'")
-    query = f"'{folder_id}' in parents and trashed=false and name='{safe_name}'"
-    found = service.files().list(
-        q=query,
-        pageSize=1,
-        fields="files(id,name,modifiedTime)",
-        orderBy="modifiedTime desc",
-    ).execute().get("files", [])
-    if not found:
-        return False
-
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    blob = service.files().get_media(fileId=found[0]["id"]).execute()
-    target_path.write_bytes(blob)
-    logger.info(
-        "Downloaded latest %s from Drive to %s (modified=%s)",
-        file_name,
-        target_path,
-        found[0].get("modifiedTime"),
-    )
-    return True
-
-
 # ── Data loading ──────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=1800)
 def load_custos_producao_cached() -> pd.DataFrame:
-    """Carrega custos_producao_agregado.parquet da camada Gold (TTL 30 min).
-
-    Tenta o caminho rápido ``data/gold/`` primeiro; recorre a
-    ``data/processed/gold/`` como fallback.
-    """
-    if not any(path.exists() for path in (_GOLD_PRIMARY, _GOLD_FALLBACK, _GOLD_LEGACY_PRIMARY, _GOLD_LEGACY_FALLBACK)):
-        if not _download_parquet_from_drive("custos_producao_agregado.parquet", _GOLD_FALLBACK):
-            _download_parquet_from_drive("custos_producao.parquet", _GOLD_LEGACY_FALLBACK)
-
-    df = _read_first_existing_parquet(
-        (
-            _GOLD_PRIMARY,
-            _GOLD_FALLBACK,
-            _GOLD_LEGACY_PRIMARY,
-            _GOLD_LEGACY_FALLBACK,
-        )
-    )
+    """Carrega custos_producao_agregado.parquet da camada Gold (TTL 30 min)."""
+    df = load_parquet_from_drive("custos_producao_agregado.parquet")
+    if df.empty:
+        df = load_parquet_from_drive("custos_producao.parquet")
     if not df.empty:
         if "nome_produto" in df.columns:
             df["nome_produto"] = df["nome_produto"].astype(str).str.title()
@@ -129,11 +39,9 @@ def load_custos_producao_cached() -> pd.DataFrame:
         return df
 
     logger.warning(
-        "load_custos_producao_cached: nenhum parquet encontrado em '%s', '%s', '%s' nem '%s'",
-        _GOLD_PRIMARY,
-        _GOLD_FALLBACK,
-        _GOLD_LEGACY_PRIMARY,
-        _GOLD_LEGACY_FALLBACK,
+        "load_custos_producao_cached: nenhum parquet encontrado no Drive (%s, %s)",
+        "custos_producao_agregado.parquet",
+        "custos_producao.parquet",
     )
     return pd.DataFrame(columns=_CUSTOS_COLUMNS)
 
@@ -141,10 +49,7 @@ def load_custos_producao_cached() -> pd.DataFrame:
 @st.cache_data(ttl=1800)
 def load_receitas_detalhadas_cached() -> pd.DataFrame:
     """Carrega receitas_detalhadas.parquet (Gold detalhado) com fallback."""
-    if not any(path.exists() for path in (_DETAIL_PRIMARY, _DETAIL_FALLBACK)):
-        _download_parquet_from_drive("receitas_detalhadas.parquet", _DETAIL_FALLBACK)
-
-    df = _read_first_existing_parquet((_DETAIL_PRIMARY, _DETAIL_FALLBACK))
+    df = load_parquet_from_drive("receitas_detalhadas.parquet")
     if not df.empty:
         if "nome_produto" in df.columns:
             df["nome_produto"] = df["nome_produto"].astype(str).str.title()
@@ -324,10 +229,8 @@ def _render_custos_table(search_term: str) -> None:
 
         if custos_df.empty:
             st.warning(
-                "⚠️ Arquivo `custos_producao.parquet` não encontrado. "
-                f"Caminhos verificados:  \n"
-                f"• `{_GOLD_PRIMARY.relative_to(_PROJECT_ROOT)}`  \n"
-                f"• `{_GOLD_FALLBACK.relative_to(_PROJECT_ROOT)}`"
+                "⚠️ Arquivos de custos nao encontrados no Google Drive: "
+                "`custos_producao_agregado.parquet` e `custos_producao.parquet`."
             )
             return
 

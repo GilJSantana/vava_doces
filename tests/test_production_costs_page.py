@@ -1,9 +1,7 @@
 import pandas as pd
 
 from src.presentation.pages.production_costs import (
-    _read_first_existing_parquet,
     build_no_cost_products_table,
-    build_recipe_detail_table,
     filter_products_by_name,
     filter_issues_by_product,
 )
@@ -95,24 +93,5 @@ def test_filter_issues_by_product_applies_name_refinement():
 
     assert result["Produto"].tolist() == ["Copo Morango"]
 
-
-def test_read_first_existing_parquet_returns_first_valid_file(tmp_path):
-    first = tmp_path / "first.parquet"
-    second = tmp_path / "second.parquet"
-    pd.DataFrame({"a": [1]}).to_parquet(second, index=False)
-
-    result = _read_first_existing_parquet((first, second))
-
-    assert len(result) == 1
-    assert result.loc[0, "a"] == 1
-
-
-def test_read_first_existing_parquet_returns_empty_when_none_exist(tmp_path):
-    missing_a = tmp_path / "a.parquet"
-    missing_b = tmp_path / "b.parquet"
-
-    result = _read_first_existing_parquet((missing_a, missing_b))
-
-    assert result.empty
 
 
