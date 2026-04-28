@@ -1163,7 +1163,7 @@ def build_gold_rentabilidade(
 
     fat = faturamento_agregado.copy()
     if "id_produto" not in fat.columns:
-        fat["id_produto"] = ""
+        fat["id_produto"] = fat["produto_id"] if "produto_id" in fat.columns else ""
     if "nome_produto" not in fat.columns:
         fat["nome_produto"] = fat["id_produto"]
     if "faturamento_liquido" not in fat.columns:
@@ -1172,6 +1172,8 @@ def build_gold_rentabilidade(
         fat["qtd_vendida"] = 0.0
 
     fat["id_produto"] = fat["id_produto"].astype("string").str.strip().str.upper()
+    fat["nome_produto"] = fat["nome_produto"].fillna(fat["id_produto"]).astype("string").str.strip()
+    fat["produto_nome_key"] = fat["nome_produto"].fillna("").astype(str).map(_normalise_value)
     fat["faturamento_item"] = pd.to_numeric(fat["faturamento_liquido"], errors="coerce").fillna(0.0)
     fat["preco_venda_unitario"] = _safe_divide(
         fat["faturamento_item"],
@@ -1183,14 +1185,26 @@ def build_gold_rentabilidade(
         custos = pd.DataFrame(columns=["id_produto", "custo_producao"])
     if "id_produto" not in custos.columns:
         custos["id_produto"] = ""
+    if "nome_produto" not in custos.columns:
+        custos["nome_produto"] = custos["id_produto"]
     if "custo_producao" not in custos.columns:
         custos["custo_producao"] = np.nan
 
     custos["id_produto"] = custos["id_produto"].astype("string").str.strip().str.upper()
+    custos["nome_produto"] = custos["nome_produto"].fillna(custos["id_produto"]).astype("string").str.strip()
+    custos["produto_nome_key"] = custos["nome_produto"].fillna("").astype(str).map(_normalise_value)
     custos["custo_producao"] = pd.to_numeric(custos["custo_producao"], errors="coerce")
-    custos = custos[["id_produto", "custo_producao"]].drop_duplicates(subset=["id_produto"], keep="first")
+    custos_by_id = custos[["id_produto", "custo_producao"]].drop_duplicates(subset=["id_produto"], keep="first")
 
-    gold = fat.merge(custos, on="id_produto", how="left")
+    gold = fat.merge(custos_by_id, on="id_produto", how="left")
+    if gold["custo_producao"].isna().any():
+        custos_by_name = custos[["produto_nome_key", "custo_producao"]].copy()
+        custos_by_name["produto_nome_key"] = custos_by_name["produto_nome_key"].replace({"": pd.NA, "nan": pd.NA, "none": pd.NA})
+        custos_by_name = custos_by_name.dropna(subset=["produto_nome_key"]).drop_duplicates(subset=["produto_nome_key"], keep="first")
+        if not custos_by_name.empty:
+            gold = gold.merge(custos_by_name, on="produto_nome_key", how="left", suffixes=("", "_nome"))
+            gold["custo_producao"] = gold["custo_producao"].fillna(gold["custo_producao_nome"])
+            gold = gold.drop(columns=["custo_producao_nome"])
     gold["custo_producao_unitario"] = pd.to_numeric(gold["custo_producao"], errors="coerce")
     # Keep original NaN lineage for audit; only fill for arithmetic safety.
     gold["custo_producao_unitario_audit"] = gold["custo_producao_unitario"]

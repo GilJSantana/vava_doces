@@ -251,12 +251,27 @@ class DataQualityValidator:
             self._log("  ✅ All custos >= 0")
 
             # Business logic: margem in reasonable range (-100%, +1000%)
-            # margem = (valor_total - custo) / quantidade
+            # Unit margin may legitimately exceed 100 in absolute currency;
+            # the bounded metric is margem_percentual (percentage points).
             invalid_margem = (np.isinf(df["margem"]) | np.isnan(df["margem"])).sum()
             assert invalid_margem == 0, \
                 f"Found {invalid_margem} rows with inf/NaN margem"
-            assert (df["margem"] >= -100).all() and (df["margem"] <= 1000).all(), \
-                "Margem values outside reasonable range (-100%, +1000%)"
+            if "margem_percentual" in df.columns:
+                margem_pct = pd.to_numeric(df["margem_percentual"], errors="coerce")
+            else:
+                faturamento = pd.Series(
+                    pd.to_numeric(df.get("valor_total", pd.Series(index=df.index, dtype="float64")), errors="coerce"),
+                    index=df.index,
+                    dtype="float64",
+                )
+                lucro_total = faturamento - pd.Series(pd.to_numeric(df["custo"], errors="coerce"), index=df.index, dtype="float64")
+                margem_pct = (lucro_total / faturamento.mask(faturamento.eq(0))) * 100.0
+            invalid_margem_pct = np.isinf(margem_pct).sum()
+            assert invalid_margem_pct == 0, \
+                f"Found {invalid_margem_pct} rows with inf margem_percentual"
+            margem_pct_valid = margem_pct.dropna()
+            assert ((margem_pct_valid >= -100) & (margem_pct_valid <= 1000)).all(), \
+                "Margem percentual values outside reasonable range (-100%, +1000%)"
             self._log("  ✅ All margins in reasonable range (-100%, +1000%)")
 
             # Statistical sanity checks

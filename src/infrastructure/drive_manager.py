@@ -101,7 +101,13 @@ def load_parquet_from_drive(file_name: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     content = service.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
-    return pd.read_parquet(io.BytesIO(content))
+    dataframe = pd.read_parquet(io.BytesIO(content))
+    if file_name == "gold_rentabilidade.parquet":
+        if dataframe.empty:
+            logger.warning("DEBUG RENTABILIDADE: arquivo %s no Drive retornou dataframe vazio", file_name)
+        else:
+            logger.info("DEBUG RENTABILIDADE: arquivo %s carregado com %d linha(s)", file_name, len(dataframe))
+    return dataframe
 
 
 def update_parquet_in_drive(file_name: str, df: pd.DataFrame) -> bool:
@@ -126,7 +132,4 @@ def update_parquet_in_drive(file_name: str, df: pd.DataFrame) -> bool:
         supportsAllDrives=True,
     ).execute()
     return True
-
-
-
 
