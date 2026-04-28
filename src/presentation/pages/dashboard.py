@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_datetime64_any_dtype
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
@@ -34,6 +35,7 @@ _BRAND_MARGIN_COLORSCALE = [
 ]
 _MAX_SCATTER_POINTS = 800
 _MAX_REASONABLE_MARGIN_PERCENT = 100.0
+_PRODUCT_KEY_CANDIDATES = ("produto_id", "id_produto", "produto_key")
 
 
 def _safe_num(series: pd.Series | None, fill: float | None = 0.0) -> pd.Series:
@@ -174,6 +176,68 @@ def _load_gold_optional(name: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _build_sales_agg_from_sales_df(sales_df: pd.DataFrame | None) -> pd.DataFrame:
+    """Build product-level sales aggregation from the shared cached sales dataframe."""
+    if sales_df is None or sales_df.empty:
+        logger.info("DEBUG RENTABILIDADE: sales_df compartilhado vazio/None na agregacao")
+        return pd.DataFrame()
+
+    df = sales_df.copy()
+    logger.info("DEBUG RENTABILIDADE: sales_df bruto antes da agregacao linhas=%d", len(df))
+
+    if "data" in df.columns:
+        df["data"] = pd.to_datetime(df["data"], errors="coerce")
+        nat_count = int(df["data"].isna().sum())
+        logger.info(
+            "DEBUG RENTABILIDADE: dtype data apos cast=%s nat_data=%d",
+            df["data"].dtype,
+            nat_count,
+        )
+
+    qty_col = "qtd" if "qtd" in df.columns else ("quantidade" if "quantidade" in df.columns else None)
+    revenue_col = (
+        "faturamento_liquido"
+        if "faturamento_liquido" in df.columns
+        else ("valor_total" if "valor_total" in df.columns else ("valor_venda" if "valor_venda" in df.columns else None))
+    )
+    if qty_col is None or revenue_col is None:
+        logger.warning(
+            "DEBUG RENTABILIDADE: sem colunas obrigatorias para agregacao qty=%s revenue=%s",
+            qty_col,
+            revenue_col,
+        )
+        return pd.DataFrame()
+
+    key_col = next((c for c in _PRODUCT_KEY_CANDIDATES if c in df.columns), None)
+    if key_col is None:
+        logger.warning("DEBUG RENTABILIDADE: sales_df sem coluna de chave de produto. candidatos=%s", _PRODUCT_KEY_CANDIDATES)
+        return pd.DataFrame()
+    logger.info("DEBUG RENTABILIDADE: chave de produto selecionada na origem=%s", key_col)
+
+    df["produto_id"] = _normalize_join_key(df.get(key_col))
+
+    before_drop = len(df)
+    df = df.loc[df["produto_id"].notna()].copy()
+    logger.info(
+        "DEBUG RENTABILIDADE: filtro produto_id.notna() before=%d after=%d",
+        before_drop,
+        len(df),
+    )
+    if df.empty:
+        return pd.DataFrame()
+
+    if "produto" not in df.columns:
+        df["produto"] = df["produto_id"].astype(str)
+
+    agg_produto = (
+        df.groupby(["produto_id", "produto"], as_index=False, dropna=False)
+        .agg(qtd_vendida=(qty_col, "sum"), faturamento_liquido=(revenue_col, "sum"))
+        .rename(columns={"produto_id": "id_produto", "produto": "nome_produto"})
+    )
+    logger.info("DEBUG RENTABILIDADE: agg_produto derivado do sales_df linhas=%d", len(agg_produto))
+    return agg_produto
+
+
 def _apply_month_filter(
     profitability_df: pd.DataFrame,
     sales_df: pd.DataFrame | None,
@@ -235,7 +299,17 @@ def _apply_month_filter(
 def _build_month_sales_agg(sales_df: pd.DataFrame, selected_months: tuple[str, ...]) -> pd.DataFrame:
     if sales_df is None or sales_df.empty or not selected_months:
         return pd.DataFrame()
+    logger.info(
+        "DEBUG RENTABILIDADE: filtro mensal entrada linhas=%d meses=%s",
+        len(sales_df),
+        list(selected_months),
+    )
     filtered_sales = sales_df[sales_df["mes_referencia"].astype(str).isin(selected_months)].copy()
+    logger.info(
+        "DEBUG RENTABILIDADE: filtro mensal mes_referencia before=%d after=%d",
+        len(sales_df),
+        len(filtered_sales),
+    )
     if filtered_sales.empty:
         return pd.DataFrame()
     qty_col = "qtd" if "qtd" in filtered_sales.columns else ("quantidade" if "quantidade" in filtered_sales.columns else None)
@@ -244,7 +318,12 @@ def _build_month_sales_agg(sales_df: pd.DataFrame, selected_months: tuple[str, .
         if "faturamento_liquido" in filtered_sales.columns
         else ("valor_total" if "valor_total" in filtered_sales.columns else ("valor_venda" if "valor_venda" in filtered_sales.columns else None))
     )
-    if qty_col is None or revenue_col is None or "produto_id" not in filtered_sales.columns:
+    key_col = next((c for c in _PRODUCT_KEY_CANDIDATES if c in filtered_sales.columns), None)
+    if qty_col is None or revenue_col is None or key_col is None:
+        return pd.DataFrame()
+    filtered_sales["produto_id"] = _normalize_join_key(filtered_sales.get(key_col))
+    filtered_sales = filtered_sales.loc[filtered_sales["produto_id"].notna()].copy()
+    if filtered_sales.empty:
         return pd.DataFrame()
     month_agg = (
         filtered_sales.groupby(["produto_id", "produto"], as_index=False)
@@ -256,8 +335,12 @@ def _build_month_sales_agg(sales_df: pd.DataFrame, selected_months: tuple[str, .
 
 
 @st.cache_data(ttl=1800)
-def _build_profitability_base() -> pd.DataFrame:
-    agg_produto = _load_gold_optional("agg_vendas_produto")
+def _build_profitability_base(sales_df: pd.DataFrame | None = None) -> pd.DataFrame:
+    if sales_df is None:
+        logger.info("DEBUG RENTABILIDADE: sales_df nao informado, usando load_sales_data_cached()")
+        sales_df = load_sales_data_cached()
+
+    agg_produto = _build_sales_agg_from_sales_df(sales_df)
     rent = _load_gold_optional("gold_rentabilidade")
     custos = _load_gold_optional("custos_producao_agregado")
 
@@ -267,6 +350,7 @@ def _build_profitability_base() -> pd.DataFrame:
         len(rent),
         len(custos),
     )
+    mapping_error = False
     if not agg_produto.empty and "produto_id" in agg_produto.columns:
         logger.debug("DEBUG RENTABILIDADE: vendas dtypes=\n%s", agg_produto.dtypes)
         logger.debug(
@@ -329,6 +413,7 @@ def _build_profitability_base() -> pd.DataFrame:
         )
         if not common_keys:
             logger.error("FALHA CRITICA: sem intersecao de chaves entre vendas e rentabilidade")
+            mapping_error = True
         merge_cols = [
             "id_produto",
             "custo_producao_unitario",
@@ -365,6 +450,7 @@ def _build_profitability_base() -> pd.DataFrame:
             )
             if not common_keys:
                 logger.error("FALHA CRITICA: sem intersecao de chaves entre vendas e custos")
+                mapping_error = True
             base = base.merge(tmp, on="id_produto", how="left")
             base["custo_producao_unitario"] = _safe_num(base.get("custo_producao"), fill=None)
             if base["custo_producao_unitario"].isna().any() and "nome_produto" in custos.columns:
@@ -400,7 +486,9 @@ def _build_profitability_base() -> pd.DataFrame:
         "margem_perc",
         "markup",
         "item_auditoria",
+        "_mapping_error",
     ]
+    base["_mapping_error"] = mapping_error
     for col in keep:
         if col not in base.columns:
             base[col] = np.nan
@@ -819,6 +907,21 @@ def show_dashboard() -> None:
 
 
     sales_df = load_sales_data_cached()
+    if sales_df is not None and not sales_df.empty:
+        sales_df = sales_df.copy()
+        sales_df["data"] = pd.to_datetime(sales_df.get("data", pd.Series(index=sales_df.index, dtype="object")), errors="coerce")
+        if not is_datetime64_any_dtype(sales_df["data"]):
+            logger.error("DEBUG RENTABILIDADE: coluna 'data' nao esta em datetime64[ns] apos cast")
+        nat_data = int(sales_df["data"].isna().sum())
+        logger.info(
+            "DEBUG RENTABILIDADE: sales_df dashboard rows=%d data_dtype=%s nat_data=%d",
+            len(sales_df),
+            sales_df["data"].dtype,
+            nat_data,
+        )
+        data_ini = sales_df["data"].min()
+        data_fim = sales_df["data"].max()
+        logger.info("Filtros Dashboard: Inicio=%s, Fim=%s", data_ini, data_fim)
     available_months: list[str] = []
     if sales_df is not None and not sales_df.empty and "mes_referencia" in sales_df.columns:
         available_months = sorted([m for m in sales_df["mes_referencia"].dropna().astype(str).unique().tolist() if m and m != "sem_mes"])
@@ -841,7 +944,9 @@ def show_dashboard() -> None:
     if sales_df is None:
         st.warning("⚠️ Não foi possível validar a carga de vendas do Gold.")
 
-    profitability_df = _build_profitability_base()
+    profitability_df = _build_profitability_base(sales_df)
+    if not profitability_df.empty and "_mapping_error" in profitability_df.columns and bool(profitability_df["_mapping_error"].fillna(False).any()):
+        st.error("Erro de Mapeamento: Chaves de Produtos não coincidem")
     if profitability_df.empty:
         st.warning("⚠️ Não há dados suficientes para montar o dashboard de rentabilidade.")
         return

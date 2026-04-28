@@ -7,6 +7,7 @@ from io import BytesIO
 from typing import Optional
 
 import pandas as pd
+from pandas.api.types import is_datetime64_any_dtype
 import streamlit as st
 
 from src.infrastructure.drive_manager import load_parquet_from_drive
@@ -39,6 +40,15 @@ def _normalize_sales_for_presentation(df: pd.DataFrame) -> pd.DataFrame:
     """
     out = df.copy()
     out["data"] = pd.to_datetime(out.get("data", pd.Series(index=out.index, dtype="object")), errors="coerce")
+    nat_data = int(out["data"].isna().sum())
+    logger.info(
+        "[diag] sales_shared:normalize_data dtype=%s nat_data=%d rows=%d",
+        out["data"].dtype,
+        nat_data,
+        len(out),
+    )
+    if not is_datetime64_any_dtype(out["data"]):
+        logger.error("[diag] sales_shared:normalize_data falha no cast para datetime64[ns]")
 
     for col in ("produto", "cliente", "canal", "arquivo_origem", "data_carga"):
         if col not in out.columns:
