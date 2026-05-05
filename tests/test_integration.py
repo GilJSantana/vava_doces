@@ -6,7 +6,7 @@ import pytest
 from scripts.medallion_pipeline import build_gold_custos_produtos, build_gold_rentabilidade
 
 
-def test_cost_gold_output_feeds_profitability_with_yield_adjusted_unit_cost() -> None:
+def test_cost_gold_output_feeds_profitability_with_recipe_sum_cost() -> None:
 	manual_sheets = {
 		"materia_prima": pd.DataFrame(
 			[
@@ -56,9 +56,9 @@ def test_cost_gold_output_feeds_profitability_with_yield_adjusted_unit_cost() ->
 
 	rentabilidade = build_gold_rentabilidade(faturamento_agregado, custos_agregados)
 
-	assert rentabilidade.loc[0, "custo_producao_unitario"] == pytest.approx(1.04)
-	assert rentabilidade.loc[0, "margem_valor"] == pytest.approx(18.96)
-	assert rentabilidade.loc[0, "markup"] == pytest.approx(20.0 / 1.04)
+	assert rentabilidade.loc[0, "custo_producao_unitario"] == pytest.approx(10.4)
+	assert rentabilidade.loc[0, "margem_valor"] == pytest.approx(9.6)
+	assert rentabilidade.loc[0, "markup"] == pytest.approx(20.0 / 10.4)
 
 
 def test_profitability_build_preserves_sales_row_even_without_matching_cost() -> None:
