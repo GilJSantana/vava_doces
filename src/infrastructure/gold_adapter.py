@@ -1,47 +1,24 @@
-"""Gold Layer Adapter — reads Parquet star schema tables."""
+"""Gold Layer Adapter — reads Parquet star schema tables from Google Drive."""
 
-from pathlib import Path
-from typing import Literal, Optional
+from collections.abc import Callable, Mapping
+from typing import Literal
 import pandas as pd
 
+from src.infrastructure.drive_manager import get_drive_assets_map, load_parquet_from_drive
 from src.ports.data_source import GoldDataSource, DataSourceError
 
 
 class GoldParquetAdapter(GoldDataSource):
-    """Adapter for reading gold layer Parquet files from disk.
+    """Adapter for reading gold layer Parquet files exclusively from Google Drive."""
 
-    Expects Parquet files in the following structure:
-      gold_dir/
-        ├── dim_produto.parquet
-        ├── dim_tempo.parquet
-        ├── dim_canal.parquet
-        ├── fato_vendas.parquet
-        ├── agg_vendas_dia.parquet
-        ├── agg_vendas_canal.parquet
-        ├── agg_vendas_produto.parquet
-        └── agg_vendas_tempo.parquet
-
-    Uses pyarrow engine for Parquet I/O.
-    """
-
-    def __init__(self, gold_dir: Optional[Path] = None):
-        """Initialize the adapter with a gold directory path.
-
-        Args:
-            gold_dir: Path to the gold layer directory. Defaults to
-                      data/processed/gold/ relative to project root.
-        """
-        project_root = Path(__file__).resolve().parent.parent.parent
-        if gold_dir is None:
-            # Canonical write path is processed/gold; keep data/gold as read fallback.
-            self._candidate_dirs = (
-                project_root / "data" / "processed" / "gold",
-                project_root / "data" / "gold",
-            )
-            self.gold_dir = self._candidate_dirs[0]
-        else:
-            self.gold_dir = Path(gold_dir)
-            self._candidate_dirs = (self.gold_dir,)
+    def __init__(
+        self,
+        parquet_loader: Callable[[str], pd.DataFrame] | None = None,
+        assets_provider: Callable[[], Mapping[str, str]] | None = None,
+    ):
+        """Initialize the adapter with an optional parquet loader injection (tests)."""
+        self._loader = parquet_loader or load_parquet_from_drive
+        self._assets_provider = assets_provider or get_drive_assets_map
         self._cache: dict[str, pd.DataFrame] = {}
 
     def load_gold(
@@ -73,33 +50,22 @@ class GoldParquetAdapter(GoldDataSource):
         if cache_key in self._cache:
             return self._cache[cache_key].copy()
 
-        parquet_path: Path | None = None
-        for directory in self._candidate_dirs:
-            candidate = directory / f"{layer}.parquet"
-            if candidate.exists():
-                parquet_path = candidate
-                break
-
-        if parquet_path is None:
-            searched = "\n".join([str(d / f"{layer}.parquet") for d in self._candidate_dirs])
+        file_name = f"{layer}.parquet"
+        if file_name not in self._assets_provider():
             raise DataSourceError(
-                "Gold layer file not found. Checked:\n"
-                f"{searched}\n"
-                "Run 'python scripts/medallion_pipeline.py' first to generate gold tables."
+                "Gold layer file not found in Google Drive asset map: "
+                f"{file_name}. Run the pipeline to materialize/update gold tables."
             )
 
         try:
-            read_kwargs: dict[str, object] = {"engine": "pyarrow"}
+            full_df = self._loader(file_name)
+            if full_df is None or full_df.empty:
+                raise DataSourceError(f"Gold layer '{layer}' returned empty content from Drive")
             if columns:
-                read_kwargs["columns"] = columns
-            try:
-                df = pd.read_parquet(parquet_path, **read_kwargs)
-            except Exception:
-                if not columns:
-                    raise
-                full_df = pd.read_parquet(parquet_path, engine="pyarrow")
                 keep = [c for c in columns if c in full_df.columns]
                 df = full_df[keep].copy()
+            else:
+                df = full_df.copy()
             self._cache[cache_key] = df
             return df.copy()
         except Exception as exc:
