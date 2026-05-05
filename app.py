@@ -29,7 +29,7 @@ if _APP_ROOT not in sys.path:
 
 from scripts.medallion_pipeline import MedallionPipeline
 
-from src.domain.sales_analysis_service import sync_drive_files_to_raw_from_env
+from src.infrastructure.drive_manager import get_drive_assets_map, load_parquet_from_drive
 from src.infrastructure.google_oauth2_adapter import (
     init_session_state_auth,
     is_user_authenticated,
@@ -87,45 +87,19 @@ PAGE_HANDLERS: dict[str, Callable] = {
 def initialize_data_pipeline() -> dict[str, object]:
     """Executa bootstrap de ingestão RAW->SILVER->GOLD antes da renderização."""
     try:
-        drive_folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
-        if drive_folder_id and not os.getenv("DRIVE_FOLDER_ID"):
+        drive_folder_id = (st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "") or "").strip()
+        if drive_folder_id:
             os.environ["DRIVE_FOLDER_ID"] = drive_folder_id
 
         t0 = perf_counter()
-        # Tentar sincronizar dados do Google Drive
-        try:
-            t_sync = perf_counter()
-            synced_files = sync_drive_files_to_raw_from_env()
-            print(f"[perf] bronze_sync_ms={(perf_counter() - t_sync) * 1000:.2f}")
-            if synced_files > 0:
-                print(f"✅ Sincronizados {synced_files} arquivo(s) do Google Drive")
-        except Exception as sync_err:
-            print(f"⚠️  Não foi possível sincronizar do Google Drive: {sync_err}")
-            print("  Continuando com dados locais em data/raw/ (se disponível)")
-
-        # Verificar se há dados em data/raw/
-        raw_dir = Path(__file__).resolve().parent / "data" / "raw"
-        raw_files = list(raw_dir.glob("*.csv")) + list(raw_dir.glob("*.xlsx"))
-
-        if len(raw_files) == 0:
-            # Se não há dados locais, usar modo demo
-            print("⚠️  Nenhum arquivo encontrado em data/raw/")
-            print("   Use: python scripts/download_demo_data.py")
-            print("   Ou configure gcp_service_account e GOOGLE_DRIVE_FOLDER_ID em .streamlit/secrets.toml")
-            os.environ["VAVA_SALES_SOURCE"] = "demo"
-            return {
-                "bronze_rows": 0,
-                "silver_rows": 0,
-                "gold_rows": 0,
-                "mode": "demo",
-                "message": "Modo demo: configure Google Drive ou adicione arquivos em data/raw/",
-            }
-
-        # Executar pipeline com dados locais
         t_pipeline = perf_counter()
         result = MedallionPipeline().run()
         print(f"[perf] medallion_run_ms={(perf_counter() - t_pipeline) * 1000:.2f}")
         print(f"[perf] initialize_data_pipeline_ms={(perf_counter() - t0) * 1000:.2f}")
+        # Global cache invalidation after successful pipeline execution.
+        get_drive_assets_map.clear()
+        load_parquet_from_drive.clear()
+        st.cache_data.clear()
         os.environ["VAVA_SALES_SOURCE"] = "gold"
         print(f"✅ Pipeline executado com sucesso: {result}")
         return result
