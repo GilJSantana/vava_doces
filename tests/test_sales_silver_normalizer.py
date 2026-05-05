@@ -100,5 +100,7 @@ def test_normalize_sales_to_silver_deduplicates_with_traceability_audit():
 
     assert audit["rows_in"] == 2
     assert audit["rows_out"] == 2
+    assert audit["rows_removed"] == 0
+    assert audit["rows_by_source"] == {"sales_data_01_2026.csv": 2}
     assert audit["dedup"]["removed"] == 0
     assert audit["dedup"]["dedup_key"] == []
