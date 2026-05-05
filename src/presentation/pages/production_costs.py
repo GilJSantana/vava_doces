@@ -9,7 +9,7 @@ import logging
 import pandas as pd
 import streamlit as st
 
-from src.infrastructure.drive_manager import load_parquet_from_drive
+from src.infrastructure.drive_manager import get_drive_assets_map, load_parquet_from_drive
 from src.presentation.components import render_separator
 
 logger = logging.getLogger(__name__)
@@ -26,9 +26,33 @@ _CUSTOS_COLUMNS = [
 @st.cache_data(ttl=1800)
 def load_custos_producao_cached() -> pd.DataFrame:
     """Carrega custos_producao_agregado.parquet da camada Gold (TTL 30 min)."""
-    df = load_parquet_from_drive("custos_producao_agregado.parquet")
-    if df.empty:
-        df = load_parquet_from_drive("custos_producao.parquet")
+    candidates = [
+        "custos_producao_agregado.parquet",
+        "custos_producao.parquet",
+    ]
+    assets_map = get_drive_assets_map()
+    existing_candidates = [name for name in candidates if name in assets_map]
+
+    if not existing_candidates:
+        logger.warning(
+            "load_custos_producao_cached: nenhum parquet encontrado no Drive (%s, %s)",
+            candidates[0],
+            candidates[1],
+        )
+        empty = pd.DataFrame(columns=_CUSTOS_COLUMNS)
+        empty.attrs["custos_status"] = "missing"
+        return empty
+
+    df = pd.DataFrame()
+    for file_name in candidates:
+        if file_name not in assets_map:
+            continue
+        candidate_df = load_parquet_from_drive(file_name)
+        if not candidate_df.empty:
+            df = candidate_df
+            df.attrs["custos_source_file"] = file_name
+            break
+
     if not df.empty:
         if "nome_produto" in df.columns:
             df["nome_produto"] = df["nome_produto"].astype(str).str.title()
@@ -36,14 +60,19 @@ def load_custos_producao_cached() -> pd.DataFrame:
         for col in ("qtd_ingredientes", "custo_producao"):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
+        if "qtd_ingredientes" in df.columns:
+            df = df[df["qtd_ingredientes"].fillna(0).ge(1)].copy()
+        df.attrs["custos_status"] = "ok"
         return df
 
-    logger.warning(
-        "load_custos_producao_cached: nenhum parquet encontrado no Drive (%s, %s)",
-        "custos_producao_agregado.parquet",
-        "custos_producao.parquet",
+    logger.info(
+        "load_custos_producao_cached: parquet(s) encontrados, mas sem linhas utilizaveis (%s)",
+        ", ".join(existing_candidates),
     )
-    return pd.DataFrame(columns=_CUSTOS_COLUMNS)
+    empty = pd.DataFrame(columns=_CUSTOS_COLUMNS)
+    empty.attrs["custos_status"] = "empty"
+    empty.attrs["custos_source_file"] = ",".join(existing_candidates)
+    return empty
 
 
 @st.cache_data(ttl=1800)
@@ -228,10 +257,17 @@ def _render_custos_table(search_term: str) -> None:
         custos_df = load_custos_producao_cached()
 
         if custos_df.empty:
-            st.warning(
-                "⚠️ Arquivos de custos nao encontrados no Google Drive: "
-                "`custos_producao_agregado.parquet` e `custos_producao.parquet`."
-            )
+            status = str(custos_df.attrs.get("custos_status", "missing"))
+            if status == "empty":
+                st.info(
+                    "ℹ️ Arquivos de custos encontrados no Google Drive, mas sem registros para exibir. "
+                    "Verifique se as abas manuais de custos/receitas possuem dados validos."
+                )
+            else:
+                st.warning(
+                    "⚠️ Arquivos de custos nao encontrados no Google Drive: "
+                    "`custos_producao_agregado.parquet` e `custos_producao.parquet`."
+                )
             return
 
         filtered_df = _filter_by_name(custos_df, "nome_produto", search_term)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -13,13 +12,12 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from src.infrastructure.drive_manager import load_parquet_from_drive
 from src.domain.sales_analysis_service import _normalise_value
 from src.presentation.components import render_separator
 from src.presentation.pages.sales_shared import inject_roboto_font, load_sales_data_cached
 
 logger = logging.getLogger(__name__)
-
-_GOLD_DIR = Path(__file__).resolve().parents[3] / "data" / "processed" / "gold"
 
 # Vava Doces visual identity (dark-theme friendly).
 _QUADRANT_COLORS = {
@@ -167,13 +165,7 @@ def _period_title_suffix(selected_months: list[str], available_months: list[str]
 
 
 def _load_gold_optional(name: str) -> pd.DataFrame:
-    path = _GOLD_DIR / f"{name}.parquet"
-    if not path.exists():
-        return pd.DataFrame()
-    try:
-        return pd.read_parquet(path, engine="pyarrow")
-    except Exception:
-        return pd.DataFrame()
+    return load_parquet_from_drive(f"{name}.parquet")
 
 
 def _build_sales_agg_from_sales_df(sales_df: pd.DataFrame | None) -> pd.DataFrame:
