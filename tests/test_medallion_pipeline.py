@@ -944,6 +944,79 @@ class TestMedallionPipelineFacade:
         assert result["silver_rows"] == 1
         assert result["gold_rows"] == 1
 
+    def test_run_preserves_existing_cost_gold_when_manual_tabs_are_empty(self, tmp_path, monkeypatch):
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        (raw_dir / "sales_2026_01.csv").write_text(
+            "Número da venda;Nota Fiscal / RPS;Data da venda;Cliente;Nome do produto/serviço;"
+            "Unidade de medida;Quantidade de itens;Valor unitário;Valor Bruto;Desconto na venda;"
+            "Valor Liquido no Financeiro;Valor Total;Peso Bruto;Peso Total;Cidade do cliente;"
+            "Tipo de item (produto ou serviço);Tipo de Negociação\n"
+            "1001;NF-001;02/01/2026;João;Brigadeiro;UN;2;5,00;10,00;0,00;10,00;10,00;0;0;São Paulo;Produto;IFOOD\n",
+            encoding="utf-8",
+        )
+
+        existing_custos = pd.DataFrame(
+            {
+                "id_produto": ["PROD-001"],
+                "nome_produto": ["Brigadeiro"],
+                "qtd_ingredientes": [2],
+                "custo_producao": [7.5],
+            }
+        )
+        existing_receitas = pd.DataFrame(
+            {
+                "id_produto": ["PROD-001"],
+                "nome_produto": ["Brigadeiro"],
+                "id_ingrediente": ["ING-001"],
+                "nome_ingrediente": ["Chocolate"],
+                "quantidade_formatada": ["60 g"],
+                "custo_unitario_final": [4.5],
+            }
+        )
+
+        monkeypatch.setattr(
+            "scripts.medallion_pipeline.DriveManager.check_for_updates",
+            lambda _self, **_kwargs: {
+                "should_process": True,
+                "reason": "sources_updated",
+                "manifest_file_id": None,
+                "sources": {
+                    "sales_csv": {"changed": False},
+                    "production_costs_sheets": {
+                        "changed": True,
+                        "current_modified_time": "2026-05-05T18:34:34.022Z",
+                        "previous_modified_time": None,
+                    },
+                },
+            },
+        )
+        monkeypatch.setattr(
+            "scripts.medallion_pipeline.load_parquet_from_drive",
+            lambda name: existing_custos.copy()
+            if name in {"custos_producao_agregado.parquet", "custos_producao.parquet"}
+            else (existing_receitas.copy() if name == "receitas_detalhadas.parquet" else pd.DataFrame()),
+        )
+        monkeypatch.setattr("scripts.medallion_pipeline.DriveManager.update_manifest_state", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(
+            "scripts.medallion_pipeline.DataQualityValidator.validate_all",
+            lambda _self, *_args, **_kwargs: {"dim_produto": True, "dim_tempo": True, "fato_vendas": True},
+        )
+
+        persisted: dict[str, pd.DataFrame] = {}
+
+        def _fake_persist(_self, parquet_frames: dict[str, pd.DataFrame]) -> int:
+            persisted.update({name: df.copy() for name, df in parquet_frames.items()})
+            return 0
+
+        monkeypatch.setattr("scripts.medallion_pipeline.MedallionPipeline._persist_gold_to_drive", _fake_persist)
+
+        result = MedallionPipeline(source=LocalRawSource(raw_dir=raw_dir)).run()
+
+        assert result["gold_custos_rows"] == 1
+        assert len(persisted["custos_producao_agregado.parquet"]) == 1
+        assert len(persisted["receitas_detalhadas.parquet"]) == 1
+
 
 
 class TestEndToEnd:

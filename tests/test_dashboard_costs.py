@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.presentation.pages.dashboard import (
+    _compute_revenue_total_from_sales,
     _invalidate_metrics_without_cost,
     _normalize_margin_percent,
     _fmt_currency,
@@ -21,13 +22,14 @@ def test_invalidate_sets_margem_nan_when_cost_is_zero() -> None:
     df = pd.DataFrame(
         {
             "custo_producao_unitario": [0.0, 5.0],
+            "custo_producao_unitario_audit": [0.0, 5.0],
             "margem_perc": [100.0, 40.0],
             "markup": [99.0, 1.5],
             "item_auditoria": [False, False],
         }
     )
     result = _invalidate_metrics_without_cost(df)
-    assert pd.isna(result.loc[0, "margem_perc"]), "zero cost should produce NaN margem"
+    assert result.loc[0, "margem_perc"] == 100.0, "zero source cost is valid and should remain visible"
     assert result.loc[1, "margem_perc"] == 40.0, "non-zero cost should be unchanged"
 
 
@@ -35,6 +37,7 @@ def test_invalidate_sets_margem_nan_when_cost_is_nan() -> None:
     df = pd.DataFrame(
         {
             "custo_producao_unitario": [np.nan, 3.0],
+            "custo_producao_unitario_audit": [np.nan, 3.0],
             "margem_perc": [90.0, 50.0],
             "markup": [10.0, 2.0],
             "item_auditoria": [False, False],
@@ -49,6 +52,7 @@ def test_invalidate_flags_item_auditoria_for_missing_cost() -> None:
     df = pd.DataFrame(
         {
             "custo_producao_unitario": [np.nan, 8.0],
+            "custo_producao_unitario_audit": [np.nan, 8.0],
             "margem_perc": [80.0, 25.0],
             "item_auditoria": [False, False],
         }
@@ -62,6 +66,7 @@ def test_invalidate_returns_unchanged_when_all_costs_present() -> None:
     df = pd.DataFrame(
         {
             "custo_producao_unitario": [1.5, 3.0, 10.0],
+            "custo_producao_unitario_audit": [1.5, 3.0, 10.0],
             "margem_perc": [30.0, 50.0, 60.0],
             "item_auditoria": [False, False, False],
         }
@@ -74,6 +79,21 @@ def test_invalidate_returns_empty_df_unchanged() -> None:
     df = pd.DataFrame(columns=["custo_producao_unitario", "margem_perc"])
     result = _invalidate_metrics_without_cost(df)
     assert result.empty
+
+
+def test_invalidate_uses_audit_lineage_over_zero_numeric_cost() -> None:
+    df = pd.DataFrame(
+        {
+            "custo_producao_unitario": [0.0],
+            "custo_producao_unitario_audit": [np.nan],
+            "margem_perc": [100.0],
+            "markup": [99.0],
+            "item_auditoria": [False],
+        }
+    )
+    result = _invalidate_metrics_without_cost(df)
+    assert pd.isna(result.loc[0, "margem_perc"])
+    assert bool(result.loc[0, "item_auditoria"]) is True
 
 
 # ── _normalize_margin_percent ─────────────────────────────────────────────────
@@ -255,5 +275,31 @@ def test_build_profitability_base_marks_mapping_error_when_keys_do_not_intersect
 
     assert "_mapping_error" in result.columns
     assert bool(result["_mapping_error"].iloc[0]) is True
+
+
+def test_compute_revenue_total_from_sales_uses_filtered_sales_scope() -> None:
+    sales_df = pd.DataFrame(
+        {
+            "mes_referencia": ["2026-01", "2026-02", "2026-02"],
+            "faturamento_liquido": [100.0, 150.0, 50.0],
+        }
+    )
+
+    result = _compute_revenue_total_from_sales(sales_df, ["2026-02"])
+
+    assert result == 200.0
+
+
+def test_compute_revenue_total_from_sales_falls_back_to_valor_total() -> None:
+    sales_df = pd.DataFrame(
+        {
+            "mes_referencia": ["2026-01", "2026-01"],
+            "valor_total": [12.5, 7.5],
+        }
+    )
+
+    result = _compute_revenue_total_from_sales(sales_df, ["2026-01"])
+
+    assert result == 20.0
 
 

@@ -1,6 +1,7 @@
 import pandas as pd
 
 from src.presentation.pages.production_costs import (
+    build_recipe_detail_table,
     build_no_cost_products_table,
     filter_products_by_name,
     filter_issues_by_product,
@@ -92,6 +93,25 @@ def test_filter_issues_by_product_applies_name_refinement():
     result = filter_issues_by_product(issues_df, "PROD-001", "moran")
 
     assert result["Produto"].tolist() == ["Copo Morango"]
+
+
+def test_build_recipe_detail_table_marks_sem_custo_only_when_source_price_missing() -> None:
+    raw = pd.DataFrame(
+        {
+            "id_produto": ["PROD-001", "PROD-001"],
+            "nome_produto": ["Torta", "Torta"],
+            "id_ingrediente": ["ING-001", "ING-002"],
+            "nome_ingrediente": ["Limao", "Acucar"],
+            "quantidade_formatada": ["1 g", "10 g"],
+            "custo_unitario_final": [0.004, 0.0],
+            "custo_origem_ausente": [False, True],
+        }
+    )
+
+    result = build_recipe_detail_table(raw)
+
+    assert result.loc[0, "estado_custo"] == ""
+    assert result.loc[1, "estado_custo"] == "⚠️ sem custo"
 
 
 

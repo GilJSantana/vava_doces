@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -13,13 +12,12 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from src.infrastructure.drive_manager import load_parquet_from_drive
 from src.domain.sales_analysis_service import _normalise_value
 from src.presentation.components import render_separator
 from src.presentation.pages.sales_shared import inject_roboto_font, load_sales_data_cached
 
 logger = logging.getLogger(__name__)
-
-_GOLD_DIR = Path(__file__).resolve().parents[3] / "data" / "processed" / "gold"
 
 # Vava Doces visual identity (dark-theme friendly).
 _QUADRANT_COLORS = {
@@ -118,13 +116,16 @@ def _normalize_margin_percent(series: pd.Series | None) -> pd.Series:
 
 
 def _invalidate_metrics_without_cost(df: pd.DataFrame) -> pd.DataFrame:
-    """Mark profitability metrics as unknown when production cost is missing or zero."""
+    """Mark profitability metrics as unknown when source cost is missing (null lineage)."""
     if df.empty or "custo_producao_unitario" not in df.columns:
         return df
 
     out = df.copy()
-    custo_unit = _safe_num(out.get("custo_producao_unitario"), fill=None)
-    missing_cost_mask = custo_unit.isna() | custo_unit.eq(0)
+    audit_col = out.get("custo_producao_unitario_audit")
+    if audit_col is not None:
+        missing_cost_mask = _safe_num(audit_col, fill=None).isna()
+    else:
+        missing_cost_mask = _safe_num(out.get("custo_producao_unitario"), fill=None).isna()
 
     if "margem_perc" in out.columns:
         out.loc[missing_cost_mask, "margem_perc"] = np.nan
@@ -167,13 +168,95 @@ def _period_title_suffix(selected_months: list[str], available_months: list[str]
 
 
 def _load_gold_optional(name: str) -> pd.DataFrame:
-    path = _GOLD_DIR / f"{name}.parquet"
-    if not path.exists():
+    return load_parquet_from_drive(f"{name}.parquet")
+
+
+def _build_sales_agg_from_sales_df(sales_df: pd.DataFrame | None) -> pd.DataFrame:
+    """Build product-level sales aggregation from the shared cached sales dataframe."""
+    if sales_df is None or sales_df.empty:
+        logger.info("DEBUG RENTABILIDADE: sales_df compartilhado vazio/None na agregacao")
         return pd.DataFrame()
-    try:
-        return pd.read_parquet(path, engine="pyarrow")
-    except Exception:
+
+    df = sales_df.copy()
+    logger.info("DEBUG RENTABILIDADE: sales_df bruto antes da agregacao linhas=%d", len(df))
+
+    if "data" in df.columns:
+        df["data"] = pd.to_datetime(df["data"], errors="coerce")
+        nat_count = int(df["data"].isna().sum())
+        logger.info(
+            "DEBUG RENTABILIDADE: dtype data apos cast=%s nat_data=%d",
+            df["data"].dtype,
+            nat_count,
+        )
+
+    qty_col = "qtd" if "qtd" in df.columns else ("quantidade" if "quantidade" in df.columns else None)
+    revenue_col = (
+        "faturamento_liquido"
+        if "faturamento_liquido" in df.columns
+        else ("valor_total" if "valor_total" in df.columns else ("valor_venda" if "valor_venda" in df.columns else None))
+    )
+    if qty_col is None or revenue_col is None:
+        logger.warning(
+            "DEBUG RENTABILIDADE: sem colunas obrigatorias para agregacao qty=%s revenue=%s",
+            qty_col,
+            revenue_col,
+        )
         return pd.DataFrame()
+
+    key_col = next((c for c in _PRODUCT_KEY_CANDIDATES if c in df.columns), None)
+    if key_col is None:
+        logger.warning("DEBUG RENTABILIDADE: sales_df sem coluna de chave de produto. candidatos=%s", _PRODUCT_KEY_CANDIDATES)
+        return pd.DataFrame()
+    logger.info("DEBUG RENTABILIDADE: chave de produto selecionada na origem=%s", key_col)
+
+    df["produto_id"] = _normalize_join_key(df.get(key_col))
+
+    before_drop = len(df)
+    df = df.loc[df["produto_id"].notna()].copy()
+    logger.info(
+        "DEBUG RENTABILIDADE: filtro produto_id.notna() before=%d after=%d",
+        before_drop,
+        len(df),
+    )
+    if df.empty:
+        return pd.DataFrame()
+
+    if "produto" not in df.columns:
+        df["produto"] = df["produto_id"].astype(str)
+
+    agg_produto = (
+        df.groupby(["produto_id", "produto"], as_index=False, dropna=False)
+        .agg(qtd_vendida=(qty_col, "sum"), faturamento_liquido=(revenue_col, "sum"))
+        .rename(columns={"produto_id": "id_produto", "produto": "nome_produto"})
+    )
+    logger.info("DEBUG RENTABILIDADE: agg_produto derivado do sales_df linhas=%d", len(agg_produto))
+    return agg_produto
+
+
+def _compute_revenue_total_from_sales(
+    sales_df: pd.DataFrame | None,
+    selected_months: list[str] | None,
+) -> float | None:
+    """Compute dashboard revenue KPI from transactional sales source-of-truth."""
+    if sales_df is None or sales_df.empty:
+        return None
+    df = sales_df.copy()
+    if selected_months is not None:
+        if not selected_months:
+            return 0.0
+        if "mes_referencia" in df.columns:
+            df = df[df["mes_referencia"].astype(str).isin(selected_months)].copy()
+    if df.empty:
+        return 0.0
+
+    revenue_col = (
+        "faturamento_liquido"
+        if "faturamento_liquido" in df.columns
+        else ("valor_total" if "valor_total" in df.columns else ("valor_venda" if "valor_venda" in df.columns else None))
+    )
+    if revenue_col is None:
+        return None
+    return float(_safe_num(df.get(revenue_col), fill=0.0).sum())
 
 
 def _build_sales_agg_from_sales_df(sales_df: pd.DataFrame | None) -> pd.DataFrame:
@@ -472,7 +555,7 @@ def _build_profitability_base(sales_df: pd.DataFrame | None = None) -> pd.DataFr
         base["markup"] = (base["preco_venda_unitario"] / custo_calc).replace([np.inf, -np.inf], np.nan)
 
     base["nome_produto"] = base.get("nome_produto", base["id_produto"]).fillna(base["id_produto"]).astype(str).str.strip()
-    base["item_auditoria"] = base["custo_producao_unitario"].isna() | (base["custo_producao_unitario"] == 0)
+    base["item_auditoria"] = base.get("custo_producao_unitario_audit", base["custo_producao_unitario"]).isna()
 
     keep = [
         "id_produto",
@@ -498,8 +581,8 @@ def _build_profitability_base(sales_df: pd.DataFrame | None = None) -> pd.DataFr
     return base[keep].reset_index(drop=True)
 
 
-def _render_kpi_row(df: pd.DataFrame) -> None:
-    revenue = float(_safe_num(df.get("faturamento_item"), fill=0.0).sum())
+def _render_kpi_row(df: pd.DataFrame, revenue_override: float | None = None) -> None:
+    revenue = revenue_override if revenue_override is not None else float(_safe_num(df.get("faturamento_item"), fill=0.0).sum())
     total_margin = float(_safe_num(df.get("margem_valor"), fill=0.0).sum())
     avg_margin = float(_safe_num(df.get("margem_perc"), fill=None).dropna().mean()) if not df.empty else 0.0
     audit_items = int(df[df.get("item_auditoria", pd.Series(dtype=bool)).fillna(False)]["id_produto"].nunique()) if not df.empty else 0
@@ -970,8 +1053,10 @@ def show_dashboard() -> None:
         st.warning("⚠️ O filtro de margem não retornou produtos. Ajuste a faixa na barra lateral.")
         return
 
+    revenue_kpi = _compute_revenue_total_from_sales(sales_df, selected_months)
+
     with st.container(border=True):
-        _render_kpi_row(filtered_df)
+        _render_kpi_row(filtered_df, revenue_override=revenue_kpi)
 
     with st.container(border=True):
         _render_scatter(filtered_df, selected_months, available_months)

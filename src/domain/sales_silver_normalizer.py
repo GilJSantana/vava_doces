@@ -120,7 +120,10 @@ def _normalize_product_name(value: object) -> tuple[str, str]:
         "  PROD-001 - brigadeiro tradicional " → ("Brigadeiro Tradicional", rule)
         "102 - risole frango"                  → ("Risole Frango", rule)
     """
-    original = str(value or "").strip()
+    if value is None or pd.isna(value):
+        original = ""
+    else:
+        original = str(value).strip()
     if not original or original.lower() in {"nan", "none"}:
         return "SEM_PRODUTO", "empty_or_null"
     cleaned = re.sub(
@@ -305,7 +308,9 @@ def normalize_sales_to_silver_with_audit(
     audit: dict[str, object] = {
         "rows_in":       int(len(df)),
         "rows_out":      int(len(out)),
+        "rows_removed":  max(int(len(df)) - int(len(out)), 0),
         "invalid_dates": int(out.get("_invalid_date", pd.Series(dtype=bool)).sum()),
+        "rows_by_source": out.get("arquivo_origem", pd.Series(dtype="object")).value_counts(dropna=False).to_dict(),
         "dedup":         dedup_audit,
     }
     return out, audit

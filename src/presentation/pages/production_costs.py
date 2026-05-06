@@ -9,7 +9,7 @@ import logging
 import pandas as pd
 import streamlit as st
 
-from src.infrastructure.drive_manager import load_parquet_from_drive
+from src.infrastructure.drive_manager import get_drive_assets_map, load_parquet_from_drive
 from src.presentation.components import render_separator
 
 logger = logging.getLogger(__name__)
@@ -26,9 +26,33 @@ _CUSTOS_COLUMNS = [
 @st.cache_data(ttl=1800)
 def load_custos_producao_cached() -> pd.DataFrame:
     """Carrega custos_producao_agregado.parquet da camada Gold (TTL 30 min)."""
-    df = load_parquet_from_drive("custos_producao_agregado.parquet")
-    if df.empty:
-        df = load_parquet_from_drive("custos_producao.parquet")
+    candidates = [
+        "custos_producao_agregado.parquet",
+        "custos_producao.parquet",
+    ]
+    assets_map = get_drive_assets_map()
+    existing_candidates = [name for name in candidates if name in assets_map]
+
+    if not existing_candidates:
+        logger.warning(
+            "load_custos_producao_cached: nenhum parquet encontrado no Drive (%s, %s)",
+            candidates[0],
+            candidates[1],
+        )
+        empty = pd.DataFrame(columns=_CUSTOS_COLUMNS)
+        empty.attrs["custos_status"] = "missing"
+        return empty
+
+    df = pd.DataFrame()
+    for file_name in candidates:
+        if file_name not in assets_map:
+            continue
+        candidate_df = load_parquet_from_drive(file_name)
+        if not candidate_df.empty:
+            df = candidate_df
+            df.attrs["custos_source_file"] = file_name
+            break
+
     if not df.empty:
         if "nome_produto" in df.columns:
             df["nome_produto"] = df["nome_produto"].astype(str).str.title()
@@ -36,14 +60,19 @@ def load_custos_producao_cached() -> pd.DataFrame:
         for col in ("qtd_ingredientes", "custo_producao"):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
+        if "qtd_ingredientes" in df.columns:
+            df = df[df["qtd_ingredientes"].fillna(0).ge(1)].copy()
+        df.attrs["custos_status"] = "ok"
         return df
 
-    logger.warning(
-        "load_custos_producao_cached: nenhum parquet encontrado no Drive (%s, %s)",
-        "custos_producao_agregado.parquet",
-        "custos_producao.parquet",
+    logger.info(
+        "load_custos_producao_cached: parquet(s) encontrados, mas sem linhas utilizaveis (%s)",
+        ", ".join(existing_candidates),
     )
-    return pd.DataFrame(columns=_CUSTOS_COLUMNS)
+    empty = pd.DataFrame(columns=_CUSTOS_COLUMNS)
+    empty.attrs["custos_status"] = "empty"
+    empty.attrs["custos_source_file"] = ",".join(existing_candidates)
+    return empty
 
 
 @st.cache_data(ttl=1800)
@@ -55,6 +84,8 @@ def load_receitas_detalhadas_cached() -> pd.DataFrame:
             df["nome_produto"] = df["nome_produto"].astype(str).str.title()
         if "custo_unitario_final" in df.columns:
             df["custo_unitario_final"] = pd.to_numeric(df["custo_unitario_final"], errors="coerce")
+        if "custo_origem_ausente" in df.columns:
+            df["custo_origem_ausente"] = df["custo_origem_ausente"].fillna(False).astype(bool)
         return df
     return pd.DataFrame(
         columns=[
@@ -64,6 +95,7 @@ def load_receitas_detalhadas_cached() -> pd.DataFrame:
             "nome_ingrediente",
             "quantidade_formatada",
             "custo_unitario_final",
+            "custo_origem_ausente",
         ]
     )
 
@@ -98,7 +130,7 @@ def _recipe_column_config() -> dict:
         "custo_unitario_final": st.column_config.NumberColumn(
             "Custo Ingred. (R$)",
             format="R$ %.2f",
-            help="⚠️ sem custo se 0",
+            help="⚠️ sem custo apenas quando o preco de origem estiver ausente",
         ),
     }
 
@@ -201,8 +233,11 @@ def _prepare_recipe_df(raw: pd.DataFrame) -> pd.DataFrame:
     if "custo_unitario_final" not in detail.columns:
         detail["custo_unitario_final"] = pd.NA
     detail["custo_unitario_final"] = pd.to_numeric(detail["custo_unitario_final"], errors="coerce")
+    if "custo_origem_ausente" not in detail.columns:
+        detail["custo_origem_ausente"] = detail["custo_unitario_final"].isna()
+    detail["custo_origem_ausente"] = detail["custo_origem_ausente"].fillna(False).astype(bool)
 
-    sem_custo_mask = detail["custo_unitario_final"].isna() | detail["custo_unitario_final"].eq(0.0)
+    sem_custo_mask = detail["custo_origem_ausente"]
     detail["estado_custo"] = sem_custo_mask.map(lambda m: "⚠️ sem custo" if m else "")
 
     ordered = [
@@ -228,10 +263,17 @@ def _render_custos_table(search_term: str) -> None:
         custos_df = load_custos_producao_cached()
 
         if custos_df.empty:
-            st.warning(
-                "⚠️ Arquivos de custos nao encontrados no Google Drive: "
-                "`custos_producao_agregado.parquet` e `custos_producao.parquet`."
-            )
+            status = str(custos_df.attrs.get("custos_status", "missing"))
+            if status == "empty":
+                st.info(
+                    "ℹ️ Arquivos de custos encontrados no Google Drive, mas sem registros para exibir. "
+                    "Verifique se as abas manuais de custos/receitas possuem dados validos."
+                )
+            else:
+                st.warning(
+                    "⚠️ Arquivos de custos nao encontrados no Google Drive: "
+                    "`custos_producao_agregado.parquet` e `custos_producao.parquet`."
+                )
             return
 
         filtered_df = _filter_by_name(custos_df, "nome_produto", search_term)
@@ -319,6 +361,8 @@ def _render_recipe_table(breakdown_all: pd.DataFrame | None) -> str | None:
             filtered = filtered[filtered["nome_produto"].astype(str) == selected_produto].copy()
 
         pending_mask = filtered["custo_unitario_final"].eq(0.0)
+        if "custo_origem_ausente" in filtered.columns:
+            pending_mask = filtered["custo_origem_ausente"].fillna(False).astype(bool)
         pending_ids = filtered.loc[pending_mask, "id_ingrediente"].astype(str).str.strip()
         pending_ids = pending_ids[pending_ids != ""]
         itens_pendentes = int(pending_ids.nunique())
@@ -440,10 +484,13 @@ def show_production_costs() -> None:
     # ── Load recipe data once for sections 2 & 3 ─────────────────────────────
     breakdown_all = load_receitas_detalhadas_cached()
     issues_df = pd.DataFrame()
-    if not breakdown_all.empty and "custo_unitario_final" in breakdown_all.columns:
-        issues_df = breakdown_all[
-            breakdown_all["custo_unitario_final"].isna() | breakdown_all["custo_unitario_final"].eq(0.0)
-        ].copy()
+    if not breakdown_all.empty:
+        if "custo_origem_ausente" in breakdown_all.columns:
+            issues_df = breakdown_all[breakdown_all["custo_origem_ausente"].fillna(False).astype(bool)].copy()
+        elif "custo_unitario_final" in breakdown_all.columns:
+            issues_df = breakdown_all[breakdown_all["custo_unitario_final"].isna()].copy()
+        else:
+            issues_df = pd.DataFrame()
 
     n_issues = len(issues_df) if issues_df is not None and not issues_df.empty else 0
     n_breakdown = len(breakdown_all) if breakdown_all is not None and not breakdown_all.empty else 0
