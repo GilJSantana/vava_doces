@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 import unicodedata
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -57,6 +58,8 @@ logger = logging.getLogger("medallion")
 _DEFAULT_SOURCE_PRODUCTS_SHEET_ID = "1KEzf8FcL21DMk_64t-B9gMQIxjEx3ZPS_XsY-jYNVNk"
 _MANIFEST_SOURCE_SALES = "sales_csv"
 _MANIFEST_SOURCE_COSTS = "production_costs_sheets"
+
+_DECIMAL_INTERMEDIATE_SCALE = Decimal("0.000001")
 
 
 
@@ -418,6 +421,31 @@ def _parse_brl_numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(text, errors="coerce")
 
 
+def _to_decimal(value: object) -> Decimal | None:
+    if pd.isna(value):
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _series_to_decimal(series: pd.Series) -> pd.Series:
+    return pd.Series(series, index=series.index).map(_to_decimal)
+
+
+def _decimal_mul(a: Decimal | None, b: Decimal | None) -> Decimal | None:
+    if a is None or b is None:
+        return None
+    return a * b
+
+
+def _decimal_div(a: Decimal | None, b: Decimal | None) -> Decimal | None:
+    if a is None or b is None or b == 0:
+        return None
+    return a / b
+
+
 def _normalize_unit_token(series: pd.Series) -> pd.Series:
     """Normalize free-text unit values to canonical tokens used in cost conversion."""
     out = pd.Series(series, index=series.index).astype("string").str.strip().str.upper()
@@ -688,7 +716,7 @@ def _build_manual_cost_map(manual_sheets: dict[str, pd.DataFrame]) -> dict[str, 
                 custo_item=("custo_item", lambda s: s.sum(min_count=1))
             )
             return {
-                _normalise_value(prod): float(cost)
+                _normalise_value(prod): float(_to_decimal(cost) or Decimal("0"))
                 for prod, cost in agg[["produto_id", "custo_item"]].itertuples(index=False, name=None)
                 if str(prod).strip() != "" and pd.notna(cost)
             }
@@ -707,14 +735,25 @@ def _build_manual_cost_map(manual_sheets: dict[str, pd.DataFrame]) -> dict[str, 
     mp["item_norm"] = mp["item"].astype(str).str.strip().str.lower()
 
     merged = rec.merge(mp[["item_norm", "custo_unit"]], left_on="ingrediente_id_norm", right_on="item_norm", how="left")
-    merged["qtd"] = pd.to_numeric(merged["qtd"], errors="coerce").fillna(0.0)
+    merged["qtd"] = pd.to_numeric(merged["qtd"], errors="coerce")
     merged["custo_unit"] = pd.to_numeric(merged["custo_unit"], errors="coerce")
-    merged["custo_item"] = merged["qtd"] * merged["custo_unit"]
-    agg = merged.groupby("produto_id", as_index=False).agg(custo_item=("custo_item", lambda s: s.sum(min_count=1)))
+    merged["custo_item_dec"] = _series_to_decimal(merged["qtd"]).combine(
+        _series_to_decimal(merged["custo_unit"]),
+        _decimal_mul,
+    )
+    agg = merged.groupby("produto_id", as_index=False).agg(
+        custo_item_dec=(
+            "custo_item_dec",
+            lambda s: sum((v for v in s if v is not None), start=Decimal("0")).quantize(
+                _DECIMAL_INTERMEDIATE_SCALE,
+                rounding=ROUND_HALF_UP,
+            ) if any(v is not None for v in s) else None,
+        )
+    )
     return {
         _normalise_value(prod): float(cost)
-        for prod, cost in agg[["produto_id", "custo_item"]].itertuples(index=False, name=None)
-        if str(prod).strip() != ""
+        for prod, cost in agg[["produto_id", "custo_item_dec"]].itertuples(index=False, name=None)
+        if str(prod).strip() != "" and cost is not None
     }
 
 
@@ -736,6 +775,7 @@ def build_gold_custos_produtos(
         "nome_ingrediente",
         "quantidade_formatada",
         "custo_unitario_final",
+        "custo_origem_ausente",
     ]
     agg_cols = ["id_produto", "nome_produto", "qtd_ingredientes", "custo_producao"]
 
@@ -819,6 +859,7 @@ def build_gold_custos_produtos(
     rec = rec[~rec_ing_key.isin({"", "nan", "none", "nat"})].copy()
     rec["qtd_receita"] = _parse_brl_numeric(rec["qtd"]).fillna(0.0)
     rec["custo_receita_linha"] = _parse_brl_numeric(rec.get("custo_do_ingrediente", pd.Series(index=rec.index, dtype="float64")))
+    rec["custo_origem_ausente"] = rec["custo_receita_linha"].isna()
     rec["unidade"] = _normalize_unit_token(rec["unidade"]).fillna("")
     rec["ingrediente_key"] = rec["id_ingrediente"].astype(str).str.strip().str.lower()
 
@@ -863,9 +904,9 @@ def build_gold_custos_produtos(
     unit_txt = unit_txt.mask(unit_txt.eq(""), _normalize_unit_token(detail["unidade_mp"]).fillna("").astype(str).str.lower())
     detail["quantidade_formatada"] = (qty_txt + " " + unit_txt).str.strip()
 
-    # Keep Gold numeric as float; Streamlit handles visual BRL formatting.
-    # Ingredient cost formula: (custo_unitario_materia_prima / rendimento_embalagem) * qtd_receita_ajustada
-    denom = detail["rendimento_embalagem"].fillna(1.0)
+    # Ingredient cost formula with Decimal precision:
+    # (custo_unitario_materia_prima / rendimento_embalagem) * qtd_receita_ajustada
+    denom = pd.to_numeric(detail["rendimento_embalagem"], errors="coerce")
     denom = denom.where(denom > 0, 1.0)
     numer = pd.to_numeric(detail["custo_un_mat_prima"], errors="coerce")
     qtd = pd.to_numeric(detail["qtd_receita"], errors="coerce")
@@ -879,7 +920,12 @@ def build_gold_custos_produtos(
         index=detail.index,
     )
 
-    detail["custo_calculado"] = (numer / denom) * qtd_ajustada
+    custo_base_dec = _series_to_decimal(numer).combine(_series_to_decimal(denom), _decimal_div)
+    detail["custo_calculado_dec"] = custo_base_dec.combine(_series_to_decimal(qtd_ajustada), _decimal_mul)
+    detail["custo_calculado_dec"] = detail["custo_calculado_dec"].map(
+        lambda d: d.quantize(_DECIMAL_INTERMEDIATE_SCALE, rounding=ROUND_HALF_UP) if d is not None else None
+    )
+    detail["custo_calculado"] = pd.to_numeric(detail["custo_calculado_dec"], errors="coerce")
     # Source-of-truth precedence: keep recipe sheet cost whenever it is present.
     detail["custo_unitario_final"] = pd.to_numeric(detail["custo_receita_linha"], errors="coerce")
     missing_recipe_cost = detail["custo_unitario_final"].isna()
@@ -888,6 +934,9 @@ def build_gold_custos_produtos(
             detail.loc[missing_recipe_cost, "custo_calculado"], errors="coerce"
         )
     detail["custo_unitario_final"] = detail["custo_unitario_final"].astype("float64")
+    if "custo_origem_ausente" not in detail.columns:
+        detail["custo_origem_ausente"] = True
+    detail["custo_origem_ausente"] = detail["custo_origem_ausente"].fillna(True).astype(bool)
 
     df_detalhado = detail[cols].copy().reset_index(drop=True) if not detail.empty else pd.DataFrame(columns=cols)
     df_detalhado.index.name = None

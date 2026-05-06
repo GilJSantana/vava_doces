@@ -84,6 +84,8 @@ def load_receitas_detalhadas_cached() -> pd.DataFrame:
             df["nome_produto"] = df["nome_produto"].astype(str).str.title()
         if "custo_unitario_final" in df.columns:
             df["custo_unitario_final"] = pd.to_numeric(df["custo_unitario_final"], errors="coerce")
+        if "custo_origem_ausente" in df.columns:
+            df["custo_origem_ausente"] = df["custo_origem_ausente"].fillna(False).astype(bool)
         return df
     return pd.DataFrame(
         columns=[
@@ -93,6 +95,7 @@ def load_receitas_detalhadas_cached() -> pd.DataFrame:
             "nome_ingrediente",
             "quantidade_formatada",
             "custo_unitario_final",
+            "custo_origem_ausente",
         ]
     )
 
@@ -127,7 +130,7 @@ def _recipe_column_config() -> dict:
         "custo_unitario_final": st.column_config.NumberColumn(
             "Custo Ingred. (R$)",
             format="R$ %.2f",
-            help="⚠️ sem custo se 0",
+            help="⚠️ sem custo apenas quando o preco de origem estiver ausente",
         ),
     }
 
@@ -230,8 +233,11 @@ def _prepare_recipe_df(raw: pd.DataFrame) -> pd.DataFrame:
     if "custo_unitario_final" not in detail.columns:
         detail["custo_unitario_final"] = pd.NA
     detail["custo_unitario_final"] = pd.to_numeric(detail["custo_unitario_final"], errors="coerce")
+    if "custo_origem_ausente" not in detail.columns:
+        detail["custo_origem_ausente"] = detail["custo_unitario_final"].isna()
+    detail["custo_origem_ausente"] = detail["custo_origem_ausente"].fillna(False).astype(bool)
 
-    sem_custo_mask = detail["custo_unitario_final"].isna() | detail["custo_unitario_final"].eq(0.0)
+    sem_custo_mask = detail["custo_origem_ausente"]
     detail["estado_custo"] = sem_custo_mask.map(lambda m: "⚠️ sem custo" if m else "")
 
     ordered = [
@@ -355,6 +361,8 @@ def _render_recipe_table(breakdown_all: pd.DataFrame | None) -> str | None:
             filtered = filtered[filtered["nome_produto"].astype(str) == selected_produto].copy()
 
         pending_mask = filtered["custo_unitario_final"].eq(0.0)
+        if "custo_origem_ausente" in filtered.columns:
+            pending_mask = filtered["custo_origem_ausente"].fillna(False).astype(bool)
         pending_ids = filtered.loc[pending_mask, "id_ingrediente"].astype(str).str.strip()
         pending_ids = pending_ids[pending_ids != ""]
         itens_pendentes = int(pending_ids.nunique())
@@ -476,10 +484,13 @@ def show_production_costs() -> None:
     # ── Load recipe data once for sections 2 & 3 ─────────────────────────────
     breakdown_all = load_receitas_detalhadas_cached()
     issues_df = pd.DataFrame()
-    if not breakdown_all.empty and "custo_unitario_final" in breakdown_all.columns:
-        issues_df = breakdown_all[
-            breakdown_all["custo_unitario_final"].isna() | breakdown_all["custo_unitario_final"].eq(0.0)
-        ].copy()
+    if not breakdown_all.empty:
+        if "custo_origem_ausente" in breakdown_all.columns:
+            issues_df = breakdown_all[breakdown_all["custo_origem_ausente"].fillna(False).astype(bool)].copy()
+        elif "custo_unitario_final" in breakdown_all.columns:
+            issues_df = breakdown_all[breakdown_all["custo_unitario_final"].isna()].copy()
+        else:
+            issues_df = pd.DataFrame()
 
     n_issues = len(issues_df) if issues_df is not None and not issues_df.empty else 0
     n_breakdown = len(breakdown_all) if breakdown_all is not None and not breakdown_all.empty else 0

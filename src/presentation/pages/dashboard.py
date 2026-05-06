@@ -116,13 +116,16 @@ def _normalize_margin_percent(series: pd.Series | None) -> pd.Series:
 
 
 def _invalidate_metrics_without_cost(df: pd.DataFrame) -> pd.DataFrame:
-    """Mark profitability metrics as unknown when production cost is missing or zero."""
+    """Mark profitability metrics as unknown when source cost is missing (null lineage)."""
     if df.empty or "custo_producao_unitario" not in df.columns:
         return df
 
     out = df.copy()
-    custo_unit = _safe_num(out.get("custo_producao_unitario"), fill=None)
-    missing_cost_mask = custo_unit.isna() | custo_unit.eq(0)
+    audit_col = out.get("custo_producao_unitario_audit")
+    if audit_col is not None:
+        missing_cost_mask = _safe_num(audit_col, fill=None).isna()
+    else:
+        missing_cost_mask = _safe_num(out.get("custo_producao_unitario"), fill=None).isna()
 
     if "margem_perc" in out.columns:
         out.loc[missing_cost_mask, "margem_perc"] = np.nan
@@ -464,7 +467,7 @@ def _build_profitability_base(sales_df: pd.DataFrame | None = None) -> pd.DataFr
         base["markup"] = (base["preco_venda_unitario"] / custo_calc).replace([np.inf, -np.inf], np.nan)
 
     base["nome_produto"] = base.get("nome_produto", base["id_produto"]).fillna(base["id_produto"]).astype(str).str.strip()
-    base["item_auditoria"] = base["custo_producao_unitario"].isna() | (base["custo_producao_unitario"] == 0)
+    base["item_auditoria"] = base.get("custo_producao_unitario_audit", base["custo_producao_unitario"]).isna()
 
     keep = [
         "id_produto",

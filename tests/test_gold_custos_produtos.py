@@ -52,6 +52,7 @@ def test_build_gold_custos_produtos_computes_yield_adjusted_unit_cost_and_clean_
         "nome_ingrediente",
         "quantidade_formatada",
         "custo_unitario_final",
+        "custo_origem_ausente",
     ]
     assert gold_detalhado.index.name is None
 
@@ -63,6 +64,7 @@ def test_build_gold_custos_produtos_computes_yield_adjusted_unit_cost_and_clean_
     assert gold_detalhado.loc[0, "quantidade_formatada"] == "120 g"
     assert gold_detalhado.loc[0, "custo_unitario_final"] == 2.4
     assert gold_detalhado.loc[1, "custo_unitario_final"] == 8.0
+    assert bool(gold_detalhado.loc[0, "custo_origem_ausente"]) is True
 
     assert list(gold_agregado.columns) == [
         "id_produto",
@@ -137,6 +139,38 @@ def test_build_gold_custos_produtos_scales_grams_against_kg_material_base():
 
     assert gold_detalhado.loc[0, "custo_unitario_final"] == pytest.approx(0.1434)
     assert gold_agregado.loc[0, "custo_producao"] == pytest.approx(0.1434)
+
+
+def test_build_gold_custos_produtos_keeps_fractional_cent_value_from_decimal_calculation():
+    manual_sheets = {
+        "materia_prima": pd.DataFrame(
+            [
+                {
+                    "ingrediente_id": "ING-001",
+                    "nome_ingrediente": "Limao",
+                    "unidade": "kg",
+                    "custo_unit": "4",
+                    "rendimento_embalagem": "1",
+                },
+            ]
+        ),
+        "receitas": pd.DataFrame(
+            [
+                {"produto_id": "PROD-001", "ingrediente_id": "ING-001", "qtd": "1", "unidade": "g"},
+            ]
+        ),
+        "produtos": pd.DataFrame(
+            [
+                {"produto_id": "PROD-001", "nome": "Torta Limao"},
+            ]
+        ),
+    }
+
+    gold_agregado, gold_detalhado = build_gold_custos_produtos(manual_sheets, {})
+
+    assert gold_detalhado.loc[0, "custo_unitario_final"] == pytest.approx(0.004)
+    assert gold_agregado.loc[0, "custo_producao"] == pytest.approx(0.004)
+    assert bool(gold_detalhado.loc[0, "custo_origem_ausente"]) is True
 
 
 def test_build_gold_custos_produtos_links_receitas_by_product_name_when_id_missing():
