@@ -602,24 +602,25 @@ def _render_kpi_row(df: pd.DataFrame, revenue_override: float | None = None) -> 
         unsafe_allow_html=True,
     )
 
-    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+    row1_col1, row1_col2 = st.columns(2)
+    row2_col1, row2_col2 = st.columns(2)
 
-    col1.metric(
+    row1_col1.metric(
         label="Faturamento Total",
         value=_fmt_currency(revenue),
         help="Soma bruta de todas as vendas no período. Reflete o volume financeiro que entrou no caixa.",
     )
-    col2.metric(
+    row1_col2.metric(
         label="Margem Total (R$)",
         value=_fmt_currency(total_margin),
         help="Lucro bruto total estimado. Calculado subtraindo o custo de produção do preço de venda dos itens com receita cadastrada.",
     )
-    col3.metric(
+    row2_col1.metric(
         label="Margem Média %",
         value=_fmt_percent(avg_margin if not pd.isna(avg_margin) else 0.0),
         help="Média ponderada da lucratividade. Indica, em média, quanto de cada real vendido sobra após pagar os custos de produção.",
     )
-    col4.metric(
+    row2_col2.metric(
         label="Itens para Auditoria",
         value=f"{audit_items}",
         help="Produtos vendidos que não possuem custo calculado (receita faltando). Atenção: se este número for alto, o Lucro Total estará subestimado.",
@@ -629,33 +630,29 @@ def _render_kpi_row(df: pd.DataFrame, revenue_override: float | None = None) -> 
 def _render_scatter(df: pd.DataFrame, selected_months: list[str], available_months: list[str]) -> None:
     st.subheader(
         "Matriz de Rentabilidade",
-        help=(
-            "Quadrante Superior Direito (Estrelas): Alto volume e alta margem. São seus melhores produtos. Proteja-os!\n\n"
-            "Quadrante Inferior Direito (Vacas Leiteiras): Alto volume, mas baixa margem. Geram caixa, mas precisam de otimização de custo de produção.\n\n"
-            "Quadrante Superior Esquerdo (Dilemas): Alta margem, mas baixo volume. Ótimos candidatos para campanhas de marketing/promoção.\n\n"
-            "Quadrante Inferior Esquerdo (Problemas): Baixo volume e baixa margem. Avalie a continuidade no cardápio ou ajuste drástico de preço."
-        ),
+        help="Visualização estratégica de produtos baseada em Volume vs. Margem."
     )
+
     if df.empty:
         st.warning("⚠️ Sem dados para matriz de rentabilidade.")
         return
 
+    # 1. Preparação e Limpeza de Dados
     plot_df = df.copy()
     plot_df = plot_df[_safe_num(plot_df["qtd_vendida"], fill=0.0) > 0]
-    plot_df["margem_perc"] = _normalize_margin_percent(plot_df["margem_perc"])
-    plot_df["faturamento_item"] = _safe_num(plot_df["faturamento_item"], fill=0.0)
-    plot_df["preco_venda_unitario"] = _safe_num(plot_df["preco_venda_unitario"], fill=None)
-    plot_df["custo_producao_unitario"] = _safe_num(plot_df["custo_producao_unitario"], fill=None)
+
     if plot_df.empty:
-        st.warning("⚠️ Não há dados com volume vendido para exibir na matriz.")
+        st.warning("⚠️ Não há dados com volume vendido.")
         return
 
+    # Cálculos de Referência
     mediana_volume = float(_safe_num(plot_df["qtd_vendida"], fill=0.0).median())
     margem_alvo = 30.0
 
-    # Keep items without calculated margin visible in chart at y=0, in gray.
+    # 2. Engenharia de Visualização
     plot_df["margem_plot"] = plot_df["margem_perc"].fillna(0.0)
 
+    # Lógica de Quadrantes
     x_high = plot_df["qtd_vendida"].ge(mediana_volume)
     y_high = plot_df["margem_plot"].ge(margem_alvo)
     plot_df["quadrante"] = np.select(
@@ -663,179 +660,87 @@ def _render_scatter(df: pd.DataFrame, selected_months: list[str], available_mont
         ["ESTRELAS", "VACAS LEITEIRAS", "DILEMAS"],
         default="PROBLEMAS",
     )
-    plot_df["margem_perc_label"] = plot_df["margem_perc"].map(_fmt_percent)
-    plot_df.loc[plot_df["margem_perc"].isna(), "margem_perc_label"] = "⚠️ Auditoria Necessária"
-    plot_df["custo_vs_preco"] = (
-        plot_df["custo_producao_unitario"].map(_fmt_currency)
-        + " vs "
-        + plot_df["preco_venda_unitario"].map(_fmt_currency)
-    )
 
-    if len(plot_df) > _MAX_SCATTER_POINTS:
-        plot_df = plot_df.sort_values("faturamento_item", ascending=False).head(_MAX_SCATTER_POINTS).copy()
-        st.caption(f"Exibindo {_MAX_SCATTER_POINTS} produtos com maior faturamento para preservar responsividade do gráfico.")
-
-    missing_mask = plot_df["margem_perc"].isna()
-    missing_margin_count = int(missing_mask.sum())
-    valid_df = plot_df[~missing_mask].copy()
-    missing_df = plot_df[missing_mask].copy()
-
-    margem_min = float(valid_df["margem_perc"].min()) if not valid_df.empty else -10.0
-    margem_max = float(valid_df["margem_perc"].max()) if not valid_df.empty else 10.0
-    if margem_min == margem_max:
-        margem_min -= 1.0
-        margem_max += 1.0
+    # 3. Definição de Limites e Padding dinâmico
+    x_max = plot_df["qtd_vendida"].max()
+    y_min = min(plot_df["margem_plot"].min(), -20)
+    y_max = max(plot_df["margem_plot"].max(), 100)  # Teto para evitar outliers esmagarem o gráfico
 
     fig = go.Figure()
 
-    x_vals = _safe_num(plot_df["qtd_vendida"], fill=0.0)
-    y_vals = _safe_num(plot_df["margem_plot"], fill=0.0)
-    x_min = float(x_vals.min())
-    x_max = float(x_vals.max())
-    y_min = float(min(y_vals.min(), 0.0))
-    y_max = float(max(y_vals.max(), margem_alvo))
-    x_pad = max((x_max - x_min) * 0.05, 1.0)
-    y_pad = max((y_max - y_min) * 0.05, 5.0)
-    x_min_plot = x_min - x_pad
-    x_max_plot = x_max + x_pad
-    y_min_plot = y_min - y_pad
-    y_max_plot = y_max + y_pad
+    # 4. Background: Labels de Quadrantes como Marcas d'Água
+    # Posicionamento centralizado em cada quadrante para evitar encavalamento
+    quadrant_labels = [
+        {"x": (mediana_volume + x_max) / 2, "y": (margem_alvo + y_max) / 2, "txt": "ESTRELAS"},
+        {"x": (mediana_volume + x_max) / 2, "y": (y_min + margem_alvo) / 2, "txt": "VACAS LEITEIRAS"},
+        {"x": mediana_volume / 2, "y": (margem_alvo + y_max) / 2, "txt": "DILEMAS"},
+        {"x": mediana_volume / 2, "y": (y_min + margem_alvo) / 2, "txt": "PROBLEMAS"},
+    ]
 
-    # Shaded strategic quadrants (high transparency, below points).
-    fig.add_shape(type="rect", x0=x_min_plot, x1=mediana_volume, y0=margem_alvo, y1=y_max_plot, fillcolor=_QUADRANT_COLORS["DILEMAS"], opacity=0.12, line={"width": 0}, layer="below")
-    fig.add_shape(type="rect", x0=mediana_volume, x1=x_max_plot, y0=margem_alvo, y1=y_max_plot, fillcolor=_QUADRANT_COLORS["ESTRELAS"], opacity=0.12, line={"width": 0}, layer="below")
-    fig.add_shape(type="rect", x0=x_min_plot, x1=mediana_volume, y0=y_min_plot, y1=margem_alvo, fillcolor=_QUADRANT_COLORS["PROBLEMAS"], opacity=0.12, line={"width": 0}, layer="below")
-    fig.add_shape(type="rect", x0=mediana_volume, x1=x_max_plot, y0=y_min_plot, y1=margem_alvo, fillcolor=_QUADRANT_COLORS["VACAS_LEITEIRAS"], opacity=0.12, line={"width": 0}, layer="below")
+    for q in quadrant_labels:
+        fig.add_annotation(
+            x=q["x"], y=q["y"], text=f"<b>{q['txt']}</b>",
+            showarrow=False, font=dict(size=24, color="rgba(255, 255, 255, 0.1)"),
+            xref="x", yref="y"
+        )
 
-    # Outer-corner high-contrast labels (bold white + subtle dark background for readability).
-    x_span = x_max_plot - x_min_plot
-    y_span = y_max_plot - y_min_plot
-    x_offset = x_span * 0.02
-    y_offset = y_span * 0.03
-    label_font = {"size": 17, "color": "#F0F2F6"}
-    label_bg = "rgba(0, 0, 0, 0.35)"
+    # 5. Renderização dos Pontos (Scatter)
+    # Separando válidos de auditoria
+    mask_audit = plot_df["margem_perc"].isna()
 
-    fig.add_annotation(
-        x=x_max_plot - x_offset,
-        y=y_max_plot - y_offset,
-        xanchor="right",
-        yanchor="top",
-        text="<b>⭐ ESTRELAS</b>",
-        showarrow=False,
-        opacity=1.0,
-        font=label_font,
-        bgcolor=label_bg,
-        borderpad=4,
-    )
-    fig.add_annotation(
-        x=x_max_plot - x_offset,
-        y=y_min_plot + y_offset,
-        xanchor="right",
-        yanchor="bottom",
-        text="<b>🐄 VACAS LEITEIRAS</b>",
-        showarrow=False,
-        opacity=1.0,
-        font=label_font,
-        bgcolor=label_bg,
-        borderpad=4,
-    )
-    fig.add_annotation(
-        x=x_min_plot + x_offset,
-        y=y_max_plot - y_offset,
-        xanchor="left",
-        yanchor="top",
-        text="<b>❓ DILEMAS</b>",
-        showarrow=False,
-        opacity=1.0,
-        font=label_font,
-        bgcolor=label_bg,
-        borderpad=4,
-    )
-    fig.add_annotation(
-        x=x_min_plot + x_offset,
-        y=y_min_plot + y_offset,
-        xanchor="left",
-        yanchor="bottom",
-        text="<b>📉 PROBLEMAS</b>",
-        showarrow=False,
-        opacity=1.0,
-        font=label_font,
-        bgcolor=label_bg,
-        borderpad=4,
-    )
-
+    # Plot de Itens com Margem (Bolhas Coloridas)
+    valid_df = plot_df[~mask_audit]
     if not valid_df.empty:
-        scatter_cls = go.Scattergl if len(valid_df) > 500 else go.Scatter
-        fig.add_trace(
-            scatter_cls(
-                x=valid_df["qtd_vendida"],
-                y=valid_df["margem_plot"],
-                mode="markers",
-                name="Margem calculada",
-                customdata=valid_df[["nome_produto", "margem_perc_label", "custo_vs_preco", "quadrante"]].to_numpy(),
-                marker={
-                    "size": np.clip(np.sqrt(valid_df["faturamento_item"].fillna(0.0)) * 1.2, 10, 48),
-                    "color": valid_df["margem_perc"],
-                    "colorscale": _BRAND_MARGIN_COLORSCALE,
-                    "cmin": margem_min,
-                    "cmax": margem_max,
-                    "line": {"width": 0.6, "color": "#243347"},
-                    "colorbar": {"title": "Margem %"},
-                },
-                hovertemplate=(
-                    "<b>%{customdata[0]}</b><br>"
-                    "Volume de Vendas: %{x:,.0f}<br>"
-                    "Margem % Real: %{customdata[1]}<br>"
-                    "Custo Unitário vs Preço de Venda: %{customdata[2]}<br>"
-                    "Quadrante: %{customdata[3]}<extra></extra>"
-                ),
-            )
-        )
+        fig.add_trace(go.Scatter(
+            x=valid_df["qtd_vendida"],
+            y=valid_df["margem_plot"],
+            mode="markers",
+            name="Margem Calculada",
+            marker=dict(
+                size=valid_df["faturamento_item"],
+                sizemode='area',
+                sizeref=2.0 * max(valid_df["faturamento_item"]) / (45 ** 2),  # Max size 45
+                sizemin=5,
+                color=valid_df["margem_perc"],
+                colorscale=_BRAND_MARGIN_COLORSCALE,
+                showscale=True,
+                colorbar=dict(title="Margem %", thickness=15, x=1.02),
+                line=dict(width=0.5, color="#1e293b")
+            ),
+            hovertemplate="<b>%{customdata[0]}</b><br>Volume: %{x}<br>Margem: %{y:.1f}%<extra></extra>",
+            customdata=valid_df[["nome_produto"]].values
+        ))
 
-    if not missing_df.empty:
-        scatter_cls = go.Scattergl if len(missing_df) > 500 else go.Scatter
-        fig.add_trace(
-            scatter_cls(
-                x=missing_df["qtd_vendida"],
-                y=missing_df["margem_plot"],
-                mode="markers",
-                name="Sem custo calculado",
-                customdata=missing_df[["nome_produto", "margem_perc_label", "custo_vs_preco", "quadrante"]].to_numpy(),
-                marker={
-                    "size": np.clip(np.sqrt(missing_df["faturamento_item"].fillna(0.0)) * 1.2, 10, 48),
-                    "color": "#555555",
-                    "symbol": "diamond",
-                    "line": {"width": 0.6, "color": "#243347"},
-                },
-                hovertemplate=(
-                    "<b>%{customdata[0]}</b><br>"
-                    "Volume de Vendas: %{x:,.0f}<br>"
-                    "Margem % Real: %{customdata[1]}<br>"
-                    "Custo Unitário vs Preço de Venda: %{customdata[2]}<br>"
-                    "Quadrante: %{customdata[3]}<extra></extra>"
-                ),
-            )
-        )
+    # Plot de Itens para Auditoria (Diamantes Cinzas com Jitter para evitar sobreposição total)
+    audit_df = plot_df[mask_audit].copy()
+    if not audit_df.empty:
+        # Adiciona um pequeno ruído no Y (±2%) para dispersar os diamantes na linha 0
+        jitter = np.random.uniform(-2, 2, size=len(audit_df))
+        fig.add_trace(go.Scatter(
+            x=audit_df["qtd_vendida"],
+            y=audit_df["margem_plot"] + jitter,
+            mode="markers",
+            name="Auditoria Necessária",
+            marker=dict(symbol="diamond", size=12, color="#64748b", line=dict(width=1, color="white")),
+            hovertemplate="<b>%{customdata[0]}</b><br>Volume: %{x}<br>Sem Custo Cadastrado<extra></extra>",
+            customdata=audit_df[["nome_produto"]].values
+        ))
 
-    fig.add_vline(x=mediana_volume, line_dash="dash", line_color="#8fa3bf", annotation_text="Mediana de Volume")
-    fig.add_hline(y=margem_alvo, line_dash="dash", line_color="#2ca02c", annotation_text="Margem Alvo 30%")
+    # 6. Layout e Eixos
+    fig.add_vline(x=mediana_volume, line_dash="dot", line_color="rgba(255,255,255,0.3)")
+    fig.add_hline(y=margem_alvo, line_dash="dot", line_color="rgba(46, 204, 113, 0.4)")
 
     fig.update_layout(
-        title=f"Quantidade Vendida x Margem % {_period_title_suffix(selected_months, available_months)}",
-        xaxis_title="Quantidade Vendida",
-        yaxis_title="Margem %",
-        legend_title_text="Status",
+        template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font={"color": "#e5e7eb"},
-        margin={"l": 8, "r": 8, "t": 40, "b": 8},
+        margin=dict(l=20, r=80, t=40, b=20),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        xaxis=dict(title="Vendas", showgrid=False),
+        yaxis=dict(title="Margem %", showgrid=True, gridcolor="rgba(255,255,255,0.05)", range=[y_min, y_max])
     )
-    fig.update_xaxes(range=[x_min_plot, x_max_plot], showgrid=False, zeroline=False)
-    fig.update_yaxes(range=[y_min_plot, y_max_plot], showgrid=False, zeroline=False)
-    _render_plot(fig)
-    if missing_margin_count > 0:
-        st.caption(f"{missing_margin_count} item(ns) com custo/margem não calculados foram exibidos em cinza com Margem 0 apenas para visualização estratégica.")
 
+    _render_plot(fig)
 
 def _render_revenue_pareto(df: pd.DataFrame) -> None:
     st.subheader("Análise de Pareto da Receita")
