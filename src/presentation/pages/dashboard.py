@@ -259,6 +259,68 @@ def _compute_revenue_total_from_sales(
     return float(_safe_num(df.get(revenue_col), fill=0.0).sum())
 
 
+def _build_sales_agg_from_sales_df(sales_df: pd.DataFrame | None) -> pd.DataFrame:
+    """Build product-level sales aggregation from the shared cached sales dataframe."""
+    if sales_df is None or sales_df.empty:
+        logger.info("DEBUG RENTABILIDADE: sales_df compartilhado vazio/None na agregacao")
+        return pd.DataFrame()
+
+    df = sales_df.copy()
+    logger.info("DEBUG RENTABILIDADE: sales_df bruto antes da agregacao linhas=%d", len(df))
+
+    if "data" in df.columns:
+        df["data"] = pd.to_datetime(df["data"], errors="coerce")
+        nat_count = int(df["data"].isna().sum())
+        logger.info(
+            "DEBUG RENTABILIDADE: dtype data apos cast=%s nat_data=%d",
+            df["data"].dtype,
+            nat_count,
+        )
+
+    qty_col = "qtd" if "qtd" in df.columns else ("quantidade" if "quantidade" in df.columns else None)
+    revenue_col = (
+        "faturamento_liquido"
+        if "faturamento_liquido" in df.columns
+        else ("valor_total" if "valor_total" in df.columns else ("valor_venda" if "valor_venda" in df.columns else None))
+    )
+    if qty_col is None or revenue_col is None:
+        logger.warning(
+            "DEBUG RENTABILIDADE: sem colunas obrigatorias para agregacao qty=%s revenue=%s",
+            qty_col,
+            revenue_col,
+        )
+        return pd.DataFrame()
+
+    key_col = next((c for c in _PRODUCT_KEY_CANDIDATES if c in df.columns), None)
+    if key_col is None:
+        logger.warning("DEBUG RENTABILIDADE: sales_df sem coluna de chave de produto. candidatos=%s", _PRODUCT_KEY_CANDIDATES)
+        return pd.DataFrame()
+    logger.info("DEBUG RENTABILIDADE: chave de produto selecionada na origem=%s", key_col)
+
+    df["produto_id"] = _normalize_join_key(df.get(key_col))
+
+    before_drop = len(df)
+    df = df.loc[df["produto_id"].notna()].copy()
+    logger.info(
+        "DEBUG RENTABILIDADE: filtro produto_id.notna() before=%d after=%d",
+        before_drop,
+        len(df),
+    )
+    if df.empty:
+        return pd.DataFrame()
+
+    if "produto" not in df.columns:
+        df["produto"] = df["produto_id"].astype(str)
+
+    agg_produto = (
+        df.groupby(["produto_id", "produto"], as_index=False, dropna=False)
+        .agg(qtd_vendida=(qty_col, "sum"), faturamento_liquido=(revenue_col, "sum"))
+        .rename(columns={"produto_id": "id_produto", "produto": "nome_produto"})
+    )
+    logger.info("DEBUG RENTABILIDADE: agg_produto derivado do sales_df linhas=%d", len(agg_produto))
+    return agg_produto
+
+
 def _apply_month_filter(
     profitability_df: pd.DataFrame,
     sales_df: pd.DataFrame | None,
