@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from src.presentation.pages.dashboard import (
+    _compute_revenue_total_from_sales,
     _invalidate_metrics_without_cost,
     _normalize_margin_percent,
     _fmt_currency,
@@ -274,5 +275,31 @@ def test_build_profitability_base_marks_mapping_error_when_keys_do_not_intersect
 
     assert "_mapping_error" in result.columns
     assert bool(result["_mapping_error"].iloc[0]) is True
+
+
+def test_compute_revenue_total_from_sales_uses_filtered_sales_scope() -> None:
+    sales_df = pd.DataFrame(
+        {
+            "mes_referencia": ["2026-01", "2026-02", "2026-02"],
+            "faturamento_liquido": [100.0, 150.0, 50.0],
+        }
+    )
+
+    result = _compute_revenue_total_from_sales(sales_df, ["2026-02"])
+
+    assert result == 200.0
+
+
+def test_compute_revenue_total_from_sales_falls_back_to_valor_total() -> None:
+    sales_df = pd.DataFrame(
+        {
+            "mes_referencia": ["2026-01", "2026-01"],
+            "valor_total": [12.5, 7.5],
+        }
+    )
+
+    result = _compute_revenue_total_from_sales(sales_df, ["2026-01"])
+
+    assert result == 20.0
 
 

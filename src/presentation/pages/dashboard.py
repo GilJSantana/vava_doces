@@ -233,6 +233,32 @@ def _build_sales_agg_from_sales_df(sales_df: pd.DataFrame | None) -> pd.DataFram
     return agg_produto
 
 
+def _compute_revenue_total_from_sales(
+    sales_df: pd.DataFrame | None,
+    selected_months: list[str] | None,
+) -> float | None:
+    """Compute dashboard revenue KPI from transactional sales source-of-truth."""
+    if sales_df is None or sales_df.empty:
+        return None
+    df = sales_df.copy()
+    if selected_months is not None:
+        if not selected_months:
+            return 0.0
+        if "mes_referencia" in df.columns:
+            df = df[df["mes_referencia"].astype(str).isin(selected_months)].copy()
+    if df.empty:
+        return 0.0
+
+    revenue_col = (
+        "faturamento_liquido"
+        if "faturamento_liquido" in df.columns
+        else ("valor_total" if "valor_total" in df.columns else ("valor_venda" if "valor_venda" in df.columns else None))
+    )
+    if revenue_col is None:
+        return None
+    return float(_safe_num(df.get(revenue_col), fill=0.0).sum())
+
+
 def _apply_month_filter(
     profitability_df: pd.DataFrame,
     sales_df: pd.DataFrame | None,
@@ -493,8 +519,8 @@ def _build_profitability_base(sales_df: pd.DataFrame | None = None) -> pd.DataFr
     return base[keep].reset_index(drop=True)
 
 
-def _render_kpi_row(df: pd.DataFrame) -> None:
-    revenue = float(_safe_num(df.get("faturamento_item"), fill=0.0).sum())
+def _render_kpi_row(df: pd.DataFrame, revenue_override: float | None = None) -> None:
+    revenue = revenue_override if revenue_override is not None else float(_safe_num(df.get("faturamento_item"), fill=0.0).sum())
     total_margin = float(_safe_num(df.get("margem_valor"), fill=0.0).sum())
     avg_margin = float(_safe_num(df.get("margem_perc"), fill=None).dropna().mean()) if not df.empty else 0.0
     audit_items = int(df[df.get("item_auditoria", pd.Series(dtype=bool)).fillna(False)]["id_produto"].nunique()) if not df.empty else 0
@@ -965,8 +991,10 @@ def show_dashboard() -> None:
         st.warning("⚠️ O filtro de margem não retornou produtos. Ajuste a faixa na barra lateral.")
         return
 
+    revenue_kpi = _compute_revenue_total_from_sales(sales_df, selected_months)
+
     with st.container(border=True):
-        _render_kpi_row(filtered_df)
+        _render_kpi_row(filtered_df, revenue_override=revenue_kpi)
 
     with st.container(border=True):
         _render_scatter(filtered_df, selected_months, available_months)
