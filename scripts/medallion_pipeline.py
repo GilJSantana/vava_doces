@@ -638,6 +638,20 @@ def normalize_manual_sheets_with_audit(
         rec_ing_key = receitas["ingrediente_id"].astype(str).str.strip().str.lower()
         receitas = receitas[~rec_ing_key.isin({"", "nan", "none", "nat"})].copy()
 
+        # Deduplicate receitas by (produto_id, ingrediente_id, custo_do_ingrediente):
+        # Keep first names, sum qtd. This handles case-insensitive ID dedup while preserving
+        # distinct cost lines (e.g., ING-005 for PROD-007 with different custo values).
+        receitas = (
+            receitas.groupby(["produto_id", "ingrediente_id", "custo_do_ingrediente"], as_index=False, dropna=False)
+            .agg(
+                nome_produto=("nome_produto", _first_non_empty),
+                nome_ingrediente=("nome_ingrediente", _first_non_empty),
+                qtd=("qtd", lambda s: s.sum(min_count=1) if s.notna().any() else np.nan),
+                unidade=("unidade", _first_non_empty),
+            )
+            .reset_index(drop=True)
+        )
+
         for col in ("produto_id", "nome_produto", "ingrediente_id", "nome_ingrediente", "unidade"):
             receitas[col] = receitas[col].astype("string")
     else:
@@ -647,7 +661,7 @@ def normalize_manual_sheets_with_audit(
         "rows_in": receitas_rows_in,
         "rows_out": int(len(receitas)),
         "rows_removed": max(receitas_rows_in - int(len(receitas)), 0),
-        "dedup_key": [],
+        "dedup_key": ["produto_id", "ingrediente_id", "custo_do_ingrediente"],
     }
 
     return normalized, audit
@@ -1548,6 +1562,84 @@ def build_agg_vendas_produto(fato_vendas: pd.DataFrame, dim_produto: pd.DataFram
     return grouped.sort_values("faturamento_liquido", ascending=False).reset_index(drop=True)
 
 
+def build_gold_vendas_mensais(
+    fato_vendas: pd.DataFrame,
+    dim_tempo: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build monthly aggregated Gold table for seasonality analysis.
+
+    Groups sales by calendar month (truncating date to month-start) and computes
+    total orders (``total_pedidos``) and total revenue (``faturamento_total``).
+
+    The ``mes_ano`` column is stored as ``datetime64[ns]`` so that Parquet round-trips
+    and chart ordering are always chronological — e.g. January comes before April.
+
+    Args:
+        fato_vendas: Fact table produced by :func:`build_fato_vendas`.
+        dim_tempo:   Time dimension produced by :func:`build_dim_tempo`.
+
+    Returns:
+        DataFrame with columns:
+            mes_ano          (datetime64[ns]) — first day of each month
+            mes_ano_label    (str, YYYY-MM)   — human-readable month label
+            total_pedidos    (int64)          — count of line-item rows
+            faturamento_total (float64)       — sum of gross revenue
+    """
+    _empty = pd.DataFrame(
+        columns=["mes_ano", "mes_ano_label", "total_pedidos", "faturamento_total"]
+    ).astype(
+        {
+            "mes_ano": "datetime64[ns]",
+            "mes_ano_label": "object",
+            "total_pedidos": "int64",
+            "faturamento_total": "float64",
+        }
+    )
+
+    if fato_vendas.empty or dim_tempo.empty:
+        return _empty
+
+    # --- Join fato_vendas with dim_tempo to recover the date column ---
+    tempo = dim_tempo[["data_id", "data"]].copy()
+    # Ensure datetime64[ns] in the Silver → Gold date chain
+    tempo["data"] = pd.to_datetime(tempo["data"], errors="coerce")
+
+    merged = fato_vendas.merge(tempo, on="data_id", how="left")
+    merged["data"] = pd.to_datetime(merged["data"], errors="coerce")
+
+    # Truncate to calendar month → stored as datetime64[ns] for correct ordering
+    merged["mes_ano"] = merged["data"].dt.to_period("M").dt.to_timestamp()
+
+    # Revenue preference: faturamento_bruto > faturamento_liquido > valor_total
+    revenue_col = next(
+        (c for c in ("faturamento_bruto", "faturamento_liquido", "valor_total") if c in merged.columns),
+        None,
+    )
+    if revenue_col is None:
+        merged["_revenue"] = 0.0
+        revenue_col = "_revenue"
+
+    grouped = (
+        merged.groupby("mes_ano", as_index=False)
+        .agg(
+            total_pedidos=("venda_id", "count"),
+            faturamento_total=(revenue_col, "sum"),
+        )
+    )
+
+    grouped["mes_ano"] = pd.to_datetime(grouped["mes_ano"])  # guarantee dtype after groupby
+    grouped["mes_ano_label"] = grouped["mes_ano"].dt.strftime("%Y-%m")
+    grouped["total_pedidos"] = grouped["total_pedidos"].astype("int64")
+    faturamento = pd.to_numeric(grouped["faturamento_total"], errors="coerce")
+    grouped["faturamento_total"] = faturamento.fillna(0.0).astype("float64")
+
+    return (
+        grouped[["mes_ano", "mes_ano_label", "total_pedidos", "faturamento_total"]]
+        .sort_values("mes_ano")
+        .reset_index(drop=True)
+    )
+
+
 def build_agg_vendas_tempo(fato_vendas: pd.DataFrame, dim_tempo: pd.DataFrame) -> pd.DataFrame:
     if fato_vendas.empty or dim_tempo.empty:
         return pd.DataFrame()
@@ -2029,15 +2121,17 @@ class MedallionPipeline:
         agg_canal = build_agg_vendas_canal(self.fato_vendas, self.dim_canal)
         agg_produto = build_agg_vendas_produto(self.fato_vendas, self.dim_produto)
         agg_tempo = build_agg_vendas_tempo(self.fato_vendas, self.dim_tempo)
+        gold_vendas_mensais = build_gold_vendas_mensais(self.fato_vendas, self.dim_tempo)
         self.gold_custos_produtos, self.receitas_detalhadas = build_gold_custos_produtos(manual_sheets, manual_cost_map)
         self._preserve_existing_cost_gold_if_needed(sync_state, source_audit)
         logger.info(
-            "[AUDIT][GOLD] fato=%d agg_dia=%d agg_canal=%d agg_produto=%d agg_tempo=%d custos=%d receitas_detalhadas=%d",
+            "[AUDIT][GOLD] fato=%d agg_dia=%d agg_canal=%d agg_produto=%d agg_tempo=%d gold_vendas_mensais=%d custos=%d receitas_detalhadas=%d",
             int(len(self.fato_vendas)),
             int(len(agg_dia)),
             int(len(agg_canal)),
             int(len(agg_produto)),
             int(len(agg_tempo)),
+            int(len(gold_vendas_mensais)),
             int(len(self.gold_custos_produtos)) if self.gold_custos_produtos is not None else 0,
             int(len(self.receitas_detalhadas)) if self.receitas_detalhadas is not None else 0,
         )
@@ -2062,6 +2156,7 @@ class MedallionPipeline:
             "agg_vendas_canal.parquet": agg_canal,
             "agg_vendas_produto.parquet": agg_produto,
             "agg_vendas_tempo.parquet": agg_tempo,
+            "gold_vendas_mensais.parquet": gold_vendas_mensais,
             "custos_producao_agregado.parquet": self.gold_custos_produtos if self.gold_custos_produtos is not None else pd.DataFrame(),
             "custos_producao.parquet": self.gold_custos_produtos if self.gold_custos_produtos is not None else pd.DataFrame(),
             "receitas_detalhadas.parquet": self.receitas_detalhadas if self.receitas_detalhadas is not None else pd.DataFrame(),

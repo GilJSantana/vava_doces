@@ -831,6 +831,63 @@ def _ptbr_percent_style(value: float | int | None) -> str:
     return _fmt_percent(float(value))
 
 
+def _render_sazonalidade_mensal() -> None:
+    """Render monthly seasonality bar chart from pre-aggregated gold_vendas_mensais.parquet.
+
+    Reads the pre-built Gold aggregate so rendering is instantaneous even as the
+    historical base grows.  The ``mes_ano`` column is stored as ``datetime64[ns]``,
+    guaranteeing chronological order (January before April, not alphabetical order).
+    """
+    st.subheader(
+        "📅 Sazonalidade Mensal",
+        help="Evolução mensal do número de pedidos. Dados pré-agregados na camada Gold para renderização instantânea.",
+    )
+
+    df_mensal = load_parquet_from_drive("gold_vendas_mensais.parquet")
+
+    if df_mensal is None or df_mensal.empty:
+        st.info("ℹ️ Dados de sazonalidade ainda não disponíveis. Execute o pipeline para gerar `gold_vendas_mensais.parquet`.")
+        return
+
+    # Ensure datetime column is properly typed for chronological sorting
+    if "mes_ano" in df_mensal.columns:
+        df_mensal["mes_ano"] = pd.to_datetime(df_mensal["mes_ano"], errors="coerce")
+        df_mensal = df_mensal.sort_values("mes_ano").reset_index(drop=True)
+
+    # Use the readable label for X axis; fall back to mes_ano if label column missing
+    if "mes_ano_label" in df_mensal.columns:
+        x_labels = df_mensal["mes_ano_label"].astype(str).tolist()
+    elif "mes_ano" in df_mensal.columns:
+        x_labels = df_mensal["mes_ano"].dt.strftime("%Y-%m").tolist()
+    else:
+        st.warning("⚠️ Coluna de mês/ano não encontrada no arquivo de sazonalidade.")
+        return
+
+    if "total_pedidos" not in df_mensal.columns:
+        st.warning("⚠️ Coluna `total_pedidos` não encontrada em `gold_vendas_mensais.parquet`.")
+        return
+
+    # Build a DataFrame indexed by the month label for st.bar_chart / st.area_chart
+    chart_df = pd.DataFrame(
+        {"Quantidade de Vendas": df_mensal["total_pedidos"].astype(int).tolist()},
+        index=x_labels,
+    )
+
+    st.bar_chart(chart_df, color="#4f83cc")
+
+    # Optional: compact metric row below the chart
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Meses Analisados", len(df_mensal))
+    with col2:
+        peak_idx = int(df_mensal["total_pedidos"].idxmax()) if not df_mensal.empty else 0
+        peak_label = x_labels[peak_idx] if x_labels else "—"
+        st.metric("Mês de Pico", peak_label)
+    with col3:
+        avg_orders = float(df_mensal["total_pedidos"].mean()) if not df_mensal.empty else 0.0
+        st.metric("Média Mensal de Vendas", f"{avg_orders:.0f}")
+
+
 def _render_decision_table(df: pd.DataFrame) -> None:
     st.subheader("Tabela de Decisão e Alertas")
     st.markdown(
@@ -968,6 +1025,9 @@ def show_dashboard() -> None:
 
     with st.container(border=True):
         _render_revenue_pareto(filtered_df)
+
+    with st.container(border=True):
+        _render_sazonalidade_mensal()
 
     with st.container(border=True):
         _render_decision_table(filtered_df)
