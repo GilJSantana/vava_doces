@@ -156,7 +156,7 @@ def show_faturamento() -> None:
         with c3:
             lista_clientes = sorted(df_base["cliente"].unique().tolist())
             clientes_selecionados = st.multiselect(
-                "Clientes", options=lista_clientes, placeholder="Todos os clientes"
+                "Plataformas", options=lista_clientes, placeholder="Todas as plataformas"
             )
 
         meses_disponiveis = sorted(
@@ -184,7 +184,8 @@ def show_faturamento() -> None:
 
     st.markdown("---")
     st.markdown(
-        f"### Total Filtrado: **{format_brl(faturamento_total)}** ({total_registros} registros)"
+        f"### Faturamento: **{format_brl(faturamento_total)}**\n "
+        f"#### Número de Vendas: {total_registros}"
     )
     base_label = "Valor Bruto" if valor_base == "valor_bruto" else "Valor Total"
     st.caption(f"Base do cálculo do total: {base_label}")

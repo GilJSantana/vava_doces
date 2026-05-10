@@ -239,7 +239,9 @@ def test_build_gold_custos_produtos_filters_out_catalog_products_without_receita
     assert len(gold_detalhado) == 1
 
 
-def test_build_gold_custos_produtos_keeps_duplicate_recipe_lines_for_same_product_and_ingredient():
+def test_build_gold_custos_produtos_deduplicates_case_insensitive_recipe_ids():
+    """Test that recipes with case-insensitive IDs and no cost difference are deduplicated
+    and qtd is summed (60+40=100) during normalization, reducing to 1 Gold detail line."""
     manual_sheets = {
         "materia_prima": pd.DataFrame(
             [
@@ -267,14 +269,13 @@ def test_build_gold_custos_produtos_keeps_duplicate_recipe_lines_for_same_produc
 
     gold_agregado, gold_detalhado = build_gold_custos_produtos(manual_sheets, {})
 
-    assert len(gold_detalhado) == 2
+    # After normalization deduplication: 2 input lines → 1 deduplicated line with qtd=100
+    assert len(gold_detalhado) == 1
     assert gold_detalhado.loc[0, "id_produto"] == "PROD-001"
     assert gold_detalhado.loc[0, "id_ingrediente"] == "ING-001"
-    assert gold_detalhado.loc[0, "quantidade_formatada"] == "60 g"
-    assert gold_detalhado.loc[1, "quantidade_formatada"] == "40 g"
-    assert gold_detalhado.loc[0, "custo_unitario_final"] == pytest.approx(1.2)
-    assert gold_detalhado.loc[1, "custo_unitario_final"] == pytest.approx(0.8)
-    assert gold_agregado.loc[0, "qtd_ingredientes"] == 2
+    assert gold_detalhado.loc[0, "quantidade_formatada"] == "100 g"
+    assert gold_detalhado.loc[0, "custo_unitario_final"] == pytest.approx(2.0)
+    assert gold_agregado.loc[0, "qtd_ingredientes"] == 1
     assert gold_agregado.loc[0, "custo_producao"] == pytest.approx(2.0)
 
 
