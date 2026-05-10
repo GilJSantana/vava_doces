@@ -832,15 +832,10 @@ def _ptbr_percent_style(value: float | int | None) -> str:
 
 
 def _render_sazonalidade_mensal() -> None:
-    """Render monthly seasonality bar chart from pre-aggregated gold_vendas_mensais.parquet.
-
-    Reads the pre-built Gold aggregate so rendering is instantaneous even as the
-    historical base grows.  The ``mes_ano`` column is stored as ``datetime64[ns]``,
-    guaranteeing chronological order (January before April, not alphabetical order).
-    """
+    """Render monthly seasonality with MoM + moving average and optional multi-year views."""
     st.subheader(
         "📅 Sazonalidade Mensal",
-        help="Evolução mensal do número de pedidos. Dados pré-agregados na camada Gold para renderização instantânea.",
+        help="Evolução mensal de vendas com análise de tendências e sazonalidade.",
     )
 
     df_mensal = load_parquet_from_drive("gold_vendas_mensais.parquet")
@@ -867,25 +862,168 @@ def _render_sazonalidade_mensal() -> None:
         st.warning("⚠️ Coluna `total_pedidos` não encontrada em `gold_vendas_mensais.parquet`.")
         return
 
-    # Build a DataFrame indexed by the month label for st.bar_chart / st.area_chart
-    chart_df = pd.DataFrame(
-        {"Quantidade de Vendas": df_mensal["total_pedidos"].astype(int).tolist()},
-        index=x_labels,
+    # Prepare data for visualization
+    vendas = pd.to_numeric(df_mensal["total_pedidos"], errors="coerce").fillna(0.0).astype(float).values
+
+    # Calculate 3-month moving average
+    window = 3
+    moving_avg = pd.Series(vendas).rolling(window=window, center=False).mean().values
+
+    # Create interactive chart with bars and moving average line using Plotly
+    fig = go.Figure()
+
+    # Add bar chart
+    fig.add_trace(go.Bar(
+        x=x_labels,
+        y=vendas,
+        name="Vendas Mensais",
+        marker=dict(color="#4f83cc"),
+        hovertemplate="<b>%{x}</b><br>Vendas: %{y:.0f}<extra></extra>"
+    ))
+
+    # Add moving average line
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=moving_avg,
+        name=f"Média Móvel ({window} meses)",
+        mode='lines',
+        line=dict(color="#f5a623", width=3),
+        hovertemplate="<b>%{x}</b><br>MA({window}): %{y:.0f}<extra></extra>"
+    ))
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        hovermode="x unified",
+        height=400,
+        margin=dict(l=20, r=20, t=40, b=20),
+        xaxis=dict(title="Período"),
+        yaxis=dict(title="Quantidade de Vendas", showgrid=True, gridcolor="rgba(255,255,255,0.05)")
     )
 
-    st.bar_chart(chart_df, color="#4f83cc")
+    _render_plot(fig)
 
-    # Optional: compact metric row below the chart
-    col1, col2, col3 = st.columns(3)
+    # Calculate MoM (Month-on-Month) variation for peak month
+    peak_idx = int(np.argmax(vendas)) if len(vendas) else 0
+    peak_label = x_labels[peak_idx] if 0 <= peak_idx < len(x_labels) else "—"
+    peak_value = float(vendas[peak_idx]) if 0 <= peak_idx < len(vendas) else 0.0
+
+    # MoM: compare peak month to the immediately previous month.
+    mom_pct = "—"
+    if peak_idx > 0:
+        prev_value = float(vendas[peak_idx - 1])
+        if prev_value > 0:
+            mom_pct = f"{((peak_value - prev_value) / prev_value * 100):+.1f}%"
+
+    monthly_avg = float(np.mean(vendas)) if len(vendas) else 0.0
+
+    # Metrics row
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Meses Analisados", len(df_mensal))
     with col2:
-        peak_idx = int(df_mensal["total_pedidos"].idxmax()) if not df_mensal.empty else 0
-        peak_label = x_labels[peak_idx] if x_labels else "—"
         st.metric("Mês de Pico", peak_label)
     with col3:
-        avg_orders = float(df_mensal["total_pedidos"].mean()) if not df_mensal.empty else 0.0
-        st.metric("Média Mensal de Vendas", f"{avg_orders:.0f}")
+        st.metric("Pico vs. Mês Anterior", mom_pct, help="Month-on-Month (MoM) variation")
+    with col4:
+        st.metric("Média Mensal de Vendas", f"{monthly_avg:.0f}")
+
+    unique_years = int(df_mensal["mes_ano"].dt.year.nunique()) if "mes_ano" in df_mensal.columns else 0
+    if unique_years < 2:
+        st.caption(
+            "Comparação Ano-a-Ano (YoY) e variabilidade sazonal por mês serão exibidas automaticamente "
+            "quando houver pelo menos 2 anos de histórico."
+        )
+        return
+
+    # Year-over-Year comparison (only when data spans multiple years)
+    st.markdown("---")
+    st.markdown("#### 📈 Comparação Ano-a-Ano (YoY)")
+
+    if "mes_ano" in df_mensal.columns and len(df_mensal) > 12:
+        # Extract year and month for pivot
+        df_mensal_copy = df_mensal.copy()
+        df_mensal_copy["year"] = df_mensal_copy["mes_ano"].dt.year
+        df_mensal_copy["month"] = df_mensal_copy["mes_ano"].dt.month
+        df_mensal_copy["month_name"] = df_mensal_copy["mes_ano"].dt.strftime("%b")  # Jan, Feb, etc.
+        
+        # Create pivot table: months as rows, years as columns
+        df_yoy = df_mensal_copy.pivot_table(
+            index="month_name",
+            columns="year",
+            values="total_pedidos",
+            aggfunc="sum"
+        )
+        
+        # Reorder to calendar order
+        month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        df_yoy = df_yoy.reindex([m for m in month_order if m in df_yoy.index])
+        
+        if not df_yoy.empty:
+            # Create YoY line chart
+            fig_yoy = go.Figure()
+            
+            for year in df_yoy.columns:
+                fig_yoy.add_trace(go.Scatter(
+                    x=df_yoy.index,
+                    y=df_yoy[year],
+                    mode='lines+markers',
+                    name=str(year),
+                    hovertemplate="<b>%{x} (%{fullData.name})</b><br>Vendas: %{y:.0f}<extra></extra>"
+                ))
+            
+            fig_yoy.update_layout(
+                title="Comparação de Padrões Mensais por Ano",
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                hovermode="x unified",
+                height=400,
+                margin=dict(l=20, r=20, t=60, b=20),
+                xaxis=dict(title="Mês"),
+                yaxis=dict(title="Quantidade de Vendas", showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            
+            _render_plot(fig_yoy)
+        else:
+            st.info("ℹ️ Dados insuficientes para comparação YoY.")
+    # Box Plot for seasonal patterns (if multiple years available)
+    st.markdown("---")
+    st.markdown("#### 📊 Variabilidade Sazonal por Mês")
+
+    if "mes_ano" in df_mensal.columns and len(df_mensal) > 12:
+        df_mensal_copy = df_mensal.copy()
+        df_mensal_copy["month_name"] = df_mensal_copy["mes_ano"].dt.strftime("%b")
+        
+        # Create box plot
+        fig_box = go.Figure()
+        
+        month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        for month in month_order:
+            month_data = df_mensal_copy[df_mensal_copy["month_name"] == month]["total_pedidos"]
+            if not month_data.empty:
+                fig_box.add_trace(go.Box(
+                    y=month_data,
+                    name=month,
+                    boxmean='sd',
+                    hovertemplate="<b>%{fullData.name}</b><br>Vendas: %{y:.0f}<extra></extra>"
+                ))
+        
+        fig_box.update_layout(
+            title="Distribuição de Vendas por Mês (Todos os Anos)",
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=400,
+            margin=dict(l=20, r=20, t=60, b=20),
+            xaxis=dict(title="Mês"),
+            yaxis=dict(title="Quantidade de Vendas", showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+            showlegend=False
+        )
+        
+        _render_plot(fig_box)
 
 
 def _render_decision_table(df: pd.DataFrame) -> None:
