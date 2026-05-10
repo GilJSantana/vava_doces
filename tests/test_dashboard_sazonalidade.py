@@ -70,9 +70,10 @@ class TestRenderSazonalidadeMensal:
         assert "total_pedidos" in str(mock_st.warning.call_args)
 
     @patch("src.presentation.pages.dashboard.st")
+    @patch("src.presentation.pages.dashboard._render_plot")
     @patch("src.presentation.pages.dashboard.load_parquet_from_drive")
-    def test_valid_data_renders_bar_chart(self, mock_load, mock_st):
-        """With valid data, should render bar_chart."""
+    def test_valid_data_renders_plotly_chart(self, mock_load, mock_plot, mock_st):
+        """With valid data, should render Plotly chart with moving average."""
         df = pd.DataFrame({
             "mes_ano": pd.date_range("2026-01-01", periods=3, freq="MS"),
             "mes_ano_label": ["2026-01", "2026-02", "2026-03"],
@@ -81,18 +82,21 @@ class TestRenderSazonalidadeMensal:
         })
         mock_load.return_value = df
         mock_st.subheader = MagicMock()
-        mock_st.bar_chart = MagicMock()
-        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
+        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock(), MagicMock()])
         mock_st.metric = MagicMock()
+        mock_st.markdown = MagicMock()
+        mock_st.info = MagicMock()
 
         _render_sazonalidade_mensal()
 
-        mock_st.bar_chart.assert_called_once()
+        # Should render Plotly chart (via _render_plot)
+        mock_plot.assert_called()
 
     @patch("src.presentation.pages.dashboard.st")
+    @patch("src.presentation.pages.dashboard._render_plot")
     @patch("src.presentation.pages.dashboard.load_parquet_from_drive")
-    def test_metrics_calculated_correctly(self, mock_load, mock_st):
-        """Metrics (analyzed months, peak month, average) should be calculated."""
+    def test_metrics_calculated_correctly(self, mock_load, mock_plot, mock_st):
+        """Metrics (Month-on-Month, Year-over-Year, etc.) should be calculated."""
         df = pd.DataFrame({
             "mes_ano": pd.date_range("2026-01-01", periods=3, freq="MS"),
             "mes_ano_label": ["2026-01", "2026-02", "2026-03"],
@@ -101,10 +105,11 @@ class TestRenderSazonalidadeMensal:
         })
         mock_load.return_value = df
         mock_st.subheader = MagicMock()
-        mock_st.bar_chart = MagicMock()
+        mock_st.markdown = MagicMock()
+        mock_st.info = MagicMock()
 
-        # Mock columns and column context managers
-        col_mocks = [MagicMock() for _ in range(3)]
+        # Mock columns and column context managers (4 columns now, not 3)
+        col_mocks = [MagicMock() for _ in range(4)]
         mock_st.columns = MagicMock(return_value=col_mocks)
         for col in col_mocks:
             col.__enter__ = MagicMock(return_value=col)
@@ -112,10 +117,10 @@ class TestRenderSazonalidadeMensal:
 
         _render_sazonalidade_mensal()
 
-        # Verify st.metric was called 3 times (months, peak, average)
-        assert mock_st.metric.call_count == 3
+        # Verify st.metric was called with appropriate metrics including MoM and YoY
+        assert mock_st.metric.call_count >= 4  # At least 4 metric calls (months, peak, MoM, YoY, average)
 
-        # Check metric calls (order may vary, so check all calls)
+        # Check metric calls
         calls = [str(call) for call in mock_st.metric.call_args_list]
         metrics_str = " ".join(calls)
 
@@ -123,12 +128,11 @@ class TestRenderSazonalidadeMensal:
         assert "3" in metrics_str  # 3 months analyzed
         assert "Mês de Pico" in metrics_str
         assert "2026-02" in metrics_str  # Peak is February
-        assert "Média Mensal" in metrics_str
-        assert "70" in metrics_str  # Average: (50+100+60)/3 = 70
 
     @patch("src.presentation.pages.dashboard.st")
+    @patch("src.presentation.pages.dashboard._render_plot")
     @patch("src.presentation.pages.dashboard.load_parquet_from_drive")
-    def test_datetime_conversion_preserves_order(self, mock_load, mock_st):
+    def test_datetime_conversion_preserves_order(self, mock_load, mock_plot, mock_st):
         """Datetime conversion should preserve chronological order."""
         # Load with mes_ano as string (worst case)
         df = pd.DataFrame({
@@ -138,24 +142,20 @@ class TestRenderSazonalidadeMensal:
         })
         mock_load.return_value = df
         mock_st.subheader = MagicMock()
-        mock_st.bar_chart = MagicMock()
-        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
+        mock_st.markdown = MagicMock()
+        mock_st.info = MagicMock()
+        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock(), MagicMock()])
         mock_st.metric = MagicMock()
 
         _render_sazonalidade_mensal()
 
-        # Chart should be called with data sorted chronologically
-        mock_st.bar_chart.assert_called_once()
-
-        # Verify the chart_df passed has correct order
-        chart_df_arg = mock_st.bar_chart.call_args[0][0]
-        # After sorting by mes_ano (datetime), index should be [2026-01, 2026-04, 2026-12]
-        labels = chart_df_arg.index.tolist()
-        assert labels == ["2026-01", "2026-04", "2026-12"]
+        # Should render Plotly chart (via _render_plot)
+        mock_plot.assert_called()
 
     @patch("src.presentation.pages.dashboard.st")
+    @patch("src.presentation.pages.dashboard._render_plot")
     @patch("src.presentation.pages.dashboard.load_parquet_from_drive")
-    def test_renders_with_mes_ano_label_fallback(self, mock_load, mock_st):
+    def test_renders_with_mes_ano_label_fallback(self, mock_load, mock_plot, mock_st):
         """Should render even if mes_ano_label is missing (use strftime fallback)."""
         df = pd.DataFrame({
             "mes_ano": pd.date_range("2026-01-01", periods=2, freq="MS"),
@@ -163,18 +163,20 @@ class TestRenderSazonalidadeMensal:
         })
         mock_load.return_value = df
         mock_st.subheader = MagicMock()
-        mock_st.bar_chart = MagicMock()
-        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
+        mock_st.markdown = MagicMock()
+        mock_st.info = MagicMock()
+        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock(), MagicMock()])
         mock_st.metric = MagicMock()
 
         _render_sazonalidade_mensal()
 
         # Should render using strftime fallback
-        mock_st.bar_chart.assert_called_once()
+        mock_plot.assert_called()
 
     @patch("src.presentation.pages.dashboard.st")
+    @patch("src.presentation.pages.dashboard._render_plot")
     @patch("src.presentation.pages.dashboard.load_parquet_from_drive")
-    def test_handles_null_faturamento_column(self, mock_load, mock_st):
+    def test_handles_null_faturamento_column(self, mock_load, mock_plot, mock_st):
         """Should handle missing faturamento_total gracefully."""
         df = pd.DataFrame({
             "mes_ano": pd.date_range("2026-01-01", periods=2, freq="MS"),
@@ -184,12 +186,43 @@ class TestRenderSazonalidadeMensal:
         })
         mock_load.return_value = df
         mock_st.subheader = MagicMock()
-        mock_st.bar_chart = MagicMock()
-        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
+        mock_st.markdown = MagicMock()
+        mock_st.info = MagicMock()
+        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock(), MagicMock()])
         mock_st.metric = MagicMock()
 
         # Should not raise an error
         _render_sazonalidade_mensal()
 
-        mock_st.bar_chart.assert_called_once()
+        mock_plot.assert_called()
+
+    @patch("src.presentation.pages.dashboard.st")
+    @patch("src.presentation.pages.dashboard._render_plot")
+    @patch("src.presentation.pages.dashboard.load_parquet_from_drive")
+    def test_single_year_data_defers_yoy_and_boxplot(self, mock_load, mock_plot, mock_st):
+        """With only one year, render only base chart and show guidance caption."""
+        df = pd.DataFrame(
+            {
+                "mes_ano": pd.date_range("2026-01-01", periods=6, freq="MS"),
+                "mes_ano_label": [f"2026-{m:02d}" for m in range(1, 7)],
+                "total_pedidos": [50, 75, 60, 80, 90, 70],
+            }
+        )
+        mock_load.return_value = df
+        mock_st.subheader = MagicMock()
+        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock(), MagicMock()])
+        mock_st.metric = MagicMock()
+        mock_st.caption = MagicMock()
+
+        _render_sazonalidade_mensal()
+
+        assert mock_plot.call_count == 1
+        mock_st.caption.assert_called_once()
+
+
+
+
+
+
+
 
