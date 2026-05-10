@@ -73,7 +73,7 @@ class TestRenderSazonalidadeMensal:
     @patch("src.presentation.pages.dashboard._render_plot")
     @patch("src.presentation.pages.dashboard.load_parquet_from_drive")
     def test_valid_data_renders_plotly_chart(self, mock_load, mock_plot, mock_st):
-        """With valid data, should render Plotly chart with moving average."""
+        """With valid data, should render hybrid Plotly chart (bars + lines)."""
         df = pd.DataFrame({
             "mes_ano": pd.date_range("2026-01-01", periods=3, freq="MS"),
             "mes_ano_label": ["2026-01", "2026-02", "2026-03"],
@@ -91,6 +91,10 @@ class TestRenderSazonalidadeMensal:
 
         # Should render Plotly chart (via _render_plot)
         mock_plot.assert_called()
+        fig = mock_plot.call_args[0][0]
+        assert len(fig.data) >= 3
+        assert fig.data[0].type == "bar"
+        assert fig.data[1].type == "scatter"
 
     @patch("src.presentation.pages.dashboard.st")
     @patch("src.presentation.pages.dashboard._render_plot")
@@ -218,6 +222,33 @@ class TestRenderSazonalidadeMensal:
 
         assert mock_plot.call_count == 1
         mock_st.caption.assert_called_once()
+
+    @patch("src.presentation.pages.dashboard.st")
+    @patch("src.presentation.pages.dashboard._render_plot")
+    @patch("src.presentation.pages.dashboard.load_parquet_from_drive")
+    def test_peak_is_highlighted_and_annotated(self, mock_load, mock_plot, mock_st):
+        """Peak month should receive a dedicated color and a chart annotation."""
+        df = pd.DataFrame(
+            {
+                "mes_ano": pd.date_range("2026-01-01", periods=4, freq="MS"),
+                "mes_ano_label": ["2026-01", "2026-02", "2026-03", "2026-04"],
+                "total_pedidos": [30, 55, 120, 80],
+            }
+        )
+        mock_load.return_value = df
+        mock_st.subheader = MagicMock()
+        mock_st.columns = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock(), MagicMock()])
+        mock_st.metric = MagicMock()
+        mock_st.caption = MagicMock()
+
+        _render_sazonalidade_mensal()
+
+        fig = mock_plot.call_args[0][0]
+        bar_trace = fig.data[0]
+        colors = list(bar_trace.marker.color)
+        assert colors.count("#f97316") == 1
+        assert len(fig.layout.annotations) >= 1
+        assert "Pico:" in fig.layout.annotations[0].text
 
 
 
