@@ -34,6 +34,10 @@ _BRAND_MARGIN_COLORSCALE = [
 _MAX_SCATTER_POINTS = 800
 _MAX_REASONABLE_MARGIN_PERCENT = 100.0
 _PRODUCT_KEY_CANDIDATES = ("produto_id", "id_produto", "produto_key")
+_BRAND_PRIMARY_BLUE = "#4f83cc"
+_BRAND_TREND_BLUE = "#60a5fa"
+_BRAND_ACCENT_ORANGE = "#f5a623"
+_BRAND_PEAK_ORANGE = "#f97316"
 
 
 def _safe_num(series: pd.Series | None, fill: float | None = 0.0) -> pd.Series:
@@ -768,7 +772,7 @@ def _render_revenue_pareto(df: pd.DataFrame) -> None:
             x=pareto_df["nome_produto"],
             y=pareto_df["faturamento_item"],
             name="Receita (R$)",
-            marker={"color": "#4f83cc"},
+            marker={"color": _BRAND_PRIMARY_BLUE},
             hovertemplate="<b>%{x}</b><br>Receita: R$ %{y:,.2f}<extra></extra>",
         ),
         secondary_y=False,
@@ -779,7 +783,7 @@ def _render_revenue_pareto(df: pd.DataFrame) -> None:
             y=pareto_df["pct_acumulado"],
             name="% Acumulado",
             mode="lines+markers",
-            line={"color": "#f5a623", "width": 2},
+            line={"color": _BRAND_ACCENT_ORANGE, "width": 2},
             hovertemplate="<b>%{x}</b><br>% Acumulado: %{y:.1f}%<extra></extra>",
         ),
         secondary_y=True,
@@ -876,9 +880,9 @@ def _render_sazonalidade_mensal() -> None:
     window = 3
     moving_avg = pd.Series(vendas).rolling(window=window, center=False).mean().values
 
-    bar_colors = ["#4f83cc"] * len(vendas)
+    bar_colors = [_BRAND_PRIMARY_BLUE] * len(vendas)
     if 0 <= peak_idx < len(bar_colors):
-        bar_colors[peak_idx] = "#f97316"
+        bar_colors[peak_idx] = _BRAND_PEAK_ORANGE
 
     # Create interactive chart with bars and moving average line using Plotly
     fig = go.Figure()
@@ -899,7 +903,7 @@ def _render_sazonalidade_mensal() -> None:
         y=vendas,
         name="Tendência Mensal",
         mode="lines+markers",
-        line=dict(color="#60a5fa", width=2),
+        line=dict(color=_BRAND_TREND_BLUE, width=2),
         marker=dict(size=6),
         customdata=np.array(mom_labels, dtype=object).reshape(-1, 1),
         hovertemplate="<b>%{x}</b><br>Vendas: %{y:.0f}<br>MoM: %{customdata[0]}<extra></extra>"
@@ -911,7 +915,7 @@ def _render_sazonalidade_mensal() -> None:
         y=moving_avg,
         name=f"Média Móvel ({window} meses)",
         mode='lines',
-        line=dict(color="#f5a623", width=3, dash="dot"),
+        line=dict(color=_BRAND_ACCENT_ORANGE, width=3, dash="dot"),
         hovertemplate="<b>%{x}</b><br>MA({window}): %{y:.0f}<extra></extra>"
     ))
 
@@ -925,7 +929,7 @@ def _render_sazonalidade_mensal() -> None:
             ax=0,
             ay=-35,
             bgcolor="rgba(249,115,22,0.16)",
-            bordercolor="#f97316",
+            bordercolor=_BRAND_PEAK_ORANGE,
             font=dict(color="#f8fafc", size=11),
         )
 
