@@ -864,21 +864,45 @@ def _render_sazonalidade_mensal() -> None:
 
     # Prepare data for visualization
     vendas = pd.to_numeric(df_mensal["total_pedidos"], errors="coerce").fillna(0.0).astype(float).values
+    peak_idx = int(np.argmax(vendas)) if len(vendas) else 0
+    peak_label = x_labels[peak_idx] if 0 <= peak_idx < len(x_labels) else "—"
+    peak_value = float(vendas[peak_idx]) if 0 <= peak_idx < len(vendas) else 0.0
+
+    # Calculate MoM variation for hover + KPI.
+    mom_series = pd.Series(vendas).pct_change() * 100.0
+    mom_labels = ["—" if pd.isna(v) else f"{float(v):+.1f}%" for v in mom_series.tolist()]
 
     # Calculate 3-month moving average
     window = 3
     moving_avg = pd.Series(vendas).rolling(window=window, center=False).mean().values
 
+    bar_colors = ["#4f83cc"] * len(vendas)
+    if 0 <= peak_idx < len(bar_colors):
+        bar_colors[peak_idx] = "#f97316"
+
     # Create interactive chart with bars and moving average line using Plotly
     fig = go.Figure()
 
-    # Add bar chart
+    # Add bar chart with automatic peak highlight.
     fig.add_trace(go.Bar(
         x=x_labels,
         y=vendas,
         name="Vendas Mensais",
-        marker=dict(color="#4f83cc"),
-        hovertemplate="<b>%{x}</b><br>Vendas: %{y:.0f}<extra></extra>"
+        marker=dict(color=bar_colors),
+        customdata=np.array(mom_labels, dtype=object).reshape(-1, 1),
+        hovertemplate="<b>%{x}</b><br>Vendas: %{y:.0f}<br>MoM: %{customdata[0]}<extra></extra>"
+    ))
+
+    # Overlay line improves trend readability while bars keep absolute magnitude.
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=vendas,
+        name="Tendência Mensal",
+        mode="lines+markers",
+        line=dict(color="#60a5fa", width=2),
+        marker=dict(size=6),
+        customdata=np.array(mom_labels, dtype=object).reshape(-1, 1),
+        hovertemplate="<b>%{x}</b><br>Vendas: %{y:.0f}<br>MoM: %{customdata[0]}<extra></extra>"
     ))
 
     # Add moving average line
@@ -887,9 +911,23 @@ def _render_sazonalidade_mensal() -> None:
         y=moving_avg,
         name=f"Média Móvel ({window} meses)",
         mode='lines',
-        line=dict(color="#f5a623", width=3),
+        line=dict(color="#f5a623", width=3, dash="dot"),
         hovertemplate="<b>%{x}</b><br>MA({window}): %{y:.0f}<extra></extra>"
     ))
+
+    if 0 <= peak_idx < len(x_labels):
+        fig.add_annotation(
+            x=x_labels[peak_idx],
+            y=peak_value,
+            text=f"Pico: {peak_label}",
+            showarrow=True,
+            arrowhead=2,
+            ax=0,
+            ay=-35,
+            bgcolor="rgba(249,115,22,0.16)",
+            bordercolor="#f97316",
+            font=dict(color="#f8fafc", size=11),
+        )
 
     fig.update_layout(
         template="plotly_dark",
@@ -898,16 +936,14 @@ def _render_sazonalidade_mensal() -> None:
         hovermode="x unified",
         height=400,
         margin=dict(l=20, r=20, t=40, b=20),
-        xaxis=dict(title="Período"),
-        yaxis=dict(title="Quantidade de Vendas", showgrid=True, gridcolor="rgba(255,255,255,0.05)")
+        bargap=0.25,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        xaxis=dict(title="Período", showgrid=False, zeroline=False),
+        yaxis=dict(title="Quantidade de Vendas", showgrid=True, gridcolor="rgba(255,255,255,0.03)", zeroline=False)
     )
 
     _render_plot(fig)
 
-    # Calculate MoM (Month-on-Month) variation for peak month
-    peak_idx = int(np.argmax(vendas)) if len(vendas) else 0
-    peak_label = x_labels[peak_idx] if 0 <= peak_idx < len(x_labels) else "—"
-    peak_value = float(vendas[peak_idx]) if 0 <= peak_idx < len(vendas) else 0.0
 
     # MoM: compare peak month to the immediately previous month.
     mom_pct = "—"
